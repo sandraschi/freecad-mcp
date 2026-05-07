@@ -1,5 +1,5 @@
 import { Route, Routes, Navigate, NavLink } from "react-router-dom";
-import { Box, Cube, Info, Upload } from "lucide-react";
+import { Box, Info, Upload } from "lucide-react";
 import ConvertPage from "./pages/ConvertPage";
 import ModelsPage from "./pages/ModelsPage";
 import StatusPage from "./pages/StatusPage";
