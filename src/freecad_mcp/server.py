@@ -9,6 +9,7 @@ Instead it spawns FreeCADCmd.exe as a lightweight subprocess and pipes Python sc
 """
 
 import asyncio
+import collections
 import json
 import logging
 import os
@@ -18,10 +19,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
@@ -506,6 +508,95 @@ async def execute_tool(req: ToolRequest):
         return await create_shape(shape_type=st, params=params, output_name=out)
     else:
         raise HTTPException(400, f"Unknown tool: {tool_name}")
+
+
+# ── Log Ring Buffer ──────────────────────────────────────────────────────────
+
+
+LOG_RING = collections.deque(maxlen=2000)
+
+
+class LogHandler(logging.Handler):
+    def emit(self, record):
+        LOG_RING.append(self.format(record))
+
+
+# Add handler to the server logger
+_log_handler = LogHandler()
+_log_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(_log_handler)
+
+
+@app.get("/api/v1/logs/stream")
+async def stream_logs():
+    """SSE log stream."""
+    async def gen():
+        for line in list(LOG_RING):
+            yield f"data: {line}\n\n"
+        idx = len(LOG_RING)
+        while True:
+            if idx < len(LOG_RING):
+                yield f"data: {LOG_RING[idx]}\n\n"
+                idx += 1
+            await asyncio.sleep(0.1)
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+# ── Chat / LLM ───────────────────────────────────────────────────────────────
+
+
+_llm_settings = {"ollama_url": "http://192.168.1.11:11434", "model": "gemma3:1b"}
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict] = []
+    system: str = ""
+    provider: str = "ollama"
+    model: str = "gemma3:1b"
+
+
+class SettingsUpdate(BaseModel):
+    ollama_url: str | None = None
+    model: str | None = None
+
+
+@app.get("/api/v1/settings")
+async def get_settings():
+    """Get LLM settings."""
+    return _llm_settings
+
+
+@app.put("/api/v1/settings")
+async def update_settings(body: SettingsUpdate):
+    """Update LLM settings."""
+    if body.ollama_url:
+        _llm_settings["ollama_url"] = body.ollama_url
+    if body.model:
+        _llm_settings["model"] = body.model
+    return _llm_settings
+
+
+@app.post("/api/v1/chat")
+async def chat_completion(req: ChatRequest):
+    """Chat with CAD expert via Ollama."""
+    url = req.provider == "ollama" and f"{_llm_settings.get('ollama_url', 'http://192.168.1.11:11434')}/api/chat"
+    model = req.model or _llm_settings.get("model", "gemma3:1b")
+
+    if not url:
+        return {"content": "Only Ollama provider is supported currently."}
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(url, json={
+                "model": model,
+                "messages": [{"role": "system", "content": req.system or "You are a CAD expert."}, *req.messages],
+                "stream": False,
+            })
+            data = r.json()
+            return {"content": (data.get("message") or {}).get("content", "") or data.get("response", "")}
+    except Exception as e:
+        logger.error("Chat error: %s", e)
+        return {"content": f"Error: {e}"}
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────

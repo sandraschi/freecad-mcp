@@ -1,32 +1,28 @@
-import { Route, Routes, Navigate, NavLink } from "react-router-dom";
-import { Box, Info, Upload } from "lucide-react";
+import { Route, Routes, Navigate } from "react-router-dom";
+import AppLayout from "./components/AppLayout";
+import Dashboard from "./pages/Dashboard";
 import ConvertPage from "./pages/ConvertPage";
 import ModelsPage from "./pages/ModelsPage";
-import StatusPage from "./pages/StatusPage";
+import ChatPage from "./pages/ChatPage";
+import LogsPage from "./pages/LogsPage";
+import SettingsPage from "./pages/SettingsPage";
+import HelpPage from "./pages/HelpPage";
+import AppsPage from "./pages/AppsPage";
 
 export default function App() {
   return (
-    <div className="flex h-full">
-      <nav className="w-56 bg-[#0f0f12] border-r border-white/5 p-4 flex flex-col gap-2">
-        <h1 className="text-lg font-bold text-white mb-4">FreeCAD MCP</h1>
-        {[
-          { path: "/convert", label: "Convert", icon: Upload },
-          { path: "/models", label: "Models", icon: Box },
-          { path: "/status", label: "Status", icon: Info },
-        ].map(({ path, label, icon: Icon }) => (
-          <NavLink key={path} to={path} className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium ${isActive ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"}`}>
-            <Icon size={16} /> {label}
-          </NavLink>
-        ))}
-      </nav>
-      <main className="flex-1 p-6 overflow-y-auto">
-        <Routes>
-          <Route path="/" element={<Navigate to="/convert" replace />} />
-          <Route path="/convert" element={<ConvertPage />} />
-          <Route path="/models" element={<ModelsPage />} />
-          <Route path="/status" element={<StatusPage />} />
-        </Routes>
-      </main>
-    </div>
+    <AppLayout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/convert" element={<ConvertPage />} />
+        <Route path="/models" element={<ModelsPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/logs" element={<LogsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/apps" element={<AppsPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AppLayout>
   );
 }
