@@ -1,0 +1,39 @@
+[project]
+name = "freecad-mcp"
+version = "0.1.0"
+description = "FreeCAD MCP server — CAD operations via MCP tools and REST API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp==3.2.0",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "fastapi>=0.104",
+    "uvicorn[standard]>=0.23",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/freecad_mcp"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "S", "UP", "RUF"]
+ignore = ["S101"]
