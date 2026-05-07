@@ -12,11 +12,8 @@ import asyncio
 import json
 import logging
 import os
-import re
 import subprocess
-import sys
 import tempfile
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -52,7 +49,7 @@ _state: dict = {}
 def _freecad_version() -> str:
     """Return FreeCAD version string from the executable."""
     try:
-        r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10)
+        r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)  # noqa: S603
         return r.stdout.strip() or r.stderr.strip() or "unknown"
     except Exception as e:
         return f"error: {e}"
@@ -98,7 +95,7 @@ async def _run_freecad(script: str, timeout: int = 120) -> tuple[str, str, int]:
         out = stdout.decode("utf-8", errors="replace")
         err = stderr.decode("utf-8", errors="replace")
         return out, err, proc.returncode or 0
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return "", "TIMEOUT", -1
     except FileNotFoundError:
         return "", f"FreeCADCmd not found at {FREECAD_PATH}", -2
@@ -118,7 +115,7 @@ def _build_result(script_type: str, out: str, err: str, code: int, extra: dict |
         result.update(extra)
 
     # Try to extract JSON from the output (FreeCAD scripts print JSON on last line)
-    lines = [l.strip() for l in out.split("\n") if l.strip()]
+    lines = [ln.strip() for ln in out.split("\n") if ln.strip()]
     for line in reversed(lines):
         try:
             data = json.loads(line)
@@ -166,14 +163,22 @@ class ToolRequest(BaseModel):
 
 # ── MCP Tools ───────────────────────────────────────────────────────────────
 
+_README_ONLY = {"readonly": True}
 
-@mcp.tool(annotations={"readonly": True})
+
+@mcp.tool(annotations=_README_ONLY)
 async def freecad_status() -> dict:
     """
-    Check if FreeCADCmd is available and return version info.
+    Check if the FreeCAD executable is reachable and report version info.
+
+    Use this first to confirm FreeCADCmd.exe is available before calling
+    any conversion or geometry tools.
 
     ## Return Format
-    {"success": bool, "freecad_ok": bool, "version": str}
+    {"success": bool, "freecad_ok": bool, "version": str, "work_dir": str}
+
+    ## Examples
+    await freecad_status()
     """
     return {
         "success": _state.get("freecad_ok", False),
@@ -185,17 +190,20 @@ async def freecad_status() -> dict:
 
 @mcp.tool()
 async def step_to_stl(
-    file_name: Annotated[str, Field(description="STEP filename in uploads directory (e.g. model.step)")],
-    output_name: Annotated[str, Field(default="output.stl", description="Output STL filename")],
+    file_name: Annotated[str, Field(description="STEP filename in the uploads directory, e.g. model.step")],
+    output_name: Annotated[str, Field(default="output.stl", description="Desired output STL filename.")] = "output.stl",
 ) -> dict:
     """
-    Convert a STEP/STP file to STL mesh file.
+    Convert a STEP or STP assembly file to an STL mesh.
 
-    The STEP file must first be uploaded to /api/v1/upload. Then call this tool with the filename.
-    Output STL is saved in the work directory and downloadable via GET /api/v1/download/{output_name}.
+    Upload the file first via POST /api/v1/upload, then call this tool with the filename.
+    The resulting STL can be downloaded from GET /api/v1/download/{output_name}.
 
     ## Return Format
-    {"success": bool, "output": str, "file_size_kb": float, "objects_count": int}
+    {"success": bool, "output": str, "data": {"objects": int, "size_kb": float}}
+
+    ## Examples
+    await step_to_stl(file_name="raspbot_v2_step.STEP", output_name="boomy.stl")
     """
     step_path = os.path.join(UPLOAD_DIR, file_name)
     stl_path = os.path.join(OUTPUT_DIR, output_name)
@@ -221,15 +229,21 @@ async def step_to_stl(
     return _build_result("step_to_stl", out, err, code, extra={"output": output_name})
 
 
-@mcp.tool(annotations={"readonly": True})
+@mcp.tool(annotations=_README_ONLY)
 async def model_info(
-    file_name: Annotated[str, Field(description="STEP or STL filename in uploads directory")],
+    file_name: Annotated[str, Field(description="STEP, STP, or STL filename in the uploads directory.")],
 ) -> dict:
     """
-    Read a CAD file and return model metadata: object count, solid count, volume, bounding box.
+    Read a CAD file and return metadata: object count, solid count, bounding box, volume.
+
+    Supports STEP assemblies (object list) and STL meshes (vertex/facet count).
 
     ## Return Format
-    {"success": bool, "objects": list, "total_solids": int}
+    {"success": bool, "data": {"objects": [...], "total": int} | {"type": str, "vertices": int, "facets": int}}
+
+    ## Examples
+    await model_info(file_name="raspbot_v2_step.STEP")
+    await model_info(file_name="boomy.stl")
     """
     path = os.path.join(UPLOAD_DIR, file_name)
     if not os.path.isfile(path):
@@ -273,21 +287,28 @@ print(json.dumps({{"type": "mesh", "vertices": len(mesh.Points), "facets": mesh.
 
 @mcp.tool()
 async def create_shape(
-    shape_type: Annotated[str, Field(description="Shape type: box, cylinder, sphere, cone")],
-    params: Annotated[dict | None, Field(default=None, description="Parameters. For box: width, height, depth. For cylinder/sphere: radius. For cone: radius, height.")] = None,
-    output_name: Annotated[str, Field(default="shape.stl", description="Output STL filename")] = "shape.stl",
+    shape_type: Annotated[str, Field(description="Shape type: box, cylinder, sphere, or cone.")],
+    params: Annotated[dict | None, Field(default=None, description="Parameters dict: width/height/depth for box, radius/height for cylinder/sphere/cone.")] = None,
+    output_name: Annotated[str, Field(default="shape.stl", description="Output STL filename.")] = "shape.stl",
 ) -> dict:
     """
-    Create a basic geometric shape and export as STL.
+    Create a basic geometric primitive and export it as an STL mesh.
 
-    Supported shapes and parameters:
+    Supported shapes:
     - box: {"width": 10, "height": 10, "depth": 10}
     - cylinder: {"radius": 5, "height": 20}
     - sphere: {"radius": 10}
     - cone: {"radius": 5, "height": 15}
 
+    All dimensions are in millimetres. The output STL is saved to the outputs directory
+    and is downloadable via GET /api/v1/download/{output_name}.
+
     ## Return Format
-    {"success": bool, "output": str, "file_size_kb": float}
+    {"success": bool, "output": str, "data": {"size_kb": float}}
+
+    ## Examples
+    await create_shape(shape_type="box", params={"width": 20, "height": 10, "depth": 5})
+    await create_shape(shape_type="cylinder", params={"radius": 5, "height": 20}, output_name="tube.stl")
     """
     p = params or {}
     stl_path = os.path.join(OUTPUT_DIR, output_name)
@@ -389,10 +410,17 @@ async def execute_tool(req: ToolRequest):
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 
+async def _run_stdio():
+    """Serve MCP over stdio (for CLI MCP clients)."""
+    await mcp.run_stdio_async()
+
+
 def main():
+    import argparse
+
     parser = argparse.ArgumentParser(description="FreeCAD MCP Server")
     parser.add_argument("--mode", choices=["stdio", "http", "dual"], default="stdio")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default="0.0.0.0")  # noqa: S104
     parser.add_argument("--port", type=int, default=10944)
     parser.add_argument("--freecad-path", help="Path to FreeCADCmd.exe")
     args = parser.parse_args()
@@ -408,5 +436,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import argparse
     main()
