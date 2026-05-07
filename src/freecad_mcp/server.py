@@ -81,16 +81,18 @@ os.makedirs(_SCRIPTS_DIR, exist_ok=True)
 
 
 async def _run_freecad(script: str, timeout: int = 120) -> tuple[str, str, int]:
-    """Run a Python script through FreeCADCmd and return (stdout, stderr, code)."""
+    """Write script to temp file and run via FreeCADCmd."""
+    fd, script_path = tempfile.mkstemp(suffix=".py", prefix="fc_", text=True)
     try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("import sys\nsys.path = [p for p in sys.path if '_freecad_mcp' not in p]\n")
+            f.write(script)
         proc = await asyncio.create_subprocess_exec(
-            FREECAD_PATH,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            FREECAD_PATH, script_path,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=script.encode("utf-8")),
+            proc.communicate(),
             timeout=timeout,
         )
         out = stdout.decode("utf-8", errors="replace")
@@ -102,6 +104,11 @@ async def _run_freecad(script: str, timeout: int = 120) -> tuple[str, str, int]:
         return "", f"FreeCADCmd not found at {FREECAD_PATH}", -2
     except Exception as e:
         return "", str(e), -3
+    finally:
+        try:
+            os.unlink(script_path)
+        except OSError:
+            pass
 
 
 def _build_result(script_type: str, out: str, err: str, code: int, extra: dict | None = None) -> dict:
@@ -196,24 +203,20 @@ async def step_to_stl(
     if not os.path.isfile(step_path):
         return {"success": False, "error": f"File {file_name} not found in uploads. Upload first via POST /api/v1/upload."}
 
-    script = f"""
-import FreeCAD, Mesh, json, sys
-doc = FreeCAD.openDocument(r"{step_path}")
-doc.recompute()
-objs = [o for o in doc.Objects if hasattr(o, 'Shape') and o.Shape and o.Shape.Solids]
-for o in objs:
-    Mesh.export([o], r"{stl_path}")
-    break  # first solid only for combined; individual exports below
-# Export combined
-combined = doc.Objects
-if combined:
-    Mesh.export(combined, r"{stl_path}")
-    count = len(combined)
-    import os as _os
-    sz = _os.path.getsize(r"{stl_path}")
-    print(json.dumps({{"objects": count, "size_kb": round(sz/1024, 1), "object_names": [o.Label for o in combined]}}))
-FreeCAD.closeDocument(doc.Name)
-"""
+    script = (
+        "import FreeCAD, Import, Mesh, json, os\n"
+        f'doc = FreeCAD.newDocument("BOOMY")\n'
+        f'Import.insert(r"{step_path}", doc.Name)\n'
+        "doc.recompute()\n"
+        "objs = [o for o in doc.Objects if hasattr(o, 'Shape') and o.Shape and o.Shape.Solids]\n"
+        "if objs:\n"
+        f"    Mesh.export(objs, r'{stl_path}')\n"
+        f"    sz = os.path.getsize(r'{stl_path}')\n"
+        '    print(json.dumps({"objects": len(objs), "size_kb": round(sz/1024, 1), "names": [o.Label for o in objs]}))\n'
+        "else:\n"
+        '    print(json.dumps({"objects": 0, "error": "No solids found in STEP file"}))\n'
+        "FreeCAD.closeDocument(doc.Name)\n"
+    )
     out, err, code = await _run_freecad(script, timeout=300)
     return _build_result("step_to_stl", out, err, code, extra={"output": output_name})
 
@@ -293,18 +296,18 @@ async def create_shape(
         w = p.get("width", 10)
         h = p.get("height", 10)
         d = p.get("depth", 10)
-        script = f"import Part, Mesh; s = Part.makeBox({w}, {h}, {d}); Mesh.export([s], r'{stl_path}')"
+        script = f"import Part, Mesh; s = Part.makeBox({w}, {h}, {d}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
     elif shape_type == "cylinder":
         r = p.get("radius", 5)
         h = p.get("height", 20)
-        script = f"import Part, Mesh; s = Part.makeCylinder({r}, {h}); Mesh.export([s], r'{stl_path}')"
+        script = f"import Part, Mesh; s = Part.makeCylinder({r}, {h}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
     elif shape_type == "sphere":
         r = p.get("radius", 10)
-        script = f"import Part, Mesh; s = Part.makeSphere({r}); Mesh.export([s], r'{stl_path}')"
+        script = f"import Part, Mesh; s = Part.makeSphere({r}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
     elif shape_type == "cone":
         r = p.get("radius", 5)
         h = p.get("height", 15)
-        script = f"import Part, Mesh; s = Part.makeCone({r}, 0, {h}); Mesh.export([s], r'{stl_path}')"
+        script = f"import Part, Mesh; s = Part.makeCone({r}, 0, {h}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
     else:
         return {"success": False, "error": f"Unknown shape: {shape_type}. Use: box, cylinder, sphere, cone."}
 
