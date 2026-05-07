@@ -31,8 +31,10 @@ logger = logging.getLogger("freecad-mcp")
 
 FREECAD_PATH = os.environ.get(
     "FREECAD_PATH",
-    os.path.join(os.environ.get("TEMP", ""), "freecad_extracted", "FreeCAD_1.1.1-Windows-x86_64-py311", "bin", "FreeCADCmd.exe"),
+    os.path.join(os.environ.get("TEMP", ""), "freecad_extracted", "FreeCAD_1.1.1-Windows-x86_64-py311", "bin", "FreeCAD.exe"),
 )
+BRIDGE_PORT = int(os.environ.get("FC_BRIDGE_PORT", "10946"))
+BRIDGE_SCRIPT = Path(__file__).parent / "fc_bridge.py"
 WORK_DIR = os.environ.get("FREECAD_MCP_WORK_DIR", os.path.join(os.environ.get("TEMP", ""), "freecad_mcp_work"))
 os.makedirs(WORK_DIR, exist_ok=True)
 
@@ -44,91 +46,146 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
 _state: dict = {}
+_req_id = 0
+_bridge_proc: subprocess.Popen | None = None
+_bridge_reader: asyncio.StreamReader | None = None
+_bridge_writer: asyncio.StreamWriter | None = None
 
 
-def _freecad_version() -> str:
-    """Return FreeCAD version string from the executable."""
+async def _bridge_send(method: str, params: dict | None = None, timeout: float = 120) -> dict:
+    """Send a JSON command to the FreeCAD bridge and return the response."""
+    global _req_id
+    _req_id += 1
+    req = {"id": _req_id, "method": method, "params": params or {}}
+    payload = json.dumps(req) + "\n"
+
+    if _bridge_writer is None:
+        return {"success": False, "error": "FreeCAD bridge not connected", "fallback": True}
+
     try:
-        r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)  # noqa: S603
-        return r.stdout.strip() or r.stderr.strip() or "unknown"
+        _bridge_writer.write(payload.encode("utf-8"))
+        await _bridge_writer.drain()
+        data = await asyncio.wait_for(_bridge_reader.readline(), timeout=timeout)
+        return json.loads(data.decode("utf-8"))
+    except TimeoutError:
+        return {"success": False, "error": f"Bridge timeout ({timeout}s)", "fallback": True}
     except Exception as e:
-        return f"error: {e}"
+        return {"success": False, "error": str(e), "fallback": True}
+
+
+async def _bridge_connect():
+    """Connect to the FreeCAD bridge TCP socket."""
+    global _bridge_reader, _bridge_writer
+    try:
+        r, w = await asyncio.wait_for(
+            asyncio.open_connection("127.0.0.1", BRIDGE_PORT),
+            timeout=10,
+        )
+        _bridge_reader, _bridge_writer = r, w
+        # Verify with ping
+        resp = await _bridge_send("ping", timeout=5)
+        return resp.get("data") == "pong"
+    except Exception as e:
+        logger.warning("Bridge connect failed: %s", e)
+        _bridge_reader = _bridge_writer = None
+        return False
+
+
+def _start_freecad_bridge():
+    """Launch FreeCAD GUI with the bridge script."""
+    global _bridge_proc
+    if not os.path.isfile(FREECAD_PATH):
+        logger.warning("FreeCAD not found at %s", FREECAD_PATH)
+        return False
+    if not os.path.isfile(BRIDGE_SCRIPT):
+        logger.warning("Bridge script not found at %s", BRIDGE_SCRIPT)
+        return False
+    try:
+        env = os.environ.copy()
+        env["FC_BRIDGE_PORT"] = str(BRIDGE_PORT)
+        _bridge_proc = subprocess.Popen(
+            [FREECAD_PATH, str(BRIDGE_SCRIPT)],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logger.info("FreeCAD bridge launched (PID %s)", _bridge_proc.pid)
+        return True
+    except Exception as e:
+        logger.error("Failed to start FreeCAD bridge: %s", e)
+        return False
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: verify FreeCADCmd is reachable."""
+    """Startup: launch FreeCAD bridge, connect, then serve."""
     logger.info("FreeCAD MCP startup")
+    _state["freecad_ok"] = False
+    _state["freecad_version"] = None
+    _state["bridge_mode"] = "none"
+
+    # Verify FreeCAD exists
     if not os.path.isfile(FREECAD_PATH):
-        logger.warning("FreeCADCmd not found at %s", FREECAD_PATH)
-        _state["freecad_ok"] = False
-        _state["freecad_version"] = None
+        logger.warning("FreeCAD not found at %s", FREECAD_PATH)
     else:
-        _state["freecad_ok"] = True
-        _state["freecad_version"] = _freecad_version()
-        logger.info("FreeCAD OK: %s", _state["freecad_version"])
+        try:
+            r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)
+            _state["freecad_version"] = r.stdout.strip() or r.stderr.strip() or "unknown"
+        except Exception as e:
+            _state["freecad_version"] = f"error: {e}"
+
+        # Start bridge
+        if _start_freecad_bridge():
+            for attempt in range(15):
+                await asyncio.sleep(2)
+                if await _bridge_connect():
+                    _state["freecad_ok"] = True
+                    _state["bridge_mode"] = "tcp"
+                    logger.info("FreeCAD bridge connected")
+                    break
+                logger.info("Waiting for bridge (attempt %d/15)...", attempt + 1)
+
+        if not _state.get("freecad_ok"):
+            _state["bridge_mode"] = "subprocess"
+            logger.info("Falling back to subprocess mode (limited STEP support)")
+
     _state["work_dir"] = WORK_DIR
     yield
 
+    # Shutdown
+    if _bridge_writer:
+        try:
+            _bridge_writer.close()
+            await _bridge_writer.wait_closed()
+        except Exception:
+            pass
 
-# ── FreeCAD Subprocess Runner ───────────────────────────────────────────────
 
-_SCRIPTS_DIR = Path(__file__).parent / "scripts"
-os.makedirs(_SCRIPTS_DIR, exist_ok=True)
-
+# ── Subprocess Fallback ───────────────────────────────────────────────────────
 
 async def _run_freecad(script: str, timeout: int = 120) -> tuple[str, str, int]:
-    """Write script to temp file and run via FreeCADCmd."""
-    fd, script_path = tempfile.mkstemp(suffix=".py", prefix="fc_", text=True)
+    """Run a Python script via FreeCADCmd subprocess (fallback when bridge unavailable)."""
+    fd, sp = tempfile.mkstemp(suffix=".py", prefix="fc_", text=True)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write("import sys\nsys.path = [p for p in sys.path if '_freecad_mcp' not in p]\n")
+        with os.fdopen(fd, "w") as f:
             f.write(script)
         proc = await asyncio.create_subprocess_exec(
-            FREECAD_PATH, script_path,
+            FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe"), sp,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(),
-            timeout=timeout,
-        )
-        out = stdout.decode("utf-8", errors="replace")
-        err = stderr.decode("utf-8", errors="replace")
-        return out, err, proc.returncode or 0
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace"), proc.returncode or 0
     except TimeoutError:
         return "", "TIMEOUT", -1
     except FileNotFoundError:
-        return "", f"FreeCADCmd not found at {FREECAD_PATH}", -2
+        return "", "FreeCADCmd not found", -2
     except Exception as e:
         return "", str(e), -3
     finally:
         try:
-            os.unlink(script_path)
+            os.unlink(sp)
         except OSError:
             pass
-
-
-def _build_result(script_type: str, out: str, err: str, code: int, extra: dict | None = None) -> dict:
-    """Build standardized response dict from FreeCAD output."""
-    result = {"success": code == 0, "type": script_type, "exit_code": code}
-    if extra:
-        result.update(extra)
-
-    # Try to extract JSON from the output (FreeCAD scripts print JSON on last line)
-    lines = [ln.strip() for ln in out.split("\n") if ln.strip()]
-    for line in reversed(lines):
-        try:
-            data = json.loads(line)
-            result["data"] = data
-            break
-        except (json.JSONDecodeError, ValueError):
-            continue
-
-    if err:
-        result["stderr"] = err.strip()
-    if out:
-        result["stdout"] = out.strip()[:2000]
-    return result
 
 
 # ── FastAPI App ──────────────────────────────────────────────────────────────
@@ -137,6 +194,27 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 mcp = FastMCP.from_fastapi(app, name="FreeCAD MCP")
+
+
+# ── Response builder ─────────────────────────────────────────────────────────
+
+def _build_result(script_type: str, out: str, err: str, code: int, extra: dict | None = None) -> dict:
+    """Parse FreeCAD subprocess output into a standard result dict."""
+    result = {"success": code == 0, "type": script_type, "exit_code": code}
+    if extra:
+        result.update(extra)
+    lines = [ln.strip() for ln in out.split("\n") if ln.strip()]
+    for line in reversed(lines):
+        try:
+            result["data"] = json.loads(line)
+            break
+        except (json.JSONDecodeError, ValueError):
+            continue
+    if err:
+        result["stderr"] = err.strip()
+    if out:
+        result["stdout"] = out.strip()[:2000]
+    return result
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
@@ -211,6 +289,16 @@ async def step_to_stl(
     if not os.path.isfile(step_path):
         return {"success": False, "error": f"File {file_name} not found in uploads. Upload first via POST /api/v1/upload."}
 
+    if _state.get("bridge_mode") == "tcp":
+        resp = await _bridge_send("open", {"path": step_path, "name": "STEP_Import"}, timeout=300)
+        if not resp.get("success"):
+            return {"success": False, "error": resp.get("error", "STEP import failed"), "stderr": resp.get("error")}
+        resp2 = await _bridge_send("export_stl", {"path": stl_path}, timeout=300)
+        if not resp2.get("success"):
+            return {"success": False, "error": resp2.get("error", "STL export failed")}
+        return {"success": True, "output": output_name, "data": resp2.get("data")}
+
+    # Fallback to subprocess
     script = (
         "import FreeCAD, Import, Mesh, json, os\n"
         f'doc = FreeCAD.newDocument("BOOMY")\n'
@@ -248,6 +336,13 @@ async def model_info(
     path = os.path.join(UPLOAD_DIR, file_name)
     if not os.path.isfile(path):
         return {"success": False, "error": f"File {file_name} not found."}
+
+    if _state.get("bridge_mode") == "tcp":
+        resp = await _bridge_send("model_info", {"path": path}, timeout=120)
+        if resp.get("success"):
+            return {"success": True, "type": "model_info", "data": resp.get("data")}
+        # fall through to subprocess on failure
+        logger.warning("Bridge model_info failed, trying subprocess: %s", resp.get("error"))
 
     ext = Path(file_name).suffix.lower()
     if ext in (".step", ".stp"):
@@ -312,6 +407,12 @@ async def create_shape(
     """
     p = params or {}
     stl_path = os.path.join(OUTPUT_DIR, output_name)
+
+    if _state.get("bridge_mode") == "tcp":
+        resp = await _bridge_send("create_shape", {"shape_type": shape_type, "params": p, "path": stl_path}, timeout=30)
+        if resp.get("success"):
+            return {"success": True, "output": output_name, "data": resp.get("data")}
+        logger.warning("Bridge create_shape failed, trying subprocess: %s", resp.get("error"))
 
     if shape_type == "box":
         w = p.get("width", 10)
