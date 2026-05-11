@@ -536,6 +536,43 @@ async def slice_stl(
         return {"success": False, "error": str(e)}
 
 
+@mcp.tool()
+async def freecad_gui(
+    file_name: Annotated[str | None, Field(default=None, description="Optional file to open (STL, STEP, FCStd).")] = None,
+) -> dict:
+    """
+    Launch the FreeCAD GUI application, optionally opening a file.
+
+    The GUI runs as a separate process. This tool returns immediately after launch.
+
+    ## Return Format
+    {"success": bool, "message": str, "process_pid": int}
+
+    ## Examples
+    await freecad_gui()
+    await freecad_gui(file_name="tfmini_bracket_final.stl")
+    """
+    gui_path = FREECAD_PATH.replace("FreeCADCmd.exe", "FreeCAD.exe")
+    if not os.path.isfile(gui_path):
+        gui_path = os.path.join(os.path.dirname(FREECAD_PATH), "FreeCAD.exe")
+    if not os.path.isfile(gui_path):
+        return {"success": False, "error": "FreeCAD GUI not found (FreeCAD.exe)"}
+
+    args = [gui_path]
+    if file_name:
+        fpath = os.path.join(UPLOAD_DIR, file_name)
+        if os.path.isfile(fpath):
+            args.append(fpath)
+        elif os.path.isfile(file_name):
+            args.append(file_name)
+
+    try:
+        proc = subprocess.Popen(args, shell=False)
+        return {"success": True, "message": f"FreeCAD GUI launched (PID {proc.pid})", "process_pid": proc.pid}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 # ── REST Endpoints ────────────────────────────────────────────────────────────
 
 
