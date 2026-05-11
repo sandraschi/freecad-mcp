@@ -31,9 +31,16 @@ logger = logging.getLogger("freecad-mcp")
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-FREECAD_PATH = os.environ.get(
-    "FREECAD_PATH",
-    os.path.join(os.environ.get("TEMP", ""), "freecad_extracted", "FreeCAD_1.1.1-Windows-x86_64-py311", "bin", "FreeCAD.exe"),
+FREECAD_PATH = (
+    os.environ.get("FREECAD_PATH") or
+    next(
+        (p for p in [
+            r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\bin\FreeCAD.exe",
+            r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\FreeCAD.exe",
+            os.path.join(os.environ.get("TEMP", ""), "freecad_extracted", "FreeCAD_1.1.1-Windows-x86_64-py311", "bin", "FreeCAD.exe"),
+        ] if os.path.isfile(p)),
+        r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\bin\FreeCAD.exe"
+    )
 )
 BRIDGE_PORT = int(os.environ.get("FC_BRIDGE_PORT", "10946"))
 BRIDGE_SCRIPT = Path(__file__).parent / "fc_bridge.py"
