@@ -440,6 +440,95 @@ async def create_shape(
     return _build_result("create_shape", out, err, code, extra={"output": output_name})
 
 
+# ── PrusaSlicer Tools ────────────────────────────────────────────────────────
+
+_SLICER_PATH = os.environ.get(
+    "PRUSA_SLICER_PATH",
+    r"D:\Dev\repos\PrusaSlicer\PrusaSlicer-2.8.1+win64-202409181359\prusa-slicer.exe",
+)
+_SLICER_OUTPUT_DIR = os.path.join(WORK_DIR, "gcode")
+os.makedirs(_SLICER_OUTPUT_DIR, exist_ok=True)
+
+
+def _slicer_available() -> bool:
+    return os.path.exists(_SLICER_PATH)
+
+
+@mcp.tool(annotations=_README_ONLY)
+async def slicer_status() -> dict:
+    """
+    Check if PrusaSlicer is available and report version.
+
+    ## Return Format
+    {"success": bool, "available": bool, "version": str, "profiles_dir": str}
+
+    ## Examples
+    await slicer_status()
+    """
+    if not _slicer_available():
+        return {"success": False, "available": False, "version": None, "profiles_dir": None}
+
+    try:
+        r = subprocess.run([_SLICER_PATH, "--help"], capture_output=True, text=True, timeout=10)
+        first = r.stdout.strip().split("\n")[0] if r.stdout else "unknown"
+        return {"success": True, "available": True, "version": first, "profiles_dir": str(Path(_SLICER_PATH).parent / "profiles")}
+    except Exception as e:
+        return {"success": False, "available": False, "version": str(e), "profiles_dir": None}
+
+
+@mcp.tool()
+async def slice_stl(
+    file_name: Annotated[str, Field(description="STL filename in the uploads directory.")],
+    printer_profile: Annotated[str, Field(default="", description="Printer profile name. Empty = default Prusa MK4.")] = "",
+    filament_profile: Annotated[str, Field(default="", description="Filament profile name. Empty = default PLA.")] = "",
+    quality: Annotated[str, Field(default="0.20mm SPEED", description="Layer height / quality preset.")] = "0.20mm SPEED",
+    output_name: Annotated[str | None, Field(default=None, description="Output G-code filename. Auto-generated if omitted.")] = None,
+) -> dict:
+    """
+    Slice an STL file using PrusaSlicer and produce G-code for 3D printing.
+
+    Upload the STL first via POST /api/v1/upload, then call this tool.
+    The resulting .gcode file can be downloaded from GET /api/v1/download/{output_name}.
+
+    ## Return Format
+    {"success": bool, "output": str, "data": {"size_kb": float, "path": str, "printer": str, "filament": str}}
+
+    ## Examples
+    await slice_stl(file_name="bracket.stl", printer_profile="Prusa MK4")
+    await slice_stl(file_name="bracket.stl")
+    """
+    if not _slicer_available():
+        return {"success": False, "error": "PrusaSlicer not found. Set PRUSA_SLICER_PATH."}
+
+    stl_path = os.path.join(UPLOAD_DIR, file_name)
+    if not os.path.exists(stl_path):
+        return {"success": False, "error": f"File not found: {file_name}"}
+
+    out_name = output_name or file_name.replace(".stl", ".gcode")
+    gcode_path = os.path.join(_SLICER_OUTPUT_DIR, out_name)
+
+    cmd = [_SLICER_PATH, "--slice", stl_path, "--output", gcode_path, "--center", "0,0"]
+    if printer_profile:
+        cmd += ["--print-settings", printer_profile]
+    if filament_profile:
+        cmd += ["--filament-settings", filament_profile]
+
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if r.returncode != 0:
+            return {"success": False, "error": r.stderr.strip() or r.stdout.strip()}
+        size_kb = round(os.path.getsize(gcode_path) / 1024, 1)
+        return {
+            "success": True,
+            "output": out_name,
+            "data": {"size_kb": size_kb, "path": gcode_path, "printer": printer_profile or "default", "filament": filament_profile or "default"},
+        }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Slicing timed out after 300s"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 # ── REST Endpoints ────────────────────────────────────────────────────────────
 
 
@@ -471,19 +560,22 @@ async def upload_file(file: UploadFile):
 
 @app.get("/api/v1/download/{filename}")
 async def download_file(filename: str):
-    """Download a processed STL file."""
-    path = os.path.join(OUTPUT_DIR, filename)
-    if not os.path.isfile(path):
-        raise HTTPException(404, f"File {filename} not found.")
-    return FileResponse(path, media_type="application/sla", filename=filename)
+    """Download a processed STL or G-code file."""
+    for d in (OUTPUT_DIR, _SLICER_OUTPUT_DIR):
+        path = os.path.join(d, filename)
+        if os.path.isfile(path):
+            media = "text/x.gcode" if filename.endswith(".gcode") else "application/sla"
+            return FileResponse(path, media_type=media, filename=filename)
+    raise HTTPException(404, f"File {filename} not found.")
 
 
 @app.get("/api/v1/files")
 async def list_files():
-    """List uploaded and output files."""
+    """List uploaded and output files including G-code."""
     uploads = [{"name": f, "size_kb": round(os.path.getsize(os.path.join(UPLOAD_DIR, f)) / 1024, 1)} for f in os.listdir(UPLOAD_DIR) if os.path.isfile(os.path.join(UPLOAD_DIR, f))]
     outputs = [{"name": f, "size_kb": round(os.path.getsize(os.path.join(OUTPUT_DIR, f)) / 1024, 1)} for f in os.listdir(OUTPUT_DIR) if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
-    return {"uploads": uploads, "outputs": outputs}
+    gcodes = [{"name": f, "size_kb": round(os.path.getsize(os.path.join(_SLICER_OUTPUT_DIR, f)) / 1024, 1)} for f in os.listdir(_SLICER_OUTPUT_DIR) if os.path.isfile(os.path.join(_SLICER_OUTPUT_DIR, f))]
+    return {"uploads": uploads, "outputs": outputs, "gcodes": gcodes}
 
 
 @app.post("/api/v1/control/tool")
