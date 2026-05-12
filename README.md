@@ -4,49 +4,34 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Linted with Biome](https://img.shields.io/badge/Linted_with-Biome-60a5fa?style=flat-square&logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Built with Just](https://img.shields.io/badge/Built_with-Just-000000?style=flat-square&logo=gnu-bash&logoColor=white)](https://github.com/casey/just)
-[![GitHub last commit](https://img.shields.io/github/last-commit/sandraschi/freecad-mcp?style=flat-square&logo=github&logoColor=white)](https://github.com/sandraschi/freecad-mcp)
-[![Python version](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![FreeCAD](https://img.shields.io/badge/FreeCAD-1.1.1-094b8a?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptMCAxOGMtNC40MSAwLTgtMy41OS04LThzMy41OS04IDgtOCA4IDMuNTkgOCA4LTMuNTkgOC04IDh6IiBmaWxsPSIjMDk0YjhhIi8+PC9zdmc+)](https://freecad.org)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-**FastMCP 3.2** — Unified Gateway: MCP (stdio/SSE) + REST + Vite dashboard.
+**CAD to 3D print, through your AI assistant.** — Convert STEP assemblies, inspect geometry, create primitives, slice for printing, and browse marketplaces — all via MCP tools and a Vite dashboard.
 
-> CAD operations via FreeCAD's OCCT kernel — STEP/STL conversion, model metadata, geometry creation.
+| | |
+|--:|--|
+| **You might use this if…** | You want an AI to reason about CAD files, convert formats, prepare 3D prints, or search model marketplaces without opening FreeCAD. |
+| **What it connects to** | FreeCAD 1.1.1+ (OCCT kernel), PrusaSlicer 2.8+, Printables / Thingiverse / GrabCAD APIs |
+| **Ports** | Backend **10944**, Dashboard **10945**, TCP Bridge **10946** |
+| **Start** | `just bootstrap` then `start.ps1` |
 
-## Summary
+## Documentation Index
 
-| Item | Details |
-|------|---------|
-| **Ports** | Backend **10944**, Dashboard **10945** (Vite proxies `/api` → 10944) |
-| **Start** | `just serve` + `just web`, or `start.ps1` from repo root |
-| **Depends on** | FreeCAD 1.1.1+ (`FreeCADCmd.exe` on PATH or `FREECAD_PATH` env var) |
+| Guide | Content |
+| :--- | :--- |
+| **[Installation](docs/install.md)** | Prerequisites, FreeCAD setup, PrusaSlicer, `just bootstrap` |
+| **[Architecture](docs/architecture.md)** | TCP bridge, subprocess fallback, port layout, file pipeline |
+| **[MCP Tools](docs/mcp-tools.md)** | All 10 tools: CAD operations, slicing, marketplace search/download, GUI launch, Prefab card — with examples |
+| **[AI Tooling](docs/ai-tooling.md)** | Ollama chat, agentic CAD reasoning, sampling workflows |
+| **[About FreeCAD](docs/about-freecad.md)** | History, community, Python scripting, 300+ workbenches, vs SolidWorks/Fusion |
+| **[Marketplace](docs/marketplace.md)** | Searching and importing models from Printables, Thingiverse, GrabCAD |
+| **[Webapp README](webapp/README.md)** | Dashboard frontend: pages, viewer, proxy, development |
 
 ## Quick Start
 
 ```powershell
-just bootstrap   # install deps
-just serve       # start backend
-just web         # start dashboard
+just bootstrap   # uv sync + npm install
+start.ps1        # kills zombies, starts backend + frontend, opens browser
 ```
-
-## MCP Tools
-
-| Tool | Description |
-|------|-------------|
-| `freecad_status` | Server health + FreeCAD version check |
-| `step_to_stl` | Convert STEP/STP → STL mesh |
-| `model_info` | Object count, solids, volume, bounding box |
-| `create_shape` | Box, cylinder, sphere, cone → STL |
-
-## REST API
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/status` | GET | Health check |
-| `/api/v1/upload` | POST | Upload CAD file |
-| `/api/v1/download/{name}` | GET | Download STL |
-| `/api/v1/files` | GET | List all files |
-| `/api/v1/control/tool` | POST | Execute any MCP tool |
 
 ## MCP Client Config
 
@@ -61,22 +46,13 @@ just web         # start dashboard
 }
 ```
 
-## Architecture
+## Industrial Quality Stack
 
-```
-MCP Client / Webapp
-    │
-    ▼
-FastAPI + FastMCP 3.2 (port 10944)
-    │
-    ▼
-FreeCADCmd.exe subprocess (temp Python scripts)
-    │
-    ▼
-OCCT CAD kernel → STL files
-```
+- **Python (Core)**: [Ruff](https://astral.sh/ruff) for linting and formatting.
+- **Webapp (UI)**: [Biome](https://biomejs.dev/) for sub-millisecond linting.
+- **Protocol**: FastMCP 3.2 SSE transport with hardened stdout/stderr isolation.
+- **Automation**: [Justfile](./justfile) recipes for all fleet operations (`just lint`, `just fix`, `just dev`).
 
-The server does NOT import FreeCAD Python modules directly (2+ GB footprint).
-Instead it spawns `FreeCADCmd.exe` as a lightweight subprocess, writes Python
-scripts to temp files, and parses JSON from stdout. This keeps the server slim
-(~50 MB with deps) while providing full FreeCAD capabilities.
+## License
+
+MIT — see [LICENSE](LICENSE).

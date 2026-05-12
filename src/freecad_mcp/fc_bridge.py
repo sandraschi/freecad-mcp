@@ -20,7 +20,13 @@ PORT = int(os.environ.get("FC_BRIDGE_PORT", "10946"))
 FreeCAD.Console.PrintMessage(f"FreeCAD Bridge starting on port {PORT}...\n")
 
 # Ensure GUI is ready
-FreeCADGui.showMainWindow(True)
+try:
+    FreeCADGui.showMainWindow()
+except Exception:
+    try:
+        FreeCADGui.showMainWindow(True)
+    except Exception:
+        FreeCAD.Console.PrintMessage("GUI showMainWindow not available, continuing anyway\n")
 
 
 class BridgeHandler(socketserver.StreamRequestHandler):

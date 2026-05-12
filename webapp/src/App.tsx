@@ -8,6 +8,7 @@ import LogsPage from "./pages/LogsPage";
 import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
 import AppsPage from "./pages/AppsPage";
+import MarketplacePage from "./pages/MarketplacePage";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/convert" element={<ConvertPage />} />
         <Route path="/models" element={<ModelsPage />} />
+        <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/settings" element={<SettingsPage />} />

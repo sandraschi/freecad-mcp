@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastmcp import FastMCP
+from prefab_ui.app import PrefabApp
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("freecad-mcp")
@@ -100,9 +101,22 @@ async def _bridge_connect():
         return False
 
 
+def _freecad_already_running() -> bool:
+    """Check if any FreeCAD GUI process is already running."""
+    import subprocess
+    try:
+        r = subprocess.run(["tasklist.exe", "/FI", "IMAGENAME eq FreeCAD.exe", "/NH"], capture_output=True, text=True, timeout=5)  # noqa: S607
+        return "FreeCAD.exe" in r.stdout
+    except Exception:
+        return False
+
+
 def _start_freecad_bridge():
-    """Launch FreeCAD GUI with the bridge script."""
+    """Launch FreeCAD GUI with the bridge script — only if no FreeCAD is already running."""
     global _bridge_proc
+    if _freecad_already_running():
+        logger.info("FreeCAD GUI already running — skipping bridge launch (will attempt to connect)")
+        return False
     if not os.path.isfile(FREECAD_PATH):
         logger.warning("FreeCAD not found at %s", FREECAD_PATH)
         return False
@@ -127,42 +141,66 @@ def _start_freecad_bridge():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: launch FreeCAD bridge, connect, then serve."""
+    """Startup: launch FreeCAD bridge (if not already running), connect, then serve."""
     logger.info("FreeCAD MCP startup")
     _state["freecad_ok"] = False
     _state["freecad_version"] = None
     _state["bridge_mode"] = "none"
 
-    # Verify FreeCAD exists
-    if not os.path.isfile(FREECAD_PATH):
-        logger.warning("FreeCAD not found at %s", FREECAD_PATH)
+    # Check if FreeCAD bridge is already running on its port
+    bridge_already_running = False
+    try:
+        _, writer = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", BRIDGE_PORT), timeout=1)
+        writer.close()
+        await writer.wait_closed()
+        bridge_already_running = True
+        logger.info("FreeCAD bridge already running on port %s", BRIDGE_PORT)
+    except (TimeoutError, ConnectionRefusedError, OSError):
+        pass
+
+    if not bridge_already_running:
+        if not os.path.isfile(FREECAD_PATH):
+            logger.warning("FreeCAD not found at %s", FREECAD_PATH)
+        else:
+            try:
+                r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)
+                _state["freecad_version"] = r.stdout.strip() or r.stderr.strip() or "unknown"
+            except Exception as e:
+                _state["freecad_version"] = f"error: {e}"
+
+            # Start bridge
+            if _start_freecad_bridge():
+                for attempt in range(5):
+                    await asyncio.sleep(2)
+                    if await _bridge_connect():
+                        _state["freecad_ok"] = True
+                        _state["bridge_mode"] = "tcp"
+                        logger.info("FreeCAD bridge connected")
+                        break
+                    logger.info("Waiting for bridge (attempt %d/5)...", attempt + 1)
+
+            if not _state.get("freecad_ok"):
+                _state["bridge_mode"] = "subprocess"
+                logger.info("Falling back to subprocess mode (limited STEP support)")
     else:
-        try:
-            r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)
-            _state["freecad_version"] = r.stdout.strip() or r.stderr.strip() or "unknown"
-        except Exception as e:
-            _state["freecad_version"] = f"error: {e}"
-
-        # Start bridge
-        if _start_freecad_bridge():
-            for attempt in range(15):
-                await asyncio.sleep(2)
-                if await _bridge_connect():
-                    _state["freecad_ok"] = True
-                    _state["bridge_mode"] = "tcp"
-                    logger.info("FreeCAD bridge connected")
-                    break
-                logger.info("Waiting for bridge (attempt %d/15)...", attempt + 1)
-
+        # Bridge already running, just connect
+        _state["freecad_version"] = "bridge_running"
+        for attempt in range(5):
+            await asyncio.sleep(1)
+            if await _bridge_connect():
+                _state["freecad_ok"] = True
+                _state["bridge_mode"] = "tcp"
+                logger.info("Connected to existing FreeCAD bridge")
+                break
         if not _state.get("freecad_ok"):
-            _state["bridge_mode"] = "subprocess"
-            logger.info("Falling back to subprocess mode (limited STEP support)")
+            _state["bridge_mode"] = "tcp"  # still tcp, just not connected yet
+            logger.warning("Existing bridge found but could not connect")
 
     _state["work_dir"] = WORK_DIR
     yield
 
     # Shutdown
-    if _bridge_writer:
+    if _bridge_writer and not bridge_already_running:
         try:
             _bridge_writer.close()
             await _bridge_writer.wait_closed()
@@ -678,10 +716,405 @@ async def stream_logs():
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+# ── Marketplace Proxy ─────────────────────────────────────────────────────────
+
+
+class MarketplaceSearchRequest(BaseModel):
+    source: str = Field(description="Marketplace: printables, grabcad, thingiverse")
+    query: str = Field(description="Search query")
+    limit: int = Field(default=20, description="Max results")
+    page: int = Field(default=1, description="Page number")
+
+
+class MarketplaceDownloadRequest(BaseModel):
+    source: str = Field(description="Marketplace source")
+    model_id: str = Field(description="Model ID to download")
+    file_url: str = Field(description="Direct download URL")
+    filename: str = Field(description="Desired filename")
+
+
+_PRINTABLES_GQL = "https://api.printables.com/graphql/"
+_GRABCAD_API = "https://grabcad.com/api/v1"
+_THINGIVERSE_API = "https://api.thingiverse.com"
+_HEADERS = {"User-Agent": "freecad-mcp/0.3.0 (MCP server; +https://github.com/sandraschi/freecad-mcp)", "Accept": "application/json"}
+
+_MARKETPLACE_CATEGORIES = {
+    "printables": [
+        {"id": "", "label": "All"},
+        {"id": "3D-Printing", "label": "3D Printing"},
+        {"id": "Art", "label": "Art"},
+        {"id": "Automotive", "label": "Automotive"},
+        {"id": "Electronics", "label": "Electronics"},
+        {"id": "Fashion", "label": "Fashion"},
+        {"id": "Gadgets", "label": "Gadgets"},
+        {"id": "Games", "label": "Games"},
+        {"id": "Household", "label": "Household"},
+        {"id": "Kitchen", "label": "Kitchen & Dining"},
+        {"id": "Organization", "label": "Organization"},
+        {"id": "Outdoor", "label": "Outdoor & Garden"},
+        {"id": "Pets", "label": "Pets"},
+        {"id": "Sports", "label": "Sports"},
+        {"id": "Tools", "label": "Tools"},
+        {"id": "Toys", "label": "Toys"},
+    ],
+    "thingiverse": [
+        {"id": "", "label": "All"},
+        {"id": "3D-Printing", "label": "3D Printing"},
+        {"id": "Art", "label": "Art"},
+        {"id": "DIY", "label": "DIY"},
+        {"id": "Electronics", "label": "Electronics"},
+        {"id": "Gadgets", "label": "Gadgets"},
+        {"id": "Games", "label": "Games"},
+        {"id": "Household", "label": "Household"},
+        {"id": "Learning", "label": "Learning"},
+        {"id": "Models", "label": "Models"},
+        {"id": "Music", "label": "Music"},
+        {"id": "Pets", "label": "Pets"},
+        {"id": "Robotics", "label": "Robotics"},
+        {"id": "Sports", "label": "Sports"},
+        {"id": "Tools", "label": "Tools"},
+        {"id": "Toys", "label": "Toys & Games"},
+        {"id": "Wearables", "label": "Wearables"},
+    ],
+    "grabcad": [
+        {"id": "", "label": "All"},
+        {"id": "3d-printing", "label": "3D Printing"},
+        {"id": "aerospace", "label": "Aerospace"},
+        {"id": "automotive", "label": "Automotive"},
+        {"id": "consumer-products", "label": "Consumer Products"},
+        {"id": "electronics", "label": "Electronics"},
+        {"id": "furniture", "label": "Furniture"},
+        {"id": "industrial-design", "label": "Industrial Design"},
+        {"id": "machine-design", "label": "Machine Design"},
+        {"id": "marine", "label": "Marine"},
+        {"id": "mechanical", "label": "Mechanical"},
+        {"id": "medical", "label": "Medical"},
+        {"id": "robotics", "label": "Robotics"},
+        {"id": "sports", "label": "Sports"},
+        {"id": "tools", "label": "Tools"},
+        {"id": "toys", "label": "Toys"},
+    ],
+}
+
+
+def _safe_json(response: httpx.Response) -> dict | list | None:
+    """Parse JSON safely — return None on empty or non-JSON."""
+    if response.status_code >= 400:
+        logger.warning("Marketplace API error %s: %s", response.status_code, response.text[:500])
+        return None
+    try:
+        return response.json()
+    except Exception as e:
+        logger.warning("Marketplace API non-JSON response: %s — %s", response.text[:200], e)
+        return None
+
+
+_PRINTABLES_SEARCH_QUERY = """query Search($query: String!, $limit: Int!, $offset: Int!) {
+  searchPrints2(query: $query, limit: $limit, offset: $offset) {
+    totalCount
+    items {
+      id
+      name
+      slug
+      summary
+      downloadCount
+      likesCount
+      user {
+        publicUsername
+        handle
+      }
+      images {
+        filePath
+      }
+    }
+  }
+}"""
+
+
+async def _marketplace_search(source: str, query: str, category: str = "", limit: int = 20, page: int = 1) -> dict:
+    """Shared marketplace search logic — used by both REST and MCP tools."""
+    offset = (page - 1) * limit
+
+    if source not in ("printables", "grabcad", "thingiverse"):
+        return {"success": False, "error": f"Unknown source: {source}"}
+
+    try:
+        if source == "printables":
+            q = f"{query} {category}" if category else query
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                r = await client.post(_PRINTABLES_GQL, headers=_HEADERS, json={"query": _PRINTABLES_SEARCH_QUERY, "variables": {"query": q, "limit": limit, "offset": offset}})
+                data = _safe_json(r)
+                if not data:
+                    return {"success": False, "source": source, "results": [], "error": f"Empty response from Printables (HTTP {r.status_code})"}
+                items = data.get("data", {}).get("searchPrints2", {}).get("items", []) or []
+                total = data.get("data", {}).get("searchPrints2", {}).get("totalCount", 0)
+                results = []
+                for item in items:
+                    img = item.get("images", [{}])[0].get("filePath", "") if item.get("images") else ""
+                    item_id = str(item.get("id", ""))
+                    results.append({
+                        "id": item_id,
+                        "title": item.get("name", ""),
+                        "summary": (item.get("summary") or "")[:200],
+                        "author": item.get("user", {}).get("publicUsername", item.get("user", {}).get("handle", "")),
+                        "downloads": item.get("downloadCount", 0),
+                        "likes": item.get("likesCount", 0),
+                        "image_url": f"https://media.printables.com/{img}" if img else "",
+                        "model_url": f"https://www.printables.com/model/{item_id}",
+                        "download_url": "",
+                        "source": "printables",
+                    })
+                return {"success": True, "source": source, "results": results, "total": total}
+
+        elif source == "grabcad":
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                params = {"query": query, "per_page": limit, "page": page}
+                if category:
+                    params["category"] = category
+                r = await client.get(f"{_GRABCAD_API}/search", headers=_HEADERS, params=params)
+                data = _safe_json(r)
+                if not data:
+                    return {"success": False, "source": source, "results": [], "error": f"Empty response from GrabCAD (HTTP {r.status_code})"}
+                items = data.get("items", []) or data.get("models", []) or []
+                results = []
+                for item in items:
+                    results.append({
+                        "id": str(item.get("id", "")), "title": item.get("name", ""),
+                        "summary": (item.get("description") or "")[:200],
+                        "author": item.get("author", {}).get("name", "") if isinstance(item.get("author"), dict) else "",
+                        "downloads": item.get("download_count", 0), "likes": item.get("like_count", 0),
+                        "image_url": item.get("preview_image", ""),
+                        "model_url": item.get("url", f"https://grabcad.com/library/{item.get('slug', '')}"),
+                        "download_url": "", "source": "grabcad",
+                    })
+                total = data.get("total_count", data.get("total", len(results)))
+                return {"success": True, "source": source, "results": results, "total": total}
+
+        elif source == "thingiverse":
+            token = _marketplace_settings.get("thingiverse_api_key", "") or os.environ.get("THINGIVERSE_API_KEY", "")
+            headers = dict(_HEADERS)
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                params = {"type": "things", "page": page, "per_page": limit}
+                if category:
+                    params["category"] = category
+                r = await client.get(f"https://api.thingiverse.com/search/{query}", headers=headers, params=params)
+                data = _safe_json(r)
+                if not data:
+                    return {"success": False, "source": source, "results": [], "error": f"Empty response from Thingiverse (HTTP {r.status_code})"}
+                hits = data.get("hits", [])
+                results = []
+                for item in hits:
+                    results.append({
+                        "id": str(item.get("id", "")), "title": item.get("name", ""),
+                        "summary": (item.get("description") or "")[:200],
+                        "author": item.get("creator", {}).get("name", "") if isinstance(item.get("creator"), dict) else "",
+                        "downloads": item.get("download_count", 0), "likes": item.get("like_count", 0),
+                        "image_url": item.get("thumbnail", ""),
+                        "model_url": item.get("public_url", item.get("url", "")),
+                        "download_url": f"https://www.thingiverse.com/thing:{item.get('id', '')}/zip" if item.get("id") else "",
+                        "source": "thingiverse",
+                    })
+                total = data.get("total", 0)
+                return {"success": True, "source": source, "results": results, "total": total}
+
+    except Exception as e:
+        logger.error("Marketplace search error (%s): %s", source, e)
+        return {"success": False, "source": source, "results": [], "error": str(e)}
+
+
+async def _marketplace_download(source: str, model_id: str, file_url: str, filename: str) -> dict:
+    """Shared marketplace download logic — used by both REST and MCP tools."""
+    ext = Path(filename).suffix.lower()
+    if ext not in (".step", ".stp", ".stl", ".zip"):
+        return {"success": False, "error": f"Unsupported format: {ext}. Use .step, .stp, .stl, or .zip."}
+    dest = os.path.join(UPLOAD_DIR, filename)
+    try:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            r = await client.get(file_url, headers=_HEADERS)
+            r.raise_for_status()
+            content = r.content
+            with open(dest, "wb") as f:
+                f.write(content)
+        extracted = []
+        if filename.endswith(".zip"):
+            import zipfile
+            with zipfile.ZipFile(dest) as zf:
+                for name in zf.namelist():
+                    if name.lower().endswith((".stl", ".step", ".stp")):
+                        out_path = os.path.join(UPLOAD_DIR, Path(name).name)
+                        with zf.open(name) as src, open(out_path, "wb") as dst:
+                            dst.write(src.read())
+                        extracted.append({"filename": Path(name).name, "size_bytes": os.path.getsize(out_path)})
+        return {"success": True, "filename": filename, "size_bytes": len(content), "path": dest, "extracted": extracted or None}
+    except Exception as e:
+        logger.error("Marketplace download error: %s", e)
+        return {"success": False, "error": f"Download failed: {e}"}
+
+
+@app.get("/api/v1/marketplace/categories")
+async def categories_endpoint(source: str = ""):
+    """List categories for a marketplace source."""
+    if source:
+        if source not in _MARKETPLACE_CATEGORIES:
+            raise HTTPException(400, f"Unknown source: {source}")
+        return {"success": True, "source": source, "categories": _MARKETPLACE_CATEGORIES[source]}
+    return {"success": True, "categories": _MARKETPLACE_CATEGORIES}
+
+
+@app.get("/api/v1/marketplace/search")
+async def search_endpoint(source: str, query: str, category: str = "", limit: int = 20, page: int = 1):
+    """Search a marketplace for CAD models."""
+    if source not in ("printables", "grabcad", "thingiverse"):
+        raise HTTPException(400, f"Unknown source: {source}. Use 'printables', 'grabcad', or 'thingiverse'.")
+    return await _marketplace_search(source, query, category, limit, page)
+
+
+@app.post("/api/v1/marketplace/download")
+async def download_endpoint(req: MarketplaceDownloadRequest):
+    """Download a model from a marketplace URL into the uploads directory."""
+    result = await _marketplace_download(req.source, req.model_id, req.file_url, req.filename)
+    if not result.get("success"):
+        raise HTTPException(500, result.get("error", "Download failed"))
+    return result
+
+
+# ── Marketplace MCP Tools ──────────────────────────────────────────────────────
+
+
+@mcp.tool(annotations=_README_ONLY)
+async def marketplace_search(
+    source: Annotated[str, Field(description="Marketplace source: printables, thingiverse, grabcad")],
+    query: Annotated[str, Field(description="Search query. Pair with a category to browse all.")],
+    category: Annotated[str, Field(default="", description="Category filter (empty = all). Use marketplace_categories to list.")] = "",
+    page: Annotated[int, Field(default=1, description="Page number (1-based).")] = 1,
+) -> dict:
+    """Search Printables, Thingiverse, or GrabCAD for CAD models.
+
+    Use marketplace_categories first to list available categories per source.
+    Results include title, author, thumbnail, download/like counts, and model URL.
+    Download a model via marketplace_download.
+
+    ## Return Format
+    {"success": bool, "source": str, "results": list, "total": int}
+
+    ## Examples
+    await marketplace_search(source="printables", query="robot chassis")
+    await marketplace_search(source="thingiverse", query="gear", category="Tools")
+    """
+    return await _marketplace_search(source, query, category, 20, page)
+
+
+@mcp.tool()
+async def marketplace_download(
+    source: Annotated[str, Field(description="Marketplace source.")],
+    model_id: Annotated[str, Field(description="Model ID (from search results).")],
+    file_url: Annotated[str, Field(description="Direct download URL from search results.")],
+    filename: Annotated[str, Field(description="Desired filename, e.g. model.stl or model.zip")],
+) -> dict:
+    """Download a model from a marketplace into the uploads directory.
+
+    Thingiverse downloads are ZIP files — the server auto-extracts STL/STEP files.
+    After download, use step_to_stl or model_info on the imported file.
+
+    ## Return Format
+    {"success": bool, "filename": str, "size_bytes": int, "extracted": list | None}
+
+    ## Examples
+    await marketplace_download(source="printables", model_id="12345", file_url="https://...", filename="chassis.stl")
+    """
+    return await _marketplace_download(source, model_id, file_url, filename)
+
+
+@mcp.tool(annotations=_README_ONLY)
+async def marketplace_categories(
+    source: Annotated[str, Field(description="Marketplace source: printables, thingiverse, grabcad")],
+) -> dict:
+    """List available categories for a marketplace source.
+
+    Use the category id from the result as the `category` argument
+    in marketplace_search to filter.
+
+    ## Return Format
+    {"success": bool, "source": str, "categories": [{"id": str, "label": str}, ...]}
+
+    ## Examples
+    await marketplace_categories(source="printables")
+    """
+    cats = _MARKETPLACE_CATEGORIES.get(source, [])
+    return {"success": True, "source": source, "categories": cats}
+
+
+# ── Prefab UI Cards ────────────────────────────────────────────────────────────
+
+
+@mcp.tool(app=True)
+async def show_marketplace_card(
+    source: Annotated[str, Field(description="Marketplace source: printables, thingiverse, grabcad")],
+    query: Annotated[str, Field(description="Search query.")],
+    category: Annotated[str, Field(default="", description="Optional category filter.")] = "",
+) -> PrefabApp:
+    """Display marketplace search results as a rich Prefab card in the chat.
+
+    Shows up to 6 results with thumbnails, author, download/like stats.
+    Full results available via marketplace_search tool.
+
+    ## Return Format
+    PrefabApp card rendered in the MCP client.
+
+    ## Examples
+    await show_marketplace_card(source="printables", query="robot chassis")
+    await show_marketplace_card(source="thingiverse", query="gear", category="Tools")
+    """
+    from prefab_ui.components import Card, Column, Heading, Image, Link, Muted, Row, Separator, Text
+
+    data = await _marketplace_search(source, query, category, 20, 1)
+    source_labels = {"printables": "Printables", "thingiverse": "Thingiverse", "grabcad": "GrabCAD"}
+
+    if not data.get("success"):
+        with Column(gap=3, css_class="p-4") as view:
+            Heading("Marketplace Search Error")
+            Muted(data.get("error", "Unknown error"))
+        return PrefabApp(view=view, title="Marketplace Error")
+
+    items = data.get("results", [])[:6]
+    total = data.get("total", 0)
+
+    with Column(gap=3, css_class="p-4") as view:
+        Heading(f"🔍 {source_labels.get(source, source)} — {query}")
+        Muted(f"{total:,} result{'s' if total != 1 else ''}" + (f" in {category}" if category else ""))
+        Separator()
+        for item in items:
+            with Card(css_class="overflow-hidden"):
+                with Row(gap=3, css_class="items-start"):
+                    if item.get("image_url"):
+                        Image(src=item["image_url"], css_class="w-20 h-20 rounded-lg object-cover shrink-0")
+                    with Column(gap=1, css_class="flex-1 min-w-0"):
+                        Heading(item.get("title", ""), level=4)
+                        Muted(f"by {item.get('author', 'unknown')}")
+                        with Row(gap=3):
+                            Text(f"⬇ {item['downloads']:,}" if item.get("downloads") else "", css_class="text-xs")
+                            Text(f"⭐ {item['likes']:,}" if item.get("likes") else "", css_class="text-xs")
+                        if item.get("summary"):
+                            Text(item["summary"][:150], css_class="text-xs text-slate-500")
+            Separator()
+        if len(items) < total:
+            Muted(f"... and {total - len(items)} more results. Use marketplace_search for full list.")
+        if items:
+            Link("Open on marketplace ↗", href=items[0].get("model_url", ""), css_class="text-indigo-400 text-sm")
+
+    return PrefabApp(view=view, title=f"Marketplace — {query}")
+
+
 # ── Chat / LLM ───────────────────────────────────────────────────────────────
 
 
 _llm_settings = {"ollama_url": "http://192.168.1.11:11434", "model": "gemma3:1b"}
+_marketplace_settings = {
+    "thingiverse_api_key": os.environ.get("THINGIVERSE_API_KEY", ""),
+    "grabcad_api_key": os.environ.get("GRABCAD_API_KEY", ""),
+}
 
 
 class ChatRequest(BaseModel):
@@ -694,22 +1127,28 @@ class ChatRequest(BaseModel):
 class SettingsUpdate(BaseModel):
     ollama_url: str | None = None
     model: str | None = None
+    thingiverse_api_key: str | None = None
+    grabcad_api_key: str | None = None
 
 
 @app.get("/api/v1/settings")
 async def get_settings():
-    """Get LLM settings."""
-    return _llm_settings
+    """Get LLM and marketplace settings."""
+    return {**_llm_settings, **_marketplace_settings, "marketplace": _marketplace_settings}
 
 
 @app.put("/api/v1/settings")
 async def update_settings(body: SettingsUpdate):
-    """Update LLM settings."""
+    """Update LLM or marketplace settings."""
     if body.ollama_url:
         _llm_settings["ollama_url"] = body.ollama_url
     if body.model:
         _llm_settings["model"] = body.model
-    return _llm_settings
+    if body.thingiverse_api_key is not None:
+        _marketplace_settings["thingiverse_api_key"] = body.thingiverse_api_key
+    if body.grabcad_api_key is not None:
+        _marketplace_settings["grabcad_api_key"] = body.grabcad_api_key
+    return {**_llm_settings, "marketplace": _marketplace_settings}
 
 
 @app.post("/api/v1/chat")
