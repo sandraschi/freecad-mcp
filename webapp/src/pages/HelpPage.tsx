@@ -573,6 +573,7 @@ function Links() {
         ["DeepXDE", "Lightweight PINN library", "https://deepxde.readthedocs.io"],
         ["FluidX3D", "Free GPU CFD (OpenCL, all GPUs)", "https://github.com/ProjectPhysX/FluidX3D"],
         ["Lethe", "GPU-accelerated FEM CFD", "https://github.com/lethe-cfd/lethe"],
+        ["FluidX3D Docs", "Setup, extensions, video rendering", "https://github.com/ProjectPhysX/FluidX3D/blob/master/DOCUMENTATION.md"],
       ].map(([label, desc, url]) => (
         <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-all group">
           <div>

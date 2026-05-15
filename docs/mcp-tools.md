@@ -1,6 +1,6 @@
 # MCP Tools
 
-All 30 tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, and `src/freecad_mcp/tools/cfd.py`. 7 for CAD/slicing, 9 for BIM/Arch, 10 for CFD/OpenFOAM, 3 for marketplace, 1 Prefab card.
+All 36 tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 9 for BIM/Arch, 10 for CFD/OpenFOAM, 6 for FluidX3D GPU, 3 for marketplace, 1 Prefab card.
 
 ## Tool Manifest
 
@@ -36,6 +36,12 @@ All 30 tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/f
 | `cfd_parametric_study` | MUTATING | Parameter sweep for design optimization |
 | `cfd_nl2foam` | MUTATING | Natural language → OpenFOAM config via LLM |
 | `cfd_sample_for_pinns` | MUTATING | Export point clouds for PINN/GNN training |
+| `cfd_fluidx3d_status` | READ_ONLY | Check FluidX3D + compiler availability |
+| `cfd_fluidx3d_setup` | MUTATING | Generate FluidX3D C++ setup.cpp for GPU CFD |
+| `cfd_fluidx3d_compile` | MUTATING | Compile setup.cpp → GPU binary via g++/MSVC |
+| `cfd_fluidx3d_run` | MUTATING | Execute FluidX3D simulation on GPU via OpenCL |
+| `cfd_fluidx3d_results` | READ_ONLY | Parse forces, MLUPS throughput, completion status |
+| `cfd_fluidx3d_explain` | READ_ONLY | Explain flow physics: Reynolds number, regime, solver notes |
 
 ---
 
@@ -514,3 +520,93 @@ await cfd_sample_for_pinns(case_name="airfoil_cfd", n_boundary=10000, n_interior
 ```
 
 Output: CSV/JSON/NPZ with columns x, y, z, region (boundary/interior).
+
+---
+
+## FluidX3D GPU CFD Tools
+
+All 6 FluidX3D tools live in `src/freecad_mcp/tools/fluidx3d.py` and provide native GPU CFD via ProjectPhysX/FluidX3D (OpenCL — all GPU vendors). Generate C++, compile via g++/MSVC, run on GPU, parse forces/throughput.
+
+Requires: `git clone https://github.com/ProjectPhysX/FluidX3D.git` + a C++ compiler.
+
+### cfd_fluidx3d_status
+
+Check FluidX3D installation and compiler availability.
+
+```python
+await cfd_fluidx3d_status()
+# {"success": true, "fluidx3d_path": "D:/Dev/repos/FluidX3D", "compiler": "g++", "ready": true}
+```
+
+---
+
+### cfd_fluidx3d_setup
+
+Generate a C++ setup.cpp and defines.hpp for GPU simulation. Domain types: channel, pipe, box, stl.
+
+```python
+# Channel flow — 512×128×128 grid, water at Re=10000
+await cfd_fluidx3d_setup(
+    case_name="channel_gpu",
+    domain_type="channel",
+    resolution_x=512, resolution_y=128, resolution_z=128,
+    length_m=1.0, velocity_ms=0.01, viscosity_m2s=1e-6,
+    time_steps=50000
+)
+
+# STL geometry import
+await cfd_fluidx3d_setup(
+    case_name="airfoil_gpu",
+    domain_type="stl", stl_file="naca0012.stl",
+    resolution_x=768, resolution_y=256, resolution_z=256,
+    time_steps=100000
+)
+```
+
+---
+
+### cfd_fluidx3d_compile
+
+Compile the generated setup.cpp into a GPU executable. Copies into FluidX3D source tree, runs g++ or MSVC.
+
+```python
+await cfd_fluidx3d_compile(case_name="channel_gpu")
+# {"success": true, "data": {"binary": ".../bin/fluidx3d_channel_gpu.exe", "compile_time_s": 4.2}}
+```
+
+---
+
+### cfd_fluidx3d_run
+
+Execute the compiled binary on the GPU via OpenCL. Captures stdout for force/residual parsing.
+
+```python
+# Run on fastest GPU (device 0)
+await cfd_fluidx3d_run(case_name="channel_gpu")
+
+# Select specific GPU
+await cfd_fluidx3d_run(case_name="channel_gpu", gpu_device=1, timeout_s=7200)
+```
+
+VTK output files are written for ParaView post-processing.
+
+---
+
+### cfd_fluidx3d_results
+
+Parse simulation results: forces history, final forces, MLUPS throughput, completion status.
+
+```python
+await cfd_fluidx3d_results(case_name="channel_gpu")
+# {"success": true, "data": {"forces": [...], "mlups": 234.5, "completed": true, "time_steps_completed": 50000}}
+```
+
+---
+
+### cfd_fluidx3d_explain
+
+Explain the flow physics: Reynolds number, regime (creeping/laminar/transitional/turbulent), expected behaviour, solver notes.
+
+```python
+await cfd_fluidx3d_explain(case_name="channel_gpu")
+# {"success": true, "data": {"Re": 10000.0, "regime": "turbulent...", "summary": "..."}}  ```
