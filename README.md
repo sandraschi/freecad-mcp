@@ -5,13 +5,24 @@
 [![Linted with Biome](https://img.shields.io/badge/Linted_with-Biome-60a5fa?style=flat-square&logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Built with Just](https://img.shields.io/badge/Built_with-Just-000000?style=flat-square&logo=gnu-bash&logoColor=white)](https://github.com/casey/just)
 
-**CAD + BIM + CFD, through your AI assistant.** — Convert STEP assemblies, create parametric building elements (walls, slabs, columns, windows, doors, roofs), export/import IFC, run CFD simulations (OpenFOAM), generate NLP→solver configs, export point clouds for PINNs, inspect geometry, create primitives, slice for printing, and browse marketplaces — all via MCP tools and a Vite dashboard.
+## What can I do with this?
+
+FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). This project lets your AI assistant control it — through a chat interface, a web dashboard, or automated scripts. No need to open FreeCAD yourself.
+
+| Category | What you can do |
+|:---|:---|
+| **Mechanical parts** | Convert STEP files to 3D-printable STL meshes. Create boxes, cylinders, spheres, cones by describing them. Inspect part volumes and bounding boxes. |
+| **Architecture & construction** | Create walls, floor slabs, columns (rectangular or steel H-sections), windows, doors, and sloped roofs — all in millimeters. Export to `.ifc` files that architects and structural engineers can open. Import `.ifc` files from other design tools. *This is called BIM (Building Information Modeling) — 3D building design where every element knows what it is (a wall, a door, a load-bearing column), not just a shape. FreeCAD's Arch workbench handles this. QCAD is a 2D drafting tool — different domain.* |
+| **Fluid simulation** | Model pipes, channels, and nozzles. Run airflow or water-flow simulations through OpenFOAM (the same tool Formula 1 teams use). Or run GPU-accelerated simulations with FluidX3D — uses your graphics card instead of the CPU. Describe a flow problem in plain English and let an LLM write the solver config. |
+| **3D printing** | Slice STL files into G-code for your printer. Configurable profiles for different printers, filaments, and layer heights. |
+| **Model marketplace** | Search Printables, Thingiverse, and GrabCAD for ready-made parts. Import them directly into your workspace. |
+| **Machine learning** | Export point clouds from fluid domains to train neural networks that replace slow physics simulations. Generate datasets by running parameter sweeps automatically. |
 
 | | |
 |--:|--|
-| **You might use this if…** | You want an AI to reason about CAD files, convert formats, prepare 3D prints, or search model marketplaces without opening FreeCAD. |
-| **What it connects to** | FreeCAD 1.1.1+ (OCCT kernel), OpenFOAM 10 (Docker), PrusaSlicer 2.8+, Ollama (NL2FOAM), Printables / Thingiverse / GrabCAD APIs |
-| **Ports** | Backend **10944**, Dashboard **10945**, TCP Bridge **10946** |
+| **Example use cases** | "What's inside this STEP file?" — "Convert this assembly to 3D-printable STL" — "Design a room with two windows and a door" — "Simulate water flow through this pipe at 2 m/s" — "Find me a gear on Printables and slice it for my MK4" — "Train a neural network to predict airflow instead of running the full simulation every time" |
+| **What it talks to** | FreeCAD 1.1.1+ (mechanical/architectural CAD), OpenFOAM 10 via Docker (fluid simulation), FluidX3D (GPU-accelerated simulation), PrusaSlicer 2.8+ (3D printing), Ollama (local LLM for natural language → config), Printables / Thingiverse / GrabCAD (model search) |
+| **Network ports** | Web dashboard on **10945**, API + AI tools on **10944**, FreeCAD bridge on **10946** |
 | **Start** | `just bootstrap` then `start.ps1` |
 
 ## Documentation Index
@@ -20,9 +31,9 @@
 | :--- | :--- |
 | **[Installation](docs/install.md)** | Prerequisites, FreeCAD setup, PrusaSlicer, `just bootstrap` |
 | **[Architecture](docs/architecture.md)** | TCP bridge, subprocess fallback, port layout, file pipeline |
-| **[MCP Tools](docs/mcp-tools.md)** | All 30 tools: CAD operations, BIM/Arch (walls, slabs, columns, IFC), CFD/OpenFOAM (domain, physics, solver, NL2FOAM, PINNs), slicing, marketplace search/download, GUI launch, Prefab card — with examples |
-| **[CFD Pipeline](docs/cfd-guide.md)** | Complete CFD guide: architecture, installation, tool reference, fluid properties, boundary conditions, workflow examples, NL2FOAM, PINN sampling, troubleshooting, benchmarks |
-| **[OpenFOAM & GPU](docs/openfoam.md)** | OpenFOAM fundamentals, solver/turbulence model selection, GPU acceleration (RTX 4090), RapidCFD, FluidX3D, PINN surrogate path, case directory structure, mesh quality targets |
+| **[MCP Tools](docs/mcp-tools.md)** | All 36 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance |
+| **[Fluid simulation guide](docs/cfd-guide.md)** | Full walkthrough: creating domains, configuring physics, setting boundary conditions, running solvers, reading results, parametric sweeps, natural language config, and exporting data for neural network training |
+| **[OpenFOAM & GPU solvers](docs/openfoam.md)** | Solver reference, turbulence model guide, GPU acceleration options (FluidX3D on RTX 4090 and Apple Silicon), Mac vs PC comparison |
 | **[AI Tooling](docs/ai-tooling.md)** | Ollama chat, agentic CAD reasoning, sampling workflows |
 | **[About FreeCAD](docs/about-freecad.md)** | History, community, Python scripting, 300+ workbenches, vs SolidWorks/Fusion |
 | **[Marketplace](docs/marketplace.md)** | Searching and importing models from Printables, Thingiverse, GrabCAD |
@@ -48,12 +59,12 @@ start.ps1        # kills zombies, starts backend + frontend, opens browser
 }
 ```
 
-## Industrial Quality Stack
+## Quality
 
-- **Python (Core)**: [Ruff](https://astral.sh/ruff) for linting and formatting.
-- **Webapp (UI)**: [Biome](https://biomejs.dev/) for sub-millisecond linting.
-- **Protocol**: FastMCP 3.2 SSE transport with hardened stdout/stderr isolation.
-- **Automation**: [Justfile](./justfile) recipes for all fleet operations (`just lint`, `just fix`, `just dev`).
+- **Python**: [Ruff](https://astral.sh/ruff) linter + formatter (zero-config, sub-millisecond)
+- **Frontend**: [Biome](https://biomejs.dev/) linter + formatter
+- **Task runner**: [`just`](https://github.com/casey/just) — `just lint`, `just fix`, `just dev`
+- **AI protocol**: FastMCP 3.2 with SSE transport
 
 ## License
 
