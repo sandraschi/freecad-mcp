@@ -1,6 +1,6 @@
 # MCP Tools
 
-All 36 tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 9 for BIM/Arch, 10 for CFD/OpenFOAM, 6 for FluidX3D GPU, 3 for marketplace, 1 Prefab card.
+All 37 tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 9 for BIM/Arch, 10 for CFD/OpenFOAM, 7 for FluidX3D GPU, 3 for marketplace, 1 Prefab card.
 
 ## Tool Manifest
 
