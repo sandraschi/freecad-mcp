@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { AlertTriangle, BarChart3, Binary, Box, Cpu, FileCode2, Gauge, Info, Loader2, Play, RefreshCw, Rocket, Zap } from "lucide-react";
+import StlViewer from "../components/StlViewer";
 
 const API = "/api/v1";
 
@@ -257,12 +258,20 @@ export default function Fluidx3dPage() {
             </div>
 
             {result?.data && (
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-1">
-                <p className="text-sm text-emerald-300">Setup generated</p>
-                <p className="text-xs text-slate-400">
-                  Re ≈ {String(result.data.Re_estimate)} | {String(result.data.resolution)} | {String(result.data.cells)} cells
-                </p>
-                <p className="text-xs text-slate-500 font-mono">{String(result.data.setup_file)}</p>
+              <div className="space-y-4">
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-1">
+                  <p className="text-sm text-emerald-300">Setup generated</p>
+                  <p className="text-xs text-slate-400">
+                    Re ≈ {String(result.data.Re_estimate)} | {String(result.data.resolution)} | {String(result.data.cells)} cells
+                  </p>
+                  <p className="text-xs text-slate-500 font-mono">{String(result.data.setup_file)}</p>
+                </div>
+                {result.data.stl_file_name && (
+                  <StlViewer
+                    url={`/api/v1/case-files/${caseName}/${result.data.stl_file_name}`}
+                    height={400}
+                  />
+                )}
               </div>
             )}
           </div>

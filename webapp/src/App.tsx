@@ -12,6 +12,7 @@ import MarketplacePage from "./pages/MarketplacePage";
 import BimDemoPage from "./pages/BimDemoPage";
 import CfdPage from "./pages/CfdPage";
 import Fluidx3dPage from "./pages/Fluidx3dPage";
+import PipelinePage from "./pages/PipelinePage";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/bim-demo" element={<BimDemoPage />} />
         <Route path="/cfd" element={<CfdPage />} />
         <Route path="/fluidx3d" element={<Fluidx3dPage />} />
+        <Route path="/pipeline" element={<PipelinePage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/settings" element={<SettingsPage />} />

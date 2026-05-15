@@ -15,6 +15,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -31,6 +32,8 @@ from pydantic import BaseModel, Field
 from freecad_mcp.tools import register_bim_tools, register_cfd_tools, register_fluidx3d_tools
 
 logger = logging.getLogger("freecad-mcp")
+
+_START_TIME = time.time()
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
@@ -59,8 +62,10 @@ os.makedirs(WORK_DIR, exist_ok=True)
 
 UPLOAD_DIR = os.path.join(WORK_DIR, "uploads")
 OUTPUT_DIR = os.path.join(WORK_DIR, "output")
+F3D_CASE_DIR = os.path.join(WORK_DIR, "fluidx3d_cases")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(F3D_CASE_DIR, exist_ok=True)
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
@@ -69,6 +74,12 @@ _req_id = 0
 _bridge_proc: subprocess.Popen | None = None
 _bridge_reader: asyncio.StreamReader | None = None
 _bridge_writer: asyncio.StreamWriter | None = None
+
+_llm_settings = {"ollama_url": "http://192.168.1.11:11434", "model": "gemma3:1b", "api_url": "", "api_key": ""}
+_marketplace_settings = {
+    "thingiverse_api_key": os.environ.get("THINGIVERSE_API_KEY", ""),
+    "grabcad_api_key": os.environ.get("GRABCAD_API_KEY", ""),
+}
 
 
 async def _bridge_send(method: str, params: dict | None = None, timeout: float = 120) -> dict:
@@ -302,6 +313,7 @@ _cfd_tools = register_cfd_tools(
     output_dir=OUTPUT_DIR,
     upload_dir=UPLOAD_DIR,
     build_result=_build_result,
+    llm_settings=_llm_settings,
 )
 
 # Register FluidX3D GPU CFD tools (6 tools)
@@ -711,6 +723,83 @@ async def get_status():
     }
 
 
+@app.get("/api/v1/health")
+async def health_check():
+    """Return server health: FreeCAD status, Docker, uptime."""
+
+    freecad_ok = _state.get("freecad_ok", False)
+    bridge_mode = _state.get("bridge_mode", "none")
+
+    if freecad_ok:
+        status = "ok"
+    elif bridge_mode != "none":
+        status = "degraded"
+    else:
+        status = "error"
+
+    docker_available = False
+    try:
+        r = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=10)
+        docker_available = r.returncode == 0
+    except Exception:
+        pass
+
+    openfoam_image = False
+    if docker_available:
+        try:
+            r = subprocess.run(
+                ["docker", "images", "openfoam/openfoam", "-q"],
+                capture_output=True, text=True, timeout=10,
+            )
+            openfoam_image = bool(r.stdout.strip())
+        except Exception:
+            pass
+
+    fluidx3d_path = os.environ.get("FLUIDX3D_PATH")
+    if not fluidx3d_path or not os.path.isdir(fluidx3d_path):
+        for p in [
+            r"D:\Dev\repos\FluidX3D",
+            os.path.expanduser("~/FluidX3D"),
+            os.path.expanduser("~/fluidx3d"),
+            "/opt/FluidX3D",
+        ]:
+            if os.path.isdir(p) and os.path.isdir(os.path.join(p, "src")):
+                fluidx3d_path = p
+                break
+        else:
+            fluidx3d_path = None
+
+    compiler = None
+    for exe in ["g++", "g++-14", "g++-13", "g++-12", "clang++"]:
+        try:
+            r = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
+            if r.returncode == 0:
+                compiler = exe
+                break
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    if compiler is None:
+        try:
+            r = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602
+            if "Microsoft" in r.stdout or "Microsoft" in r.stderr:
+                compiler = "cl"
+        except Exception:
+            pass
+
+    uptime_seconds = time.time() - _START_TIME
+
+    return {
+        "status": status,
+        "freecad_ok": freecad_ok,
+        "bridge_mode": bridge_mode,
+        "docker_available": docker_available,
+        "openfoam_image": openfoam_image,
+        "fluidx3d_path": fluidx3d_path,
+        "compiler": compiler,
+        "uptime_seconds": round(uptime_seconds, 1),
+    }
+
+
 @app.post("/api/v1/upload")
 async def upload_file(file: UploadFile):
     """Upload a STEP/STL file for processing."""
@@ -742,6 +831,17 @@ async def download_file(filename: str):
                 media = "application/sla"
             return FileResponse(path, media_type=media, filename=filename)
     raise HTTPException(404, f"File {filename} not found.")
+
+
+@app.get("/api/v1/case-files/{case_name}/{filename:path}")
+async def serve_case_file(case_name: str, filename: str):
+    """Serve a file from a FluidX3D case directory."""
+    path = os.path.join(F3D_CASE_DIR, case_name, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(404, f"File {filename} not found in case {case_name}")
+    ext = os.path.splitext(filename)[1].lower()
+    media = "application/sla" if ext == ".stl" else "application/octet-stream"
+    return FileResponse(path, media_type=media, filename=filename)
 
 
 @app.get("/api/v1/files")
@@ -1279,12 +1379,6 @@ async def show_marketplace_card(
 # ── Chat / LLM ───────────────────────────────────────────────────────────────
 
 
-_llm_settings = {"ollama_url": "http://192.168.1.11:11434", "model": "gemma3:1b"}
-_marketplace_settings = {
-    "thingiverse_api_key": os.environ.get("THINGIVERSE_API_KEY", ""),
-    "grabcad_api_key": os.environ.get("GRABCAD_API_KEY", ""),
-}
-
 
 class ChatRequest(BaseModel):
     messages: list[dict] = []
@@ -1296,6 +1390,8 @@ class ChatRequest(BaseModel):
 class SettingsUpdate(BaseModel):
     ollama_url: str | None = None
     model: str | None = None
+    api_url: str | None = None
+    api_key: str | None = None
     thingiverse_api_key: str | None = None
     grabcad_api_key: str | None = None
 
@@ -1313,6 +1409,10 @@ async def update_settings(body: SettingsUpdate):
         _llm_settings["ollama_url"] = body.ollama_url
     if body.model:
         _llm_settings["model"] = body.model
+    if body.api_url is not None:
+        _llm_settings["api_url"] = body.api_url
+    if body.api_key is not None:
+        _llm_settings["api_key"] = body.api_key
     if body.thingiverse_api_key is not None:
         _marketplace_settings["thingiverse_api_key"] = body.thingiverse_api_key
     if body.grabcad_api_key is not None:

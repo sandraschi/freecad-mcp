@@ -360,11 +360,14 @@ def register_cfd_tools(
     output_dir: str,
     upload_dir: str,
     build_result,
+    llm_settings: dict | None = None,
 ):
     """Register all 10 CFD MCP tools on the FastMCP instance.
 
     Returns a dict mapping tool_name -> callable for REST dispatch.
     """
+    if llm_settings is None:
+        llm_settings = {}
 
     CFD_CASE_DIR = os.path.join(work_dir, "cfd_cases")
     os.makedirs(CFD_CASE_DIR, exist_ok=True)
@@ -597,6 +600,14 @@ except Exception as e:
             "mesh_cells": actual_cells,
             "step_file": step_output,
         }
+
+        # Copy STL to fluidx3d_cases so FluidX3D can auto-discover geometry
+        fluidx3d_cases_dir = os.path.join(work_dir, "fluidx3d_cases")
+        stl_src = os.path.join(case_dir, "geometry.stl")
+        if os.path.isfile(stl_src):
+            f3d_stl_dir = os.path.join(fluidx3d_cases_dir, case_name)
+            os.makedirs(f3d_stl_dir, exist_ok=True)
+            shutil.copy(stl_src, os.path.join(f3d_stl_dir, "geometry.stl"))
 
         return {"success": True, "case_name": case_name, "case_dir": case_dir, "data": data}
 
@@ -1140,14 +1151,23 @@ boundaryField
     async def cfd_nl2foam(
         description: Annotated[str, Field(description="Natural language description of the CFD problem. Include flow regime, geometry, boundary conditions, and goals.")],
         case_name: Annotated[str, Field(description="Target case directory name.")] = "nl2foam_case",
-        model: Annotated[str, Field(description="Ollama model for config generation.")] = "gemma3:1b",
+        model: Annotated[str, Field(description="LLM model name. For Ollama: gemma3:1b, llama3. For OpenAI-compatible: gpt-4o, deepseek-chat, etc.")] = "gemma3:1b",
+        api_url: Annotated[str, Field(description="OpenAI-compatible API endpoint (e.g. https://api.openai.com). If empty, uses the configured Ollama instance.")] = "",
+        api_key: Annotated[str, Field(description="API key for the OpenAI-compatible endpoint. Only needed when api_url is set.")] = "",
     ) -> dict:
         """Convert a natural language fluid dynamics description into an OpenFOAM case configuration.
 
-        Uses the configured Ollama LLM to generate blockMeshDict, boundary
-        conditions, physics models, and solver settings from a plain-language
-        description. The LLM outputs structured JSON that is validated and
-        written to the OpenFOAM case directory.
+        Uses either the configured Ollama LLM or an OpenAI-compatible API endpoint
+        to generate blockMeshDict, boundary conditions, physics models, and solver
+        settings from a plain-language description. The LLM outputs structured JSON
+        that is validated and written to the OpenFOAM case directory.
+
+        When api_url is set (e.g. https://api.openai.com), uses the /v1/chat/completions
+        endpoint with standard OpenAI message format. The api_url and api_key persist
+        across calls for the session.
+
+        When api_url is empty, falls back to the configured Ollama instance using
+        the /api/generate endpoint.
 
         Example descriptions:
         - "Incompressible laminar flow through a 1m long, 0.1m diameter pipe at Re=500"
@@ -1159,43 +1179,78 @@ boundaryField
 
         ## Examples
         await cfd_nl2foam(description="Laminar pipe flow, Re=500, D=0.1m, L=1m, inlet velocity 0.005 m/s")
+        await cfd_nl2foam(description="Turbulent airfoil at 10 deg AoA", api_url="https://api.openai.com", api_key="sk-...", model="gpt-4o")
         """
         try:
             import httpx
         except ImportError:
             return {"success": False, "error": "httpx not available"}
 
-        ollama_url = "http://192.168.1.11:11434"
+        effective_api_url = api_url or llm_settings.get("api_url", "")
+        effective_api_key = api_key or llm_settings.get("api_key", "")
 
-        prompt = f"""You are an OpenFOAM CFD expert. Convert the following fluid dynamics problem description into a structured JSON configuration for an OpenFOAM case.
+        if api_url:
+            llm_settings["api_url"] = api_url
+        if api_key:
+            llm_settings["api_key"] = api_key
+
+        schema_json = """{
+    "solver": "simpleFoam|pisoFoam|pimpleFoam",
+    "flow_type": "laminar|kEpsilon|kOmegaSST",
+    "fluid": {"nu": float, "density": float, "name": "water|air|custom"},
+    "inlet": {"velocity": [float, float, float], "type": "fixedValue|flowRateInletVelocity"},
+    "outlet": {"type": "zeroGradient|fixedValue", "pressure": float},
+    "walls": {"type": "noSlip|slip"},
+    "domain": {"lx": float, "ly": float, "lz": float, "unit": "m"},
+    "mesh": {"nx": int, "ny": int, "nz": int},
+    "control": {"end_time": float, "write_interval": int},
+    "reasoning": "Brief physics justification (1-2 sentences)"
+}"""
+
+        system_prompt = "You are an OpenFOAM CFD expert. Respond only with valid JSON matching the requested schema."
+
+        if effective_api_url and (effective_api_url.startswith("https://") or effective_api_url.startswith("http://")):
+            headers = {"Content-Type": "application/json"}
+            if effective_api_key:
+                headers["Authorization"] = f"Bearer {effective_api_key}"
+
+            api_endpoint = f"{effective_api_url.rstrip('/')}/v1/chat/completions"
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Problem description: {description}\n\nReturn ONLY valid JSON with this structure:\n{schema_json}"},
+                ],
+            }
+
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.post(api_endpoint, json=payload, headers=headers)
+                    resp.raise_for_status()
+                    response_data = resp.json()
+                    raw = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            except Exception as e:
+                return {"success": False, "error": f"API request failed: {e}"}
+        else:
+            ollama_url = llm_settings.get("ollama_url", "http://192.168.1.11:11434")
+            prompt = f"""{system_prompt} Convert the following fluid dynamics problem description into a structured JSON configuration for an OpenFOAM case.
 
 Problem description: {description}
 
 Return ONLY valid JSON (no markdown, no explanation) with this structure:
-{{
-    "solver": "simpleFoam|pisoFoam|pimpleFoam",
-    "flow_type": "laminar|kEpsilon|kOmegaSST",
-    "fluid": {{"nu": float, "density": float, "name": "water|air|custom"}},
-    "inlet": {{"velocity": [float, float, float], "type": "fixedValue|flowRateInletVelocity"}},
-    "outlet": {{"type": "zeroGradient|fixedValue", "pressure": float}},
-    "walls": {{"type": "noSlip|slip"}},
-    "domain": {{"lx": float, "ly": float, "lz": float, "unit": "m"}},
-    "mesh": {{"nx": int, "ny": int, "nz": int}},
-    "control": {{"end_time": float, "write_interval": int}},
-    "reasoning": "Brief physics justification (1-2 sentences)"
-}}"""
+{schema_json}"""
 
-        try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(
-                    f"{ollama_url}/api/generate",
-                    json={"model": model, "prompt": prompt, "stream": False},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                raw = data.get("response", "")
-        except Exception as e:
-            return {"success": False, "error": f"Ollama request failed: {e}"}
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.post(
+                        f"{ollama_url}/api/generate",
+                        json={"model": model, "prompt": prompt, "stream": False},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    raw = data.get("response", "")
+            except Exception as e:
+                return {"success": False, "error": f"Ollama request failed: {e}"}
 
         # Extract JSON from response
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
