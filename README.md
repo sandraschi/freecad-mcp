@@ -5,9 +5,44 @@
 [![Linted with Biome](https://img.shields.io/badge/Linted_with-Biome-60a5fa?style=flat-square&logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Built with Just](https://img.shields.io/badge/Built_with-Just-000000?style=flat-square&logo=gnu-bash&logoColor=white)](https://github.com/casey/just)
 
+## Two ways to use this
+
+This project exposes FreeCAD as a server that two different kinds of users talk to:
+
+| | Who | How | What for |
+|:---|:---|:---|:---|
+| **MCP server** (port 10944) | **AI agents** — Claude Desktop, Cursor, Continue, any MCP client | Your AI assistant calls tools like `step_to_stl()` or `cfd_run_solver()` directly. You type "convert this STEP file and slice it for my printer" and it does the whole chain. | Hands-free CAD work. Agentic loops: the AI iterates design → simulate → analyze → refine without you touching the GUI. |
+| **Web dashboard** (port 10945) | **Humans** — you, in a browser | A dark-mode React app with pages for converting files, browsing models, configuring fluid simulations, chatting with an LLM about CAD, viewing logs, and changing settings. | Point-and-click workflow. Upload a file, click Convert, download the STL. Fill in a form, click Run, see simulation results. |
+
+Both talk to the same FreeCAD backend. An AI agent can prepare a simulation case, and you can inspect the results in the web dashboard — or vice versa.
+
+## Scripting & automation
+
+Everything the AI agents and the web dashboard call goes through the same REST API at `http://localhost:10944/api/v1/`. You can script against it directly from Python, curl, or any HTTP client:
+
+```python
+import requests
+
+# Ask the AI assistant to convert a file — same API the webapp uses
+r = requests.post("http://localhost:10944/api/v1/control/tool", json={
+    "tool": "step_to_stl",
+    "arguments": {"file_name": "bracket.step", "output_name": "bracket.stl"}
+})
+print(r.json())  # {"success": True, "output": "bracket.stl", ...}
+
+# Or run a parametric study across 10 different geometries
+for length in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 7.5, 10.0]:
+    requests.post("http://localhost:10944/api/v1/control/tool", json={
+        "tool": "cfd_create_domain",
+        "arguments": {"domain_type": "channel", "length_m": length, "case_name": f"study_{length}m"}
+    })
+```
+
+This is how you build headless pipelines: generate 100 geometry variants in a loop, run simulations on each, collect results, train a surrogate model. No GUI needed — FreeCAD runs in the background as a geometry engine.
+
 ## What can I do with this?
 
-FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). This project lets your AI assistant control it — through a chat interface, a web dashboard, or automated scripts. No need to open FreeCAD yourself.
+FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Through the API, you can:
 
 | Category | What you can do |
 |:---|:---|
@@ -21,8 +56,8 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | | |
 |--:|--|
 | **Example use cases** | "What's inside this STEP file?" — "Convert this assembly to 3D-printable STL" — "Design a room with two windows and a door" — "Simulate water flow through this pipe at 2 m/s" — "Find me a gear on Printables and slice it for my MK4" — "Train a neural network to predict airflow instead of running the full simulation every time" |
-| **What it talks to** | FreeCAD 1.1.1+ (mechanical/architectural CAD), OpenFOAM 10 via Docker (fluid simulation), FluidX3D (GPU-accelerated simulation), PrusaSlicer 2.8+ (3D printing), Ollama (local LLM for natural language → config), Printables / Thingiverse / GrabCAD (model search) |
-| **Network ports** | Web dashboard on **10945**, API + AI tools on **10944**, FreeCAD bridge on **10946** |
+| **What it connects to** | FreeCAD 1.1.1+ (the CAD engine), OpenFOAM 10 via Docker (fluid simulation), FluidX3D via OpenCL (GPU-accelerated simulation), PrusaSlicer 2.8+ (3D printing), Ollama (local LLM), Printables / Thingiverse / GrabCAD (model search) |
+| **Ports** | **10944** = MCP server (AI agents), **10945** = web dashboard (humans), **10946** = FreeCAD bridge (internal) |
 | **Start** | `just bootstrap` then `start.ps1` |
 
 ## Documentation Index
@@ -65,6 +100,18 @@ start.ps1        # kills zombies, starts backend + frontend, opens browser
 - **Frontend**: [Biome](https://biomejs.dev/) linter + formatter
 - **Task runner**: [`just`](https://github.com/casey/just) — `just lint`, `just fix`, `just dev`
 - **AI protocol**: FastMCP 3.2 with SSE transport
+
+## See also — other construction & design tools in the fleet
+
+| Repo | What it does |
+|:---|:---|
+| [**QCad MCP**](https://github.com/sandraschi/qcad-mcp) | 2D technical drafting — floor plans, schematics, blueprints |
+| [**Blender MCP**](https://github.com/sandraschi/blender-mcp) | 3D modeling, animation, rendering, sculpting |
+| [**Unity3D MCP**](https://github.com/sandraschi/unity3d-mcp) | Game engine, real-time 3D, physics, VR/AR |
+| [**Inkscape MCP**](https://github.com/sandraschi/inkscape-mcp) | Vector graphics — logos, illustrations, SVGs |
+| [**GIMP MCP**](https://github.com/sandraschi/gimp-mcp) | Raster image editing — photos, textures, pixel art |
+
+Each follows the same pattern: MCP server for AI agents + web dashboard for humans, sharing a common API.
 
 ## License
 
