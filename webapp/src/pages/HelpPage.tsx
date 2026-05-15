@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Cpu, Code2, ExternalLink, HelpCircle, Package, Printer, ShoppingBag, Wrench, Layers, History, GitCompare } from "lucide-react";
+import { BookOpen, Cpu, Code2, ExternalLink, HelpCircle, Package, Printer, ShoppingBag, Wrench, Layers, History, GitCompare, Waves } from "lucide-react";
 
 const sections = [
   { id: "intro", label: "FreeCAD", icon: BookOpen },
@@ -8,6 +8,8 @@ const sections = [
   { id: "workbenches", label: "Workbenches", icon: Layers },
   { id: "comparison", label: "vs Pro CAD", icon: GitCompare },
   { id: "tools", label: "MCP Tools", icon: Wrench },
+  { id: "cfd", label: "CFD", icon: Waves },
+  { id: "openfoam", label: "OpenFOAM", icon: Cpu },
   { id: "marketplace", label: "Marketplace", icon: ShoppingBag },
   { id: "printing", label: "3D Printing", icon: Printer },
   { id: "links", label: "Links", icon: ExternalLink },
@@ -35,6 +37,8 @@ export default function HelpPage() {
         {tab === "workbenches" && <Workbenches />}
         {tab === "comparison" && <Comparison />}
         {tab === "tools" && <Tools />}
+        {tab === "cfd" && <CfdHelp />}
+        {tab === "openfoam" && <OpenfoamHelp />}
         {tab === "marketplace" && <MarketplaceHelp />}
         {tab === "printing" && <Printing />}
         {tab === "links" && <Links />}
@@ -198,15 +202,15 @@ function Comparison() {
 function Tools() {
   return (
     <>
-      <p><strong className="text-slate-200">7 MCP tools</strong> registered in the server. Available via MCP SSE and the REST proxy.</p>
-      <div className="space-y-2.5">
+      <p><strong className="text-slate-200">30 MCP tools</strong> registered in the server. Available via MCP SSE and the REST proxy.</p>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Core CAD</h3>
+      <div className="space-y-2">
         {[
           { name: "freecad_status", tag: "READ", desc: "FreeCAD availability + version. Call this first." },
           { name: "step_to_stl", tag: "MUTATE", desc: "Convert STEP/STP assembly → STL mesh. Uses TCP bridge for AP214." },
           { name: "model_info", tag: "READ", desc: "Object count, solids, volume, bounding box. Works on STEP + STL." },
           { name: "create_shape", tag: "MUTATE", desc: "Box, cylinder, sphere, cone → STL. All dimensions in mm." },
-          { name: "slicer_status", tag: "READ", desc: "PrusaSlicer availability + version check." },
-          { name: "slice_stl", tag: "MUTATE", desc: "Slice STL → G-code. Configurable printer/filament/quality." },
           { name: "freecad_gui", tag: "MUTATE", desc: "Launch FreeCAD desktop app, optionally opening a file." },
         ].map((t) => (
           <div key={t.name} className="bg-white/5 rounded-xl p-3 flex items-start gap-3">
@@ -218,7 +222,89 @@ function Tools() {
           </div>
         ))}
       </div>
-      <p className="text-slate-500 italic">Usage via REST: POST /api/v1/control/tool with JSON {"{tool, arguments}"}. Usage via MCP: direct function call.</p>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Slicing (3D Printing)</h3>
+      <div className="space-y-2">
+        {[
+          { name: "slicer_status", tag: "READ", desc: "PrusaSlicer availability + version check." },
+          { name: "slice_stl", tag: "MUTATE", desc: "Slice STL → G-code. Configurable printer/filament/quality." },
+        ].map((t) => (
+          <div key={t.name} className="bg-white/5 rounded-xl p-3 flex items-start gap-3">
+            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${t.tag === "READ" ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>{t.tag}</span>
+            <div>
+              <code className="text-indigo-400 font-bold">{t.name}()</code>
+              <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">BIM / Architecture (Arch workbench)</h3>
+      <div className="space-y-2">
+        {[
+          { name: "bim_status", tag: "READ", desc: "BIM/Arch workbench availability check." },
+          { name: "bim_create_wall", tag: "MUTATE", desc: "Parametric architectural wall → .fcstd document." },
+          { name: "bim_create_slab", tag: "MUTATE", desc: "Floor slab (structural element) → .fcstd document." },
+          { name: "bim_create_column", tag: "MUTATE", desc: "Column (rectangular, circular, H-section) → .fcstd." },
+          { name: "bim_create_window", tag: "MUTATE", desc: "Window hosted in auto-generated wall → .fcstd." },
+          { name: "bim_create_door", tag: "MUTATE", desc: "Door hosted in auto-generated wall → .fcstd." },
+          { name: "bim_create_roof", tag: "MUTATE", desc: "Sloped or flat roof → .fcstd document." },
+          { name: "bim_export_ifc", tag: "MUTATE", desc: "Export .fcstd → .ifc (Industry Foundation Classes, open BIM standard)." },
+          { name: "bim_import_ifc", tag: "MUTATE", desc: "Import .ifc file from architects → .fcstd document." },
+        ].map((t) => (
+          <div key={t.name} className="bg-white/5 rounded-xl p-3 flex items-start gap-3">
+            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${t.tag === "READ" ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>{t.tag}</span>
+            <div>
+              <code className="text-indigo-400 font-bold">{t.name}()</code>
+              <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">CFD / OpenFOAM</h3>
+      <div className="space-y-2">
+        {[
+          { name: "cfd_status", tag: "READ", desc: "Check Docker, OpenFOAM image, and FreeCAD bridge availability." },
+          { name: "cfd_create_domain", tag: "MUTATE", desc: "Parametric fluid domain (channel, pipe, nozzle) → STEP + OpenFOAM blockMeshDict." },
+          { name: "cfd_configure_physics", tag: "MUTATE", desc: "Generate all OpenFOAM dictionaries: solver, turbulence model, fluid properties." },
+          { name: "cfd_set_boundary", tag: "MUTATE", desc: "Configure per-patch BC files (U, p, k, omega, nut) with 14 BC types." },
+          { name: "cfd_build_case", tag: "READ", desc: "Validate OpenFOAM case completeness. Lists missing files." },
+          { name: "cfd_run_solver", tag: "MUTATE", desc: "Execute OpenFOAM via Docker: blockMesh, checkMesh, simpleFoam/pisoFoam. Supports MPI parallel." },
+          { name: "cfd_read_results", tag: "READ", desc: "Parse forces, residuals, time directories, convergence status." },
+          { name: "cfd_parametric_study", tag: "MUTATE", desc: "Parameter sweeps for design optimization and ML dataset generation." },
+          { name: "cfd_nl2foam", tag: "MUTATE", desc: "Natural language → executable OpenFOAM case via Ollama LLM." },
+          { name: "cfd_sample_for_pinns", tag: "MUTATE", desc: "Export point clouds for PINN/GNN training (CSV, JSON, NumPy)." },
+        ].map((t) => (
+          <div key={t.name} className="bg-white/5 rounded-xl p-3 flex items-start gap-3">
+            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${t.tag === "READ" ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>{t.tag}</span>
+            <div>
+              <code className="text-indigo-400 font-bold">{t.name}()</code>
+              <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Marketplace</h3>
+      <div className="space-y-2">
+        {[
+          { name: "marketplace_search", tag: "READ", desc: "Search Printables, Thingiverse, GrabCAD for CAD models." },
+          { name: "marketplace_download", tag: "MUTATE", desc: "Download a model → uploads directory. Auto-extracts ZIPs." },
+          { name: "marketplace_categories", tag: "READ", desc: "List available categories per marketplace source." },
+          { name: "show_marketplace_card", tag: "PREFAB", desc: "Rich Prefab UI card with search results in MCP clients." },
+        ].map((t) => (
+          <div key={t.name} className="bg-white/5 rounded-xl p-3 flex items-start gap-3">
+            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${t.tag === "READ" ? "bg-emerald-500/20 text-emerald-400" : t.tag === "PREFAB" ? "bg-purple-500/20 text-purple-400" : "bg-amber-500/20 text-amber-400"}`}>{t.tag}</span>
+            <div>
+              <code className="text-indigo-400 font-bold">{t.name}()</code>
+              <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-slate-500 italic mt-4">Usage via REST: POST /api/v1/control/tool with JSON {"{tool, arguments}"}. Usage via MCP: direct function call.</p>
     </>
   );
 }
@@ -267,6 +353,208 @@ function Printing() {
   );
 }
 
+function CfdHelp() {
+  return (
+    <>
+      <p><strong className="text-slate-200">Computational Fluid Dynamics</strong> pipeline — FreeCAD geometry → OpenFOAM solver → AI-driven analysis. Requires Docker with <code className="text-indigo-400">openfoam/openfoam10-paraview56</code> image for solver execution. Case generation works without Docker.</p>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Installation</h3>
+      <div className="bg-black/30 rounded-xl p-4 font-mono text-xs space-y-1">
+        <div className="text-slate-600"># 1. Install Docker Desktop for Windows</div>
+        <div className="text-slate-600"># 2. Pull the OpenFOAM image (one-time, ~2 GB)</div>
+        <div>docker pull <span className="text-green-400">openfoam/openfoam10-paraview56</span></div>
+        <div className="text-slate-600"># 3. (Optional) Install Ollama for NL2FOAM</div>
+        <div className="text-slate-600"># 4. Start the freecad-mcp server</div>
+        <div>just bootstrap &amp;&amp; start.ps1</div>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Pipeline Architecture</h3>
+      <div className="space-y-1.5 text-xs">
+        <div className="flex items-center gap-2"><span className="text-indigo-400 font-mono">1. Geometry</span> <span className="text-slate-600">─</span> <span>FreeCAD parametric domain (channel, pipe, nozzle, custom STEP)</span></div>
+        <div className="flex items-center gap-2"><span className="text-indigo-400 font-mono">2. Mesh</span> <span className="text-slate-600">─</span> <span>blockMeshDict → structured hex mesh (blockMesh)</span></div>
+        <div className="flex items-center gap-2"><span className="text-indigo-400 font-mono">3. Physics</span> <span className="text-slate-600">─</span> <span>Laminar / kEpsilon / kOmegaSST turbulence models</span></div>
+        <div className="flex items-center gap-2"><span className="text-indigo-400 font-mono">4. BCs</span> <span className="text-slate-600">─</span> <span>14 boundary condition types (fixedValue, zeroGradient, noSlip...)</span></div>
+        <div className="flex items-center gap-2"><span className="text-indigo-400 font-mono">5. Solve</span> <span className="text-slate-600">─</span> <span>simpleFoam/pisoFoam/pimpleFoam via Docker (serial or MPI parallel)</span></div>
+        <div className="flex items-center gap-2"><span className="text-indigo-400 font-mono">6. Analyze</span> <span className="text-slate-600">─</span> <span>Forces, residuals, convergence, time series</span></div>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Quick Start: Laminar Channel Flow</h3>
+      <div className="bg-black/30 rounded-xl p-4 font-mono text-xs space-y-1 overflow-x-auto">
+        <div className="text-slate-600"># 1. Create 1m × 0.1m × 0.05m channel</div>
+        <div>cfd_create_domain(<span className="text-green-400">"channel"</span>, length_m=<span className="text-amber-400">1.0</span>, width_m=<span className="text-amber-400">0.1</span>, height_m=<span className="text-amber-400">0.05</span>, mesh_cells=<span className="text-amber-400">80000</span>, case_name=<span className="text-green-400">"demo"</span>)</div>
+        <div className="text-slate-600"># 2. Configure water at Re=100</div>
+        <div>cfd_configure_physics(<span className="text-green-400">"demo"</span>, flow_type=<span className="text-green-400">"laminar"</span>, fluid_nu=<span className="text-amber-400">1e-6</span>, inlet_velocity=<span className="text-amber-400">0.002</span>)</div>
+        <div className="text-slate-600"># 3. Set boundary conditions</div>
+        <div>cfd_set_boundary(<span className="text-green-400">"demo"</span>, <span className="text-green-400">"inlet"</span>, <span className="text-green-400">"U"</span>, <span className="text-green-400">"fixedValue"</span>, <span className="text-green-400">"uniform (0.002 0 0)"</span>)</div>
+        <div>cfd_set_boundary(<span className="text-green-400">"demo"</span>, <span className="text-green-400">"outlet"</span>, <span className="text-green-400">"p"</span>, <span className="text-green-400">"fixedValue"</span>, <span className="text-green-400">"uniform 0"</span>)</div>
+        <div className="text-slate-600"># 4. Validate and run</div>
+        <div>cfd_build_case(<span className="text-green-400">"demo"</span>)</div>
+        <div>cfd_run_solver(<span className="text-green-400">"demo"</span>, steps=<span className="text-green-400">"blockMesh,checkMesh,simpleFoam"</span>)</div>
+        <div className="text-slate-600"># 5. Read results</div>
+        <div>cfd_read_results(<span className="text-green-400">"demo"</span>)</div>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Fluid Property Reference</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-slate-200 border-b border-white/10">
+              <th className="text-left py-1 pr-3">Fluid</th>
+              <th className="text-left py-1 px-2">ν (m²/s)</th>
+              <th className="text-left py-1 px-2">ρ (kg/m³)</th>
+              <th className="text-left py-1 px-2">Notes</th>
+            </tr>
+          </thead>
+          <tbody className="text-slate-400">
+            {[
+              ["Water @ 20°C", "1.004e-6", "998", "Default"],
+              ["Air @ 20°C", "1.516e-5", "1.204", "Standard atmosphere"],
+              ["SAE 10W-30", "6.5e-5", "865", "Hydraulic oil"],
+              ["Glycerin", "1.18e-3", "1260", "High-viscosity benchmark"],
+              ["Mercury", "1.15e-7", "13546", "Liquid metal"],
+            ].map(([name, nu, rho, note]) => (
+              <tr key={name} className="border-b border-white/5">
+                <td className="py-1 pr-3 text-slate-300">{name}</td>
+                <td className="py-1 px-2 font-mono text-indigo-400">{nu}</td>
+                <td className="py-1 px-2 font-mono">{rho}</td>
+                <td className="py-1 px-2 text-slate-500">{note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">AI &amp; ML Features</h3>
+      <div className="space-y-2">
+        <div className="bg-white/5 rounded-xl p-3">
+          <span className="text-purple-400 font-bold text-xs">NL2FOAM</span>
+          <p className="text-xs text-slate-500 mt-1">Describe a CFD problem in plain language — the LLM generates the complete OpenFOAM case (solver, mesh, BCs) automatically. "Laminar pipe flow, Re=500, D=0.1m, water, calculate pressure drop"</p>
+        </div>
+        <div className="bg-white/5 rounded-xl p-3">
+          <span className="text-purple-400 font-bold text-xs">Parametric Sweeps</span>
+          <p className="text-xs text-slate-500 mt-1">Run design optimization by sweeping parameters (velocity, geometry, viscosity). Generate 100s of cases for training ML surrogate models.</p>
+        </div>
+        <div className="bg-white/5 rounded-xl p-3">
+          <span className="text-purple-400 font-bold text-xs">PINN Sampling</span>
+          <p className="text-xs text-slate-500 mt-1">Export coordinate point clouds for Physics-Informed Neural Networks (NVIDIA Modulus, DeepXDE). CSV, JSON, and NumPy (.npz) formats.</p>
+        </div>
+      </div>
+
+      <p className="text-slate-500 italic mt-4">Full guide: <code className="text-indigo-400">docs/cfd-guide.md</code> — architecture, complete parameter reference, troubleshooting, performance benchmarks, and bridge extension instructions.</p>
+    </>
+  );
+}
+
+function OpenfoamHelp() {
+  return (
+    <>
+      <p><strong className="text-slate-200">OpenFOAM</strong> is the industry-standard CPU CFD toolkit (finite-volume, MPI-parallel). For GPU-accelerated CFD, the free solver of choice is <a href="https://github.com/ProjectPhysX/FluidX3D" target="_blank" className="text-indigo-400 hover:underline">FluidX3D</a> (5k stars, OpenCL — runs on NVIDIA, AMD, Intel Arc, and Apple Silicon). The MCP server runs OpenFOAM via Docker; FluidX3D integration is planned.</p>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">GPU: Real Options (2026)</h3>
+      <div className="space-y-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+          <p className="text-emerald-400 font-bold text-sm">FluidX3D</p>
+          <p className="text-xs text-slate-400 mt-1">OpenCL — all GPUs (NVIDIA, AMD, Intel Arc, Apple Silicon). FP16 memory: 770³ cells on 24GB 4090 (~456M cells). Free surfaces, moving boundaries, thermal convection, STL import, interactive 3D viz, video export.</p>
+        </div>
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+          <p className="text-emerald-400 font-bold text-sm">Lethe</p>
+          <p className="text-xs text-slate-400 mt-1">CUDA-accelerated FEM Navier-Stokes solver. Validated against OpenFOAM benchmarks. Supports incompressible flow with complex geometry.</p>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+          <p className="text-amber-400 font-bold text-sm">Standard OpenFOAM</p>
+          <p className="text-xs text-slate-400 mt-1">CPU-only MPI. The <code className="text-indigo-400">openfoam/openfoam10-paraview56</code> image does NOT use GPU. RTX 4090 is idle during cfd_run_solver.</p>
+        </div>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Mac with 128GB RAM?</h3>
+      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+        <p className="text-emerald-400 font-bold text-sm">Yes — excellent for this pipeline.</p>
+        <p className="text-xs text-slate-400 mt-1">Apple Silicon unified memory means 128GB shared between CPU and GPU. FluidX3D runs on Mac GPU via OpenCL — up to ~1500³ grid (~3.4 BILLION cells) vs ~770³ on 4090. PyTorch MPS backend uses GPU for PINN/GNN training. The 4090 is ~3x faster for training throughput, but the Mac fits problems the 4090 can't hold in VRAM at all. <strong className="text-slate-300">For large parametric studies + big neural surrogates, the Mac is the better single-machine choice.</strong></p>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Solver Reference</h3>
+      <div className="space-y-1.5 text-xs">
+        {[
+          ["simpleFoam", "Steady incompressible. Most common engineering solver."],
+          ["pisoFoam", "Transient incompressible. Vortex shedding, startup transients."],
+          ["pimpleFoam", "Transient, large timesteps. Pseudo-transient for complex geometry."],
+          ["icoFoam", "Transient laminar only. Educational/validation."],
+          ["interFoam", "Multiphase (VOF). Free surfaces, sloshing, waves."],
+          ["rhoSimpleFoam", "Steady compressible. High-speed aerodynamics."],
+        ].map(([name, desc]) => (
+          <div key={name} className="flex items-start gap-2">
+            <code className="text-indigo-400 font-mono shrink-0 w-44">{name}</code>
+            <span className="text-slate-500">{desc}</span>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Case Directory Structure</h3>
+      <div className="bg-black/30 rounded-xl p-4 font-mono text-xs space-y-1">
+        <div className="text-indigo-400 font-bold">case_name/</div>
+        <div>├── <span className="text-slate-500">0/                  Initial/boundary fields</span></div>
+        <div>│   ├── <span className="text-slate-500">U                   Velocity</span></div>
+        <div>│   ├── <span className="text-slate-500">p                   Pressure</span></div>
+        <div>│   └── <span className="text-slate-500">k, omega            Turbulence fields</span></div>
+        <div>├── <span className="text-slate-500">constant/           Time-invariant data</span></div>
+        <div>│   ├── <span className="text-slate-500">polyMesh/blockMeshDict</span></div>
+        <div>│   ├── <span className="text-slate-500">transportProperties</span></div>
+        <div>│   └── <span className="text-slate-500">turbulenceProperties</span></div>
+        <div>└── <span className="text-slate-500">system/             Solver control</span></div>
+        <div>    ├── <span className="text-slate-500">controlDict        Time, write, forces</span></div>
+        <div>    ├── <span className="text-slate-500">fvSchemes          Discretisation</span></div>
+        <div>    └── <span className="text-slate-500">fvSolution         Linear solvers</span></div>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Turbulence Models</h3>
+      <div className="space-y-2">
+        {[
+          { model: "laminar", when: "No model. Re below critical (~2300 pipe, ~5e5 plate).", color: "text-emerald-400" },
+          { model: "kEpsilon", when: "High-Re industrial. Wall functions (y+ > 30). 2 extra fields.", color: "text-amber-400" },
+          { model: "kOmegaSST", when: "Wall-bounded, separation. Resolves to wall (y+ ≈ 1). 2 extra fields.", color: "text-amber-400" },
+          { model: "Spalart-Allmaras", when: "External aero, airfoils. Simple 1-equation. 1 extra field.", color: "text-amber-400" },
+        ].map(({ model, when, color }) => (
+          <div key={model} className="bg-white/5 rounded-xl p-3">
+            <span className={`font-bold text-xs font-mono ${color}`}>{model}</span>
+            <p className="text-xs text-slate-500 mt-1">{when}</p>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">FluidX3D vs OpenFOAM — Quick Pick</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-slate-200 border-b border-white/10">
+              <th className="text-left py-1 pr-3">Criterion</th>
+              <th className="text-left py-1 px-2 text-emerald-400">FluidX3D</th>
+              <th className="text-left py-1 px-2 text-amber-400">OpenFOAM</th>
+            </tr>
+          </thead>
+          <tbody className="text-slate-400">
+            {[
+              ["GPU", "Yes (OpenCL, all GPUs)", "No (CPU MPI only)"],
+              ["Max cells on 4090", "456M (770³)", "~5M (CPU RAM limited)"],
+              ["Turbulence", "Smagorinsky-Lilly", "kEpsilon, kOmegaSST, LES, DES"],
+              ["Mesh type", "Cartesian voxelized", "Structured + unstructured"],
+              ["Maturity", "4 years, 5k stars", "30+ years, industry standard"],
+              ["Multiphase", "Free surface", "VOF, Euler-Euler, reacting"],
+            ].map(([criterion, f3d, of]) => (
+              <tr key={criterion} className="border-b border-white/5">
+                <td className="py-1 pr-3 text-slate-300">{criterion}</td>
+                <td className="py-1 px-2">{f3d}</td>
+                <td className="py-1 px-2">{of}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-slate-500 italic mt-4">Full reference: <code className="text-indigo-400">docs/openfoam.md</code> — GPU solvers, Mac vs 4090 analysis, FluidX3D integration plan, solver reference, mesh quality targets.</p>
+    </>
+  );
+}
+
 function Links() {
   return (
     <div className="space-y-2">
@@ -280,6 +568,11 @@ function Links() {
         ["grabcad.com", "Engineering CAD library (Stratasys)", "https://grabcad.com"],
         ["PrusaSlicer", "Slicer for 3D printing", "https://github.com/prusa3d/PrusaSlicer"],
         ["OpenCASCADE", "The OCCT geometry kernel", "https://dev.opencascade.org"],
+        ["OpenFOAM", "Open-source CFD toolkit", "https://www.openfoam.com"],
+        ["NVIDIA Modulus", "Physics-ML framework (PINNs)", "https://developer.nvidia.com/modulus"],
+        ["DeepXDE", "Lightweight PINN library", "https://deepxde.readthedocs.io"],
+        ["FluidX3D", "Free GPU CFD (OpenCL, all GPUs)", "https://github.com/ProjectPhysX/FluidX3D"],
+        ["Lethe", "GPU-accelerated FEM CFD", "https://github.com/lethe-cfd/lethe"],
       ].map(([label, desc, url]) => (
         <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-all group">
           <div>

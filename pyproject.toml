@@ -1,6 +1,6 @@
 [project]
 name = "freecad-mcp"
-version = "0.3.0"
+version = "0.5.0"
 description = "FreeCAD MCP server — CAD operations via MCP tools and REST API"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -44,4 +44,4 @@ ignore = ["S101"]
 "src/**/*.py" = ["E501"]
 "tests/**/*.py" = ["E501", "S101"]
 "src/freecad_mcp/fc_bridge.py" = ["S110"]
-"src/freecad_mcp/server.py" = ["S603", "S110"]
+"src/freecad_mcp/server.py" = ["S603", "S110", "S607"]

@@ -2,6 +2,34 @@
 
 All notable changes to the FreeCAD MCP server and webapp.
 
+## [0.5.0] - 2026-05-15
+
+### Added
+
+- **CFD / OpenFOAM integration**: 10 new MCP tools for the complete Geometry-Mesh-Simulation-Analysis pipeline — `cfd_status`, `cfd_create_domain`, `cfd_configure_physics`, `cfd_set_boundary`, `cfd_build_case`, `cfd_run_solver`, `cfd_read_results`, `cfd_parametric_study`, `cfd_nl2foam`, `cfd_sample_for_pinns`. All in `src/freecad_mcp/tools/cfd.py` (1430 lines), following the same dual-mode pattern as BIM tools (TCP bridge + subprocess fallback).
+- **Parametric domain creation**: `cfd_create_domain` generates fluid domains (channel, pipe, box, nozzle, custom STEP) in FreeCAD and exports blockMeshDict for structured hex meshing.
+- **Physics auto-configuration**: `cfd_configure_physics` generates all OpenFOAM dictionaries (controlDict, fvSchemes, fvSolution, transportProperties, turbulenceProperties) with laminar/kEpsilon/kOmegaSST models. Built-in fluid property reference (water, air, oil, glycerin).
+- **Boundary condition management**: `cfd_set_boundary` generates per-patch field files (U, p, k, omega, nut) with 14 supported BC types.
+- **Case validation**: `cfd_build_case` checks OpenFOAM case completeness and reports missing files.
+- **Docker-based solver execution**: `cfd_run_solver` executes OpenFOAM steps (blockMesh, checkMesh, simpleFoam/pisoFoam/pimpleFoam, decomposePar, reconstructPar) via `docker run` with automatic Windows path conversion. Supports serial and parallel (MPI) execution with configurable core count.
+- **Results parsing**: `cfd_read_results` extracts time directories, force coefficients, solver residuals, and convergence status from completed cases.
+- **Parametric design sweeps**: `cfd_parametric_study` duplicates a base case across parameter variations (velocity, geometry, viscosity) — supports both config-only mode and full execution mode for design optimization and ML dataset generation.
+- **NL2FOAM — natural language to OpenFOAM**: `cfd_nl2foam` converts plain-language fluid dynamics descriptions into executable OpenFOAM cases via Ollama LLM. Includes prompt engineering with structured JSON output, automatic case creation, physics configuration, and boundary condition setup.
+- **PINN point cloud sampling**: `cfd_sample_for_pinns` exports coordinate point clouds (boundary + interior collocation points) from CFD geometry for Physics-Informed Neural Network training. Supports CSV, JSON, and NumPy (.npz) output formats. Compatible with NVIDIA Modulus, DeepXDE, and PyTorch Geometric.
+- **CFD webapp workspace**: New `CfdPage.tsx` (490 lines) with 10-tab interface: Status dashboard (Docker/OpenFOAM/bridge health), Domain creator, Physics configurator, Boundary condition editor, Case builder/validator, Solver runner with parallel toggle, Results viewer (residuals, convergence), Parametric study launcher, NL2FOAM text interface with AI reasoning display, and PINN point cloud exporter.
+- **Comprehensive CFD documentation**: New `docs/cfd-guide.md` — complete reference with architecture diagrams, parameter tables, fluid property lookup, BC type reference, full workflow examples (laminar validation, turbulent parametric sweep, NL2FOAM automation, ML dataset pipeline), troubleshooting guide, performance benchmarks, and bridge extension instructions.
+- Sidebar updated with CFD nav item (Waves icon). Help page extended with CFD tools tab. README updated with CFD pipeline mention. MCP tools count: 20 → 30.
+
+## [0.4.0] - 2026-05-14
+
+### Added
+
+- **BIM/Arch workbench tools**: 9 new MCP tools wrapping FreeCAD's Arch workbench — `bim_create_wall`, `bim_create_slab`, `bim_create_column`, `bim_create_window`, `bim_create_door`, `bim_create_roof`, `bim_export_ifc`, `bim_import_ifc`, `bim_status`. All create parametric `.fcstd` documents with dual-mode execution (TCP bridge + subprocess fallback).
+- **IFC exchange**: `bim_export_ifc` exports `.fcstd` to `.ifc` (Industry Foundation Classes — open BIM standard). `bim_import_ifc` imports `.ifc` files from architects and converts to FreeCAD documents.
+- **Modular tool architecture**: BIM tools live in `src/freecad_mcp/tools/bim.py` with a `register_bim_tools()` factory pattern. `tools/__init__.py` portmanteau re-exports for fleet-standard tool registration.
+- **BIM bridge commands**: 8 new JSON-RPC methods in `fc_bridge.py` (FreeCAD TCP bridge) for BIM operations via Arch, Draft, and Part modules.
+- **REST proxy**: `/api/v1/control/tool` dispatches all 9 BIM tools. `.ifc` and `.fcstd` file types supported in upload, download, and file listing endpoints.
+
 ## [0.3.0] - 2026-05-12
 
 ### Added

@@ -28,20 +28,29 @@ from fastmcp import FastMCP
 from prefab_ui.app import PrefabApp
 from pydantic import BaseModel, Field
 
+from freecad_mcp.tools import register_bim_tools, register_cfd_tools
+
 logger = logging.getLogger("freecad-mcp")
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-FREECAD_PATH = (
-    os.environ.get("FREECAD_PATH") or
-    next(
-        (p for p in [
+FREECAD_PATH = os.environ.get("FREECAD_PATH") or next(
+    (
+        p
+        for p in [
             r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\bin\FreeCAD.exe",
             r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\FreeCAD.exe",
-            os.path.join(os.environ.get("TEMP", ""), "freecad_extracted", "FreeCAD_1.1.1-Windows-x86_64-py311", "bin", "FreeCAD.exe"),
-        ] if os.path.isfile(p)),
-        r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\bin\FreeCAD.exe"
-    )
+            os.path.join(
+                os.environ.get("TEMP", ""),
+                "freecad_extracted",
+                "FreeCAD_1.1.1-Windows-x86_64-py311",
+                "bin",
+                "FreeCAD.exe",
+            ),
+        ]
+        if os.path.isfile(p)
+    ),
+    r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\bin\FreeCAD.exe",
 )
 BRIDGE_PORT = int(os.environ.get("FC_BRIDGE_PORT", "10946"))
 BRIDGE_SCRIPT = Path(__file__).parent / "fc_bridge.py"
@@ -104,8 +113,11 @@ async def _bridge_connect():
 def _freecad_already_running() -> bool:
     """Check if any FreeCAD GUI process is already running."""
     import subprocess
+
     try:
-        r = subprocess.run(["tasklist.exe", "/FI", "IMAGENAME eq FreeCAD.exe", "/NH"], capture_output=True, text=True, timeout=5)  # noqa: S607
+        r = subprocess.run(
+            ["tasklist.exe", "/FI", "IMAGENAME eq FreeCAD.exe", "/NH"], capture_output=True, text=True, timeout=5
+        )
         return "FreeCAD.exe" in r.stdout
     except Exception:
         return False
@@ -210,6 +222,7 @@ async def lifespan(app: FastAPI):
 
 # ── Subprocess Fallback ───────────────────────────────────────────────────────
 
+
 async def _run_freecad(script: str, timeout: int = 120) -> tuple[str, str, int]:
     """Run a Python script via FreeCADCmd subprocess (fallback when bridge unavailable)."""
     fd, sp = tempfile.mkstemp(suffix=".py", prefix="fc_", text=True)
@@ -217,8 +230,10 @@ async def _run_freecad(script: str, timeout: int = 120) -> tuple[str, str, int]:
         with os.fdopen(fd, "w") as f:
             f.write(script)
         proc = await asyncio.create_subprocess_exec(
-            FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe"), sp,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe"),
+            sp,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         return out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace"), proc.returncode or 0
@@ -245,6 +260,7 @@ mcp = FastMCP.from_fastapi(app, name="FreeCAD MCP")
 
 # ── Response builder ─────────────────────────────────────────────────────────
 
+
 def _build_result(script_type: str, out: str, err: str, code: int, extra: dict | None = None) -> dict:
     """Parse FreeCAD subprocess output into a standard result dict."""
     result = {"success": code == 0, "type": script_type, "exit_code": code}
@@ -264,24 +280,55 @@ def _build_result(script_type: str, out: str, err: str, code: int, extra: dict |
     return result
 
 
+# Register BIM tools (bound to mcp via decorator closures) — must be after _build_result
+_bim_tools = register_bim_tools(
+    mcp=mcp,
+    state=_state,
+    bridge_send=_bridge_send,
+    run_freecad=_run_freecad,
+    work_dir=WORK_DIR,
+    output_dir=OUTPUT_DIR,
+    upload_dir=UPLOAD_DIR,
+    build_result=_build_result,
+)
+
+# Register CFD tools (10 tools for FreeCAD → OpenFOAM pipeline)
+_cfd_tools = register_cfd_tools(
+    mcp=mcp,
+    state=_state,
+    bridge_send=_bridge_send,
+    run_freecad=_run_freecad,
+    work_dir=WORK_DIR,
+    output_dir=OUTPUT_DIR,
+    upload_dir=UPLOAD_DIR,
+    build_result=_build_result,
+)
+
+
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 
 class StepToStlRequest(BaseModel):
     """Convert a STEP file to STL."""
+
     file_name: str = Field(description="Filename in the uploads directory (must end with .step or .stp)")
     output_name: str = Field(default="output.stl", description="Desired output STL filename")
 
 
 class CreateShapeRequest(BaseModel):
     """Create basic geometry and export to STL."""
+
     shape_type: str = Field(description="Shape type: box, cylinder, sphere, cone")
-    params: dict = Field(default_factory=dict, description="Shape parameters: width/height/depth for box, radius/height for cylinder/sphere/cone")
+    params: dict = Field(
+        default_factory=dict,
+        description="Shape parameters: width/height/depth for box, radius/height for cylinder/sphere/cone",
+    )
     output_name: str = Field(default="shape.stl", description="Output filename")
 
 
 class ToolRequest(BaseModel):
     """Execute an MCP tool via REST."""
+
     tool: str = Field(description="Tool name: step_to_stl, model_info, create_shape, freecad_status")
     arguments: dict = Field(default_factory=dict, description="Tool arguments as a dict")
 
@@ -334,7 +381,10 @@ async def step_to_stl(
     stl_path = os.path.join(OUTPUT_DIR, output_name)
 
     if not os.path.isfile(step_path):
-        return {"success": False, "error": f"File {file_name} not found in uploads. Upload first via POST /api/v1/upload."}
+        return {
+            "success": False,
+            "error": f"File {file_name} not found in uploads. Upload first via POST /api/v1/upload.",
+        }
 
     if _state.get("bridge_mode") == "tcp":
         resp = await _bridge_send("open", {"path": step_path, "name": "STEP_Import"}, timeout=300)
@@ -430,7 +480,13 @@ print(json.dumps({{"type": "mesh", "vertices": len(mesh.Points), "facets": mesh.
 @mcp.tool()
 async def create_shape(
     shape_type: Annotated[str, Field(description="Shape type: box, cylinder, sphere, or cone.")],
-    params: Annotated[dict | None, Field(default=None, description="Parameters dict: width/height/depth for box, radius/height for cylinder/sphere/cone.")] = None,
+    params: Annotated[
+        dict | None,
+        Field(
+            default=None,
+            description="Parameters dict: width/height/depth for box, radius/height for cylinder/sphere/cone.",
+        ),
+    ] = None,
     output_name: Annotated[str, Field(default="shape.stl", description="Output STL filename.")] = "shape.stl",
 ) -> dict:
     """
@@ -516,7 +572,12 @@ async def slicer_status() -> dict:
     try:
         r = subprocess.run([_SLICER_PATH, "--help"], capture_output=True, text=True, timeout=10)
         first = r.stdout.strip().split("\n")[0] if r.stdout else "unknown"
-        return {"success": True, "available": True, "version": first, "profiles_dir": str(Path(_SLICER_PATH).parent / "profiles")}
+        return {
+            "success": True,
+            "available": True,
+            "version": first,
+            "profiles_dir": str(Path(_SLICER_PATH).parent / "profiles"),
+        }
     except Exception as e:
         return {"success": False, "available": False, "version": str(e), "profiles_dir": None}
 
@@ -524,10 +585,16 @@ async def slicer_status() -> dict:
 @mcp.tool()
 async def slice_stl(
     file_name: Annotated[str, Field(description="STL filename in the uploads directory.")],
-    printer_profile: Annotated[str, Field(default="", description="Printer profile name. Empty = default Prusa MK4.")] = "",
+    printer_profile: Annotated[
+        str, Field(default="", description="Printer profile name. Empty = default Prusa MK4.")
+    ] = "",
     filament_profile: Annotated[str, Field(default="", description="Filament profile name. Empty = default PLA.")] = "",
-    quality: Annotated[str, Field(default="0.20mm SPEED", description="Layer height / quality preset.")] = "0.20mm SPEED",
-    output_name: Annotated[str | None, Field(default=None, description="Output G-code filename. Auto-generated if omitted.")] = None,
+    quality: Annotated[
+        str, Field(default="0.20mm SPEED", description="Layer height / quality preset.")
+    ] = "0.20mm SPEED",
+    output_name: Annotated[
+        str | None, Field(default=None, description="Output G-code filename. Auto-generated if omitted.")
+    ] = None,
 ) -> dict:
     """
     Slice an STL file using PrusaSlicer and produce G-code for 3D printing.
@@ -566,7 +633,12 @@ async def slice_stl(
         return {
             "success": True,
             "output": out_name,
-            "data": {"size_kb": size_kb, "path": gcode_path, "printer": printer_profile or "default", "filament": filament_profile or "default"},
+            "data": {
+                "size_kb": size_kb,
+                "path": gcode_path,
+                "printer": printer_profile or "default",
+                "filament": filament_profile or "default",
+            },
         }
     except subprocess.TimeoutExpired:
         return {"success": False, "error": "Slicing timed out after 300s"}
@@ -576,7 +648,9 @@ async def slice_stl(
 
 @mcp.tool()
 async def freecad_gui(
-    file_name: Annotated[str | None, Field(default=None, description="Optional file to open (STL, STEP, FCStd).")] = None,
+    file_name: Annotated[
+        str | None, Field(default=None, description="Optional file to open (STL, STEP, FCStd).")
+    ] = None,
 ) -> dict:
     """
     Launch the FreeCAD GUI application, optionally opening a file.
@@ -631,8 +705,8 @@ async def upload_file(file: UploadFile):
     if not file.filename:
         raise HTTPException(400, "No filename")
     ext = Path(file.filename).suffix.lower()
-    if ext not in (".step", ".stp", ".stl"):
-        raise HTTPException(400, f"Unsupported format: {ext}. Use .step, .stp, or .stl.")
+    if ext not in (".step", ".stp", ".stl", ".ifc", ".fcstd"):
+        raise HTTPException(400, f"Unsupported format: {ext}. Use .step, .stp, .stl, .ifc, or .fcstd.")
     dest = os.path.join(UPLOAD_DIR, file.filename)
     content = await file.read()
     with open(dest, "wb") as f:
@@ -642,21 +716,40 @@ async def upload_file(file: UploadFile):
 
 @app.get("/api/v1/download/{filename}")
 async def download_file(filename: str):
-    """Download a processed STL or G-code file."""
+    """Download a processed STL, G-code, IFC, or FCStd file."""
     for d in (OUTPUT_DIR, _SLICER_OUTPUT_DIR):
         path = os.path.join(d, filename)
         if os.path.isfile(path):
-            media = "text/x.gcode" if filename.endswith(".gcode") else "application/sla"
+            if filename.endswith(".gcode"):
+                media = "text/x.gcode"
+            elif filename.endswith(".ifc"):
+                media = "application/x-step"
+            elif filename.endswith(".fcstd"):
+                media = "application/octet-stream"
+            else:
+                media = "application/sla"
             return FileResponse(path, media_type=media, filename=filename)
     raise HTTPException(404, f"File {filename} not found.")
 
 
 @app.get("/api/v1/files")
 async def list_files():
-    """List uploaded and output files including G-code."""
-    uploads = [{"name": f, "size_kb": round(os.path.getsize(os.path.join(UPLOAD_DIR, f)) / 1024, 1)} for f in os.listdir(UPLOAD_DIR) if os.path.isfile(os.path.join(UPLOAD_DIR, f))]
-    outputs = [{"name": f, "size_kb": round(os.path.getsize(os.path.join(OUTPUT_DIR, f)) / 1024, 1)} for f in os.listdir(OUTPUT_DIR) if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
-    gcodes = [{"name": f, "size_kb": round(os.path.getsize(os.path.join(_SLICER_OUTPUT_DIR, f)) / 1024, 1)} for f in os.listdir(_SLICER_OUTPUT_DIR) if os.path.isfile(os.path.join(_SLICER_OUTPUT_DIR, f))]
+    """List uploaded and output files including G-code, IFC, and FCStd."""
+    uploads = [
+        {"name": f, "size_kb": round(os.path.getsize(os.path.join(UPLOAD_DIR, f)) / 1024, 1)}
+        for f in os.listdir(UPLOAD_DIR)
+        if os.path.isfile(os.path.join(UPLOAD_DIR, f))
+    ]
+    outputs = [
+        {"name": f, "size_kb": round(os.path.getsize(os.path.join(OUTPUT_DIR, f)) / 1024, 1)}
+        for f in os.listdir(OUTPUT_DIR)
+        if os.path.isfile(os.path.join(OUTPUT_DIR, f))
+    ]
+    gcodes = [
+        {"name": f, "size_kb": round(os.path.getsize(os.path.join(_SLICER_OUTPUT_DIR, f)) / 1024, 1)}
+        for f in os.listdir(_SLICER_OUTPUT_DIR)
+        if os.path.isfile(os.path.join(_SLICER_OUTPUT_DIR, f))
+    ]
     return {"uploads": uploads, "outputs": outputs, "gcodes": gcodes}
 
 
@@ -680,6 +773,12 @@ async def execute_tool(req: ToolRequest):
         params = args.get("params", {})
         out = args.get("output_name", "shape.stl")
         return await create_shape(shape_type=st, params=params, output_name=out)
+    # BIM tool dispatch (registered via register_bim_tools closures)
+    elif tool_name in _bim_tools:
+        return await _bim_tools[tool_name](**args)
+    # CFD tool dispatch (registered via register_cfd_tools closures)
+    elif tool_name in _cfd_tools:
+        return await _cfd_tools[tool_name](**args)
     else:
         raise HTTPException(400, f"Unknown tool: {tool_name}")
 
@@ -704,6 +803,7 @@ logger.addHandler(_log_handler)
 @app.get("/api/v1/logs/stream")
 async def stream_logs():
     """SSE log stream."""
+
     async def gen():
         for line in list(LOG_RING):
             yield f"data: {line}\n\n"
@@ -713,6 +813,7 @@ async def stream_logs():
                 yield f"data: {LOG_RING[idx]}\n\n"
                 idx += 1
             await asyncio.sleep(0.1)
+
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
@@ -736,7 +837,10 @@ class MarketplaceDownloadRequest(BaseModel):
 _PRINTABLES_GQL = "https://api.printables.com/graphql/"
 _GRABCAD_API = "https://grabcad.com/api/v1"
 _THINGIVERSE_API = "https://api.thingiverse.com"
-_HEADERS = {"User-Agent": "freecad-mcp/0.3.0 (MCP server; +https://github.com/sandraschi/freecad-mcp)", "Accept": "application/json"}
+_HEADERS = {
+    "User-Agent": "freecad-mcp/0.3.0 (MCP server; +https://github.com/sandraschi/freecad-mcp)",
+    "Accept": "application/json",
+}
 
 _MARKETPLACE_CATEGORIES = {
     "printables": [
@@ -842,28 +946,44 @@ async def _marketplace_search(source: str, query: str, category: str = "", limit
         if source == "printables":
             q = f"{query} {category}" if category else query
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                r = await client.post(_PRINTABLES_GQL, headers=_HEADERS, json={"query": _PRINTABLES_SEARCH_QUERY, "variables": {"query": q, "limit": limit, "offset": offset}})
+                r = await client.post(
+                    _PRINTABLES_GQL,
+                    headers=_HEADERS,
+                    json={
+                        "query": _PRINTABLES_SEARCH_QUERY,
+                        "variables": {"query": q, "limit": limit, "offset": offset},
+                    },
+                )
                 data = _safe_json(r)
                 if not data:
-                    return {"success": False, "source": source, "results": [], "error": f"Empty response from Printables (HTTP {r.status_code})"}
+                    return {
+                        "success": False,
+                        "source": source,
+                        "results": [],
+                        "error": f"Empty response from Printables (HTTP {r.status_code})",
+                    }
                 items = data.get("data", {}).get("searchPrints2", {}).get("items", []) or []
                 total = data.get("data", {}).get("searchPrints2", {}).get("totalCount", 0)
                 results = []
                 for item in items:
                     img = item.get("images", [{}])[0].get("filePath", "") if item.get("images") else ""
                     item_id = str(item.get("id", ""))
-                    results.append({
-                        "id": item_id,
-                        "title": item.get("name", ""),
-                        "summary": (item.get("summary") or "")[:200],
-                        "author": item.get("user", {}).get("publicUsername", item.get("user", {}).get("handle", "")),
-                        "downloads": item.get("downloadCount", 0),
-                        "likes": item.get("likesCount", 0),
-                        "image_url": f"https://media.printables.com/{img}" if img else "",
-                        "model_url": f"https://www.printables.com/model/{item_id}",
-                        "download_url": "",
-                        "source": "printables",
-                    })
+                    results.append(
+                        {
+                            "id": item_id,
+                            "title": item.get("name", ""),
+                            "summary": (item.get("summary") or "")[:200],
+                            "author": item.get("user", {}).get(
+                                "publicUsername", item.get("user", {}).get("handle", "")
+                            ),
+                            "downloads": item.get("downloadCount", 0),
+                            "likes": item.get("likesCount", 0),
+                            "image_url": f"https://media.printables.com/{img}" if img else "",
+                            "model_url": f"https://www.printables.com/model/{item_id}",
+                            "download_url": "",
+                            "source": "printables",
+                        }
+                    )
                 return {"success": True, "source": source, "results": results, "total": total}
 
         elif source == "grabcad":
@@ -874,19 +994,31 @@ async def _marketplace_search(source: str, query: str, category: str = "", limit
                 r = await client.get(f"{_GRABCAD_API}/search", headers=_HEADERS, params=params)
                 data = _safe_json(r)
                 if not data:
-                    return {"success": False, "source": source, "results": [], "error": f"Empty response from GrabCAD (HTTP {r.status_code})"}
+                    return {
+                        "success": False,
+                        "source": source,
+                        "results": [],
+                        "error": f"Empty response from GrabCAD (HTTP {r.status_code})",
+                    }
                 items = data.get("items", []) or data.get("models", []) or []
                 results = []
                 for item in items:
-                    results.append({
-                        "id": str(item.get("id", "")), "title": item.get("name", ""),
-                        "summary": (item.get("description") or "")[:200],
-                        "author": item.get("author", {}).get("name", "") if isinstance(item.get("author"), dict) else "",
-                        "downloads": item.get("download_count", 0), "likes": item.get("like_count", 0),
-                        "image_url": item.get("preview_image", ""),
-                        "model_url": item.get("url", f"https://grabcad.com/library/{item.get('slug', '')}"),
-                        "download_url": "", "source": "grabcad",
-                    })
+                    results.append(
+                        {
+                            "id": str(item.get("id", "")),
+                            "title": item.get("name", ""),
+                            "summary": (item.get("description") or "")[:200],
+                            "author": item.get("author", {}).get("name", "")
+                            if isinstance(item.get("author"), dict)
+                            else "",
+                            "downloads": item.get("download_count", 0),
+                            "likes": item.get("like_count", 0),
+                            "image_url": item.get("preview_image", ""),
+                            "model_url": item.get("url", f"https://grabcad.com/library/{item.get('slug', '')}"),
+                            "download_url": "",
+                            "source": "grabcad",
+                        }
+                    )
                 total = data.get("total_count", data.get("total", len(results)))
                 return {"success": True, "source": source, "results": results, "total": total}
 
@@ -902,20 +1034,33 @@ async def _marketplace_search(source: str, query: str, category: str = "", limit
                 r = await client.get(f"https://api.thingiverse.com/search/{query}", headers=headers, params=params)
                 data = _safe_json(r)
                 if not data:
-                    return {"success": False, "source": source, "results": [], "error": f"Empty response from Thingiverse (HTTP {r.status_code})"}
+                    return {
+                        "success": False,
+                        "source": source,
+                        "results": [],
+                        "error": f"Empty response from Thingiverse (HTTP {r.status_code})",
+                    }
                 hits = data.get("hits", [])
                 results = []
                 for item in hits:
-                    results.append({
-                        "id": str(item.get("id", "")), "title": item.get("name", ""),
-                        "summary": (item.get("description") or "")[:200],
-                        "author": item.get("creator", {}).get("name", "") if isinstance(item.get("creator"), dict) else "",
-                        "downloads": item.get("download_count", 0), "likes": item.get("like_count", 0),
-                        "image_url": item.get("thumbnail", ""),
-                        "model_url": item.get("public_url", item.get("url", "")),
-                        "download_url": f"https://www.thingiverse.com/thing:{item.get('id', '')}/zip" if item.get("id") else "",
-                        "source": "thingiverse",
-                    })
+                    results.append(
+                        {
+                            "id": str(item.get("id", "")),
+                            "title": item.get("name", ""),
+                            "summary": (item.get("description") or "")[:200],
+                            "author": item.get("creator", {}).get("name", "")
+                            if isinstance(item.get("creator"), dict)
+                            else "",
+                            "downloads": item.get("download_count", 0),
+                            "likes": item.get("like_count", 0),
+                            "image_url": item.get("thumbnail", ""),
+                            "model_url": item.get("public_url", item.get("url", "")),
+                            "download_url": f"https://www.thingiverse.com/thing:{item.get('id', '')}/zip"
+                            if item.get("id")
+                            else "",
+                            "source": "thingiverse",
+                        }
+                    )
                 total = data.get("total", 0)
                 return {"success": True, "source": source, "results": results, "total": total}
 
@@ -940,6 +1085,7 @@ async def _marketplace_download(source: str, model_id: str, file_url: str, filen
         extracted = []
         if filename.endswith(".zip"):
             import zipfile
+
             with zipfile.ZipFile(dest) as zf:
                 for name in zf.namelist():
                     if name.lower().endswith((".stl", ".step", ".stp")):
@@ -947,7 +1093,13 @@ async def _marketplace_download(source: str, model_id: str, file_url: str, filen
                         with zf.open(name) as src, open(out_path, "wb") as dst:
                             dst.write(src.read())
                         extracted.append({"filename": Path(name).name, "size_bytes": os.path.getsize(out_path)})
-        return {"success": True, "filename": filename, "size_bytes": len(content), "path": dest, "extracted": extracted or None}
+        return {
+            "success": True,
+            "filename": filename,
+            "size_bytes": len(content),
+            "path": dest,
+            "extracted": extracted or None,
+        }
     except Exception as e:
         logger.error("Marketplace download error: %s", e)
         return {"success": False, "error": f"Download failed: {e}"}
@@ -987,7 +1139,9 @@ async def download_endpoint(req: MarketplaceDownloadRequest):
 async def marketplace_search(
     source: Annotated[str, Field(description="Marketplace source: printables, thingiverse, grabcad")],
     query: Annotated[str, Field(description="Search query. Pair with a category to browse all.")],
-    category: Annotated[str, Field(default="", description="Category filter (empty = all). Use marketplace_categories to list.")] = "",
+    category: Annotated[
+        str, Field(default="", description="Category filter (empty = all). Use marketplace_categories to list.")
+    ] = "",
     page: Annotated[int, Field(default=1, description="Page number (1-based).")] = 1,
 ) -> dict:
     """Search Printables, Thingiverse, or GrabCAD for CAD models.
@@ -1162,11 +1316,14 @@ async def chat_completion(req: ChatRequest):
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            r = await client.post(url, json={
-                "model": model,
-                "messages": [{"role": "system", "content": req.system or "You are a CAD expert."}, *req.messages],
-                "stream": False,
-            })
+            r = await client.post(
+                url,
+                json={
+                    "model": model,
+                    "messages": [{"role": "system", "content": req.system or "You are a CAD expert."}, *req.messages],
+                    "stream": False,
+                },
+            )
             data = r.json()
             return {"content": (data.get("message") or {}).get("content", "") or data.get("response", "")}
     except Exception as e:

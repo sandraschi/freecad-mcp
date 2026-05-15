@@ -1,10 +1,14 @@
-import { Wrench, Box, FileText, Cpu, ExternalLink } from "lucide-react";
+import { Wrench, Box, FileText, Cpu, Home, Building2, Columns, ArrowLeftRight } from "lucide-react";
 
 const apps = [
   { name: "STEP ⟶ STL", desc: "Upload a STEP assembly and download the converted STL mesh.", icon: Box, path: "/convert" },
   { name: "Model Info", desc: "Inspect CAD files: object count, solids, volume, bounding box.", icon: FileText, path: "/models" },
   { name: "Create Shape", desc: "Generate basic geometry (box, cylinder, sphere, cone) and export as STL.", icon: Cpu, path: "/convert" },
-  { name: "CAD Expert Chat", desc: "Ask FreeCAD and CAD modelling questions to the AI expert.", icon: Cpu, path: "/chat" },
+  { name: "BIM — Walls", desc: "Parametric architectural walls with placement, rotation, thickness.", icon: Home, path: "/convert" },
+  { name: "BIM — Slabs & Columns", desc: "Floor slabs and structural columns (rectangular, circular, H-section).", icon: Building2, path: "/convert" },
+  { name: "BIM — Windows & Doors", desc: "Windows and doors hosted in auto-generated walls with sill height.", icon: Columns, path: "/convert" },
+  { name: "BIM — IFC Exchange", desc: "Export .fcstd → .ifc and import architectural .ifc files.", icon: ArrowLeftRight, path: "/convert" },
+  { name: "CAD Expert Chat", desc: "Ask FreeCAD, BIM and CAD modelling questions to the AI expert.", icon: Cpu, path: "/chat" },
 ];
 
 export default function AppsPage() {

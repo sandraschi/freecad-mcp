@@ -167,4 +167,4 @@ This MCP server turns FreeCAD into an AI-accessible service. Other fleet repos c
 - Inspect model geometry before fabrication
 - Batch-convert parts libraries
 
-The key insight: FreeCAD's Python API means **every CAD operation can be an MCP tool**. The 7 tools here are a starting point — the API surface is effectively unlimited.
+The key insight: FreeCAD's Python API means **every CAD operation can be an MCP tool**. The 20 tools here cover CAD, BIM/Arch, slicing, and marketplace — the API surface is effectively unlimited.

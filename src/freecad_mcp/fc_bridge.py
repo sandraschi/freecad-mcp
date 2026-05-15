@@ -15,6 +15,16 @@ import FreeCAD
 import FreeCADGui
 import Import
 import Mesh
+import Part
+
+# BIM module imports — available inside FreeCAD GUI
+try:
+    import Arch
+    import Draft
+
+    _BIM_READY = True
+except ImportError:
+    _BIM_READY = False
 
 PORT = int(os.environ.get("FC_BRIDGE_PORT", "10946"))
 FreeCAD.Console.PrintMessage(f"FreeCAD Bridge starting on port {PORT}...\n")
@@ -88,7 +98,14 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                             "type": "mesh",
                             "vertices": len(mesh.Points),
                             "facets": mesh.CountFacets,
-                            "bbox": {"xmin": bb.XMin, "ymin": bb.YMin, "zmin": bb.ZMin, "xmax": bb.XMax, "ymax": bb.YMax, "zmax": bb.ZMax},
+                            "bbox": {
+                                "xmin": bb.XMin,
+                                "ymin": bb.YMin,
+                                "zmin": bb.ZMin,
+                                "xmax": bb.XMax,
+                                "ymax": bb.YMax,
+                                "zmax": bb.ZMax,
+                            },
                         }
                     else:
                         doc = FreeCAD.openDocument(path)
@@ -99,12 +116,21 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                                 s = o.Shape
                                 if s and s.Solids:
                                     bb = s.BoundingBox
-                                    infos.append({
-                                        "name": o.Label,
-                                        "solids": len(s.Solids),
-                                        "volume": round(s.Volume, 3) if s.Volume else 0,
-                                        "bbox": {"xmin": bb.XMin, "ymin": bb.YMin, "zmin": bb.ZMin, "xmax": bb.XMax, "ymax": bb.YMax, "zmax": bb.ZMax},
-                                    })
+                                    infos.append(
+                                        {
+                                            "name": o.Label,
+                                            "solids": len(s.Solids),
+                                            "volume": round(s.Volume, 3) if s.Volume else 0,
+                                            "bbox": {
+                                                "xmin": bb.XMin,
+                                                "ymin": bb.YMin,
+                                                "zmin": bb.ZMin,
+                                                "xmax": bb.XMax,
+                                                "ymax": bb.YMax,
+                                                "zmax": bb.ZMax,
+                                            },
+                                        }
+                                    )
                             except Exception:
                                 pass
                         result["data"] = {"objects": infos, "total": len(infos)}
@@ -114,7 +140,6 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                     stl_path = params["path"]
                     st = params.get("shape_type", "box")
                     p = params.get("params", {})
-                    import Part
 
                     if st == "box":
                         s = Part.makeBox(p.get("width", 10), p.get("height", 10), p.get("depth", 10))
@@ -130,6 +155,218 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                     m.write(stl_path)
                     sz = os.path.getsize(stl_path)
                     result["data"] = {"size_bytes": sz, "size_kb": round(sz / 1024, 1)}
+
+                elif method == "bim_create_wall":
+                    params = params  # shadow from outer scope
+                    doc = FreeCAD.newDocument("BIM_Wall")
+                    try:
+                        p1 = FreeCAD.Vector(0, 0, 0)
+                        p2 = FreeCAD.Vector(params["length"], 0, 0)
+                        line = Draft.makeLine(p1, p2)
+                        wall = Arch.makeWall(line, width=params["width"], height=params["height"])
+                        wall.Label = "Wall"
+                        wall.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(params["x"], params["y"], params["z"]),
+                            FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), params.get("rotation_z", 0)),
+                        )
+                        doc.recompute()
+                        doc.saveAs(params["path"])
+                        doc.recompute()
+                        result["data"] = {
+                            "label": wall.Label,
+                            "length": params["length"],
+                            "width": params["width"],
+                            "height": params["height"],
+                            "path": params["path"],
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
+                elif method == "bim_create_slab":
+                    doc = FreeCAD.newDocument("BIM_Slab")
+                    try:
+                        box = Part.makeBox(params["width"], params["length"], params["thickness"])
+                        slab = Arch.makeStructure(box)
+                        slab.Label = "Slab"
+                        slab.IfcType = "Slab"
+                        slab.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(params["x"], params["y"], params["z"]),
+                            FreeCAD.Rotation(),
+                        )
+                        doc.recompute()
+                        doc.saveAs(params["path"])
+                        doc.recompute()
+                        result["data"] = {
+                            "label": slab.Label,
+                            "width": params["width"],
+                            "length": params["length"],
+                            "thickness": params["thickness"],
+                            "path": params["path"],
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
+                elif method == "bim_create_column":
+                    doc = FreeCAD.newDocument("BIM_Column")
+                    try:
+                        profile = params["profile"]
+                        w = params["width"]
+                        d = params["depth"]
+                        h = params["height"]
+                        if profile == "circular":
+                            s = Part.makeCylinder(w / 2, h)
+                        elif profile == "h_section":
+                            wb = Part.makeBox(w, d, h)
+                            s1 = Part.makeBox(d, w * 0.25, h)
+                            s2 = Part.makeBox(w * 0.5, d * 0.3, h)
+                            s = wb.fuse(s1).fuse(s2)
+                        else:
+                            s = Part.makeBox(w, d, h)
+                        col = Arch.makeStructure(s)
+                        col.Label = "Column"
+                        col.IfcType = "Column"
+                        col.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(params["x"], params["y"], params["z"]),
+                            FreeCAD.Rotation(),
+                        )
+                        doc.recompute()
+                        doc.saveAs(params["path"])
+                        doc.recompute()
+                        result["data"] = {
+                            "label": col.Label,
+                            "profile": profile,
+                            "width": w,
+                            "depth": d,
+                            "height": h,
+                            "path": params["path"],
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
+                elif method == "bim_create_window":
+                    doc = FreeCAD.newDocument("BIM_Window")
+                    try:
+                        ww = params["width"]
+                        wh = params["height"]
+                        wall_len = ww + 2000
+                        p1 = FreeCAD.Vector(0, 0, 0)
+                        p2 = FreeCAD.Vector(wall_len, 0, 0)
+                        host_line = Draft.makeLine(p1, p2)
+                        host_wall = Arch.makeWall(host_line, width=200, height=wh + params["sill_height"] + 400)
+                        host_wall.Label = "HostWall"
+                        host_wall.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(params["x"], params["y"], params["z"]),
+                            FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), params.get("rotation_z", 0)),
+                        )
+                        win = Arch.makeWindow(None, width=ww, height=wh)
+                        win.Label = "Window"
+                        win.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(wall_len / 2 - ww / 2, params["sill_height"], 0),
+                            FreeCAD.Rotation(),
+                        )
+                        if hasattr(win, "Hosts"):
+                            win.Hosts = [host_wall]
+                        doc.recompute()
+                        doc.saveAs(params["path"])
+                        doc.recompute()
+                        result["data"] = {
+                            "label": win.Label,
+                            "window_type": params.get("window_type", "fixed"),
+                            "width": ww,
+                            "height": wh,
+                            "path": params["path"],
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
+                elif method == "bim_create_door":
+                    doc = FreeCAD.newDocument("BIM_Door")
+                    try:
+                        dw = params["width"]
+                        dh = params["height"]
+                        wall_len = dw + 2000
+                        p1 = FreeCAD.Vector(0, 0, 0)
+                        p2 = FreeCAD.Vector(wall_len, 0, 0)
+                        host_line = Draft.makeLine(p1, p2)
+                        host_wall = Arch.makeWall(host_line, width=200, height=dh + 400)
+                        host_wall.Label = "HostWall"
+                        host_wall.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(params["x"], params["y"], params["z"]),
+                            FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), params.get("rotation_z", 0)),
+                        )
+                        door = Arch.makeWindow(None, width=dw, height=dh)
+                        door.Label = "Door"
+                        door.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(wall_len / 2 - dw / 2, 0, 0),
+                            FreeCAD.Rotation(),
+                        )
+                        if hasattr(door, "Hosts"):
+                            door.Hosts = [host_wall]
+                        doc.recompute()
+                        doc.saveAs(params["path"])
+                        doc.recompute()
+                        result["data"] = {
+                            "label": door.Label,
+                            "door_type": params.get("door_type", "simple"),
+                            "width": dw,
+                            "height": dh,
+                            "path": params["path"],
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
+                elif method == "bim_create_roof":
+                    doc = FreeCAD.newDocument("BIM_Roof")
+                    try:
+                        face = Part.makePlane(params["width"], params["length"])
+                        roof = Arch.makeRoof(face, angle=params["angle"], thickness=params["thickness"])
+                        roof.Label = "Roof"
+                        roof.Placement = FreeCAD.Placement(
+                            FreeCAD.Vector(params["x"], params["y"], params["z"]),
+                            FreeCAD.Rotation(),
+                        )
+                        doc.recompute()
+                        doc.saveAs(params["path"])
+                        doc.recompute()
+                        result["data"] = {
+                            "label": roof.Label,
+                            "width": params["width"],
+                            "length": params["length"],
+                            "angle": params["angle"],
+                            "thickness": params["thickness"],
+                            "path": params["path"],
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
+                elif method == "bim_export_ifc":
+                    doc = FreeCAD.openDocument(params["src"])
+                    try:
+                        Import.export(doc.Objects, params["dst"])
+                        sz = os.path.getsize(params["dst"])
+                        result["data"] = {
+                            "path": params["dst"],
+                            "size_kb": round(sz / 1024, 1),
+                            "objects": len(doc.Objects),
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
+                elif method == "bim_import_ifc":
+                    doc = FreeCAD.newDocument("IFC_Import")
+                    try:
+                        Import.insert(params["src"], doc.Name)
+                        doc.recompute()
+                        doc.saveAs(params["dst"])
+                        doc.recompute()
+                        names = [o.Label for o in doc.Objects]
+                        result["data"] = {
+                            "path": params["dst"],
+                            "objects": len(doc.Objects),
+                            "object_names": names[:50],
+                        }
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
 
                 else:
                     result["success"] = False

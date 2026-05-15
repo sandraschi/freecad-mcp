@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Box, Boxes, Bot, Cpu, FileText, Gauge, HelpCircle, LayoutDashboard, Logs, Settings, ShoppingBag, Wrench } from "lucide-react";
+import { Box, Boxes, Bot, Cpu, FileText, Gauge, HelpCircle, Home, LayoutDashboard, Logs, Settings, ShoppingBag, Waves, Wrench } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const navItems = [
@@ -7,6 +7,8 @@ const navItems = [
   { path: "/convert", label: "Convert", icon: Box },
   { path: "/models", label: "Models", icon: Boxes },
   { path: "/marketplace", label: "Marketplace", icon: ShoppingBag },
+  { path: "/bim-demo", label: "BIM Demo", icon: Home },
+  { path: "/cfd", label: "CFD", icon: Waves },
   { path: "/chat", label: "CAD Expert", icon: Bot },
   { path: "/apps", label: "Apps", icon: Wrench },
   { path: "/logs", label: "Logs", icon: Logs },

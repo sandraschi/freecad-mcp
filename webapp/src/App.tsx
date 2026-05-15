@@ -9,6 +9,8 @@ import SettingsPage from "./pages/SettingsPage";
 import HelpPage from "./pages/HelpPage";
 import AppsPage from "./pages/AppsPage";
 import MarketplacePage from "./pages/MarketplacePage";
+import BimDemoPage from "./pages/BimDemoPage";
+import CfdPage from "./pages/CfdPage";
 
 export default function App() {
   return (
@@ -18,6 +20,8 @@ export default function App() {
         <Route path="/convert" element={<ConvertPage />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
+        <Route path="/bim-demo" element={<BimDemoPage />} />
+        <Route path="/cfd" element={<CfdPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
