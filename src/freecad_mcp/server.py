@@ -30,7 +30,7 @@ from fastmcp.server import create_proxy
 from prefab_ui.app import PrefabApp
 from pydantic import BaseModel, Field
 
-from freecad_mcp.tools import register_bim_tools, register_cfd_tools, register_fluidx3d_tools
+from freecad_mcp.tools import register_bim_tools, register_cfd_tools, register_fem_tools, register_fluidx3d_tools
 
 logger = logging.getLogger("freecad-mcp")
 
@@ -326,6 +326,18 @@ _cfd_tools = register_cfd_tools(
 
 # Register FluidX3D GPU CFD tools (6 tools)
 _f3d_tools = register_fluidx3d_tools(
+    mcp=mcp,
+    state=_state,
+    bridge_send=_bridge_send,
+    run_freecad=_run_freecad,
+    work_dir=WORK_DIR,
+    output_dir=OUTPUT_DIR,
+    upload_dir=UPLOAD_DIR,
+    build_result=_build_result,
+)
+
+# Register FEM structural analysis tools (7 tools: CalculiX)
+_fem_tools = register_fem_tools(
     mcp=mcp,
     state=_state,
     bridge_send=_bridge_send,
@@ -902,6 +914,9 @@ async def execute_tool(req: ToolRequest):
     # FluidX3D tool dispatch (registered via register_fluidx3d_tools closures)
     elif tool_name in _f3d_tools:
         return await _f3d_tools[tool_name](**args)
+    # FEM tool dispatch (registered via register_fem_tools closures)
+    elif tool_name in _fem_tools:
+        return await _fem_tools[tool_name](**args)
     else:
         raise HTTPException(400, f"Unknown tool: {tool_name}")
 
