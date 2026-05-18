@@ -1,0 +1,29 @@
+- generic [ref=e1]:
+  - textbox [ref=e2]
+  - contentinfo
+  - dialog [ref=e4]:
+    - generic [ref=e8]:
+      - generic [ref=e10]: Log in
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e19]: Work email
+          - textbox "Work email" [active] [ref=e22]
+        - button "Continue" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Continue
+      - generic [ref=e26]: or
+      - button "Log in with Google" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+        - generic [ref=e31]: Log in with Google
+      - button "Log in with GitHub" [ref=e32] [cursor=pointer]:
+        - generic [ref=e34]:
+          - img [ref=e35]
+          - generic [ref=e37]: Log in with GitHub
+      - button "Log in with SSO" [ref=e38] [cursor=pointer]:
+        - generic [ref=e40]:
+          - img [ref=e41]
+          - img [ref=e43]
+          - text: Log in with SSO
+      - generic [ref=e45]:
+        - text: Don't have an account?
+        - button "Sign up" [ref=e46] [cursor=pointer]:
+          - generic [ref=e47]: Sign up

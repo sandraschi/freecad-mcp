@@ -368,6 +368,37 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                     finally:
                         FreeCAD.closeDocument(doc.Name)
 
+                elif method == "mesh_to_solid":
+                    import MeshPart
+                    stl_path = params["path"]
+                    output_path = params.get("output_path", stl_path.replace(".stl", "_solid.FCStd"))
+                    doc = FreeCAD.newDocument("MeshToSolid")
+                    try:
+                        mesh = Mesh.Mesh(stl_path)
+                        if mesh.CountPoints == 0:
+                            result["success"] = False
+                            result["error"] = "Empty mesh"
+                        else:
+                            shape = MeshPart.meshFromShape(mesh)
+                            solid = Part.makeSolid(shape)
+                            if solid.isValid():
+                                obj = doc.addObject("Part::Feature", "Solid")
+                                obj.Shape = solid
+                                doc.recompute()
+                                doc.saveAs(output_path)
+                                result["success"] = True
+                                result["data"] = {
+                                    "output": output_path,
+                                    "vertices": mesh.CountPoints,
+                                    "facets": mesh.CountFacets,
+                                    "volume_mm3": round(solid.Volume, 1),
+                                }
+                            else:
+                                result["success"] = False
+                                result["error"] = "Could not create valid solid from mesh"
+                    finally:
+                        FreeCAD.closeDocument(doc.Name)
+
                 else:
                     result["success"] = False
                     result["error"] = f"Unknown method: {method}"

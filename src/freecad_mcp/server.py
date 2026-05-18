@@ -26,6 +26,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastmcp import FastMCP
+from fastmcp.server import create_proxy
 from prefab_ui.app import PrefabApp
 from pydantic import BaseModel, Field
 
@@ -268,6 +269,13 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 mcp = FastMCP.from_fastapi(app, name="FreeCAD MCP")
 
+# MCP Bridge: proxy to external MCP servers via MCP_BRIDGE_URLS env var
+_bridge_urls = os.environ.get("MCP_BRIDGE_URLS", "")
+if _bridge_urls:
+    for _bu in _bridge_urls.split(","):
+        _bu = _bu.strip()
+        if _bu:
+            mcp.add_provider(create_proxy(_bu))
 
 # ── Response builder ─────────────────────────────────────────────────────────
 

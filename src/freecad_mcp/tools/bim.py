@@ -592,6 +592,51 @@ except Exception as e:
         out, err, code = await run_freecad(script, timeout=300)
         return build_result("bim_import_ifc", out, err, code, extra={"output": output_name})
 
+    # ── mesh_to_solid ────────────────────────────────────────────────────
+
+    @mcp.tool()
+    async def mesh_to_solid(
+        file_name: Annotated[str, Field(description="STL filename in uploads/ or outputs/.")] = "",
+        output_name: Annotated[str, Field(default="", description="Output FCStd filename. Default: <input>_solid.fcstd.")] = "",
+    ) -> dict:
+        """Convert an STL mesh to a FreeCAD solid via MeshPart.meshFromShape().
+
+        Takes an STL file (e.g. from qcad-mcp plan_extrude) and converts the
+        triangular mesh to a valid B-Rep solid that can be used with BIM tools
+        or exported to STEP/IFC.
+
+        Requires TCP bridge (FreeCAD GUI mode) — not available in subprocess mode.
+
+        ## Return Format
+        {"success": bool, "output": str, "data": {"vertices": int, "facets": int, "volume_mm3": float}}
+
+        ## Examples
+        await mesh_to_solid(file_name="wall_plan.stl")
+        await mesh_to_solid(file_name="wall_plan.stl", output_name="walls_solid.fcstd")
+        """
+        stl_name = file_name or ""
+        stl_path = os.path.join(upload_dir, stl_name)
+        if not os.path.isfile(stl_path):
+            stl_path = os.path.join(output_dir, stl_name)
+        if not os.path.isfile(stl_path):
+            return {"success": False, "error": f"STL file not found: {stl_name}"}
+
+        out_name = output_name or f"{Path(stl_name).stem}_solid.fcstd"
+        output_path = os.path.join(output_dir, out_name)
+
+        if state.get("bridge_mode") != "tcp":
+            return {"success": False, "error": "mesh_to_solid requires TCP bridge (FreeCAD GUI mode). Launch freecad_gui first."}
+
+        resp = await bridge_send(
+            "mesh_to_solid",
+            {"path": stl_path, "output_path": output_path},
+            timeout=120,
+        )
+        if resp.get("success"):
+            return {"success": True, "output": out_name, "data": resp.get("data", {})}
+        logger.warning("Bridge mesh_to_solid failed: %s", resp.get("error"))
+        return {"success": False, "error": resp.get("error", "mesh_to_solid failed")}
+
     # ── bim_status ──────────────────────────────────────────────────────
 
     @mcp.tool(annotations=_README_ONLY)
@@ -629,6 +674,7 @@ except Exception as e:
         "bim_create_roof": bim_create_roof,
         "bim_export_ifc": bim_export_ifc,
         "bim_import_ifc": bim_import_ifc,
+        "mesh_to_solid": mesh_to_solid,
     }
 
 
