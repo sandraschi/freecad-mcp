@@ -1307,9 +1307,253 @@ def register_fluidx3d_tools(
             },
         }
 
+    # ── cfd_fluidx3d_export_for_render ─────────────────────────────────
+
+    @mcp.tool()
+    async def cfd_fluidx3d_export_for_render(
+        case_name: Annotated[str, Field(description="Case directory name.")] = "",
+        n_streamlines: Annotated[int, Field(description="Number of streamlines to trace.", ge=2)] = 20,
+        streamline_length: Annotated[int, Field(description="Steps per streamline.", ge=10)] = 100,
+        step_size: Annotated[float, Field(description="Integration step in grid units.", ge=0.001)] = 0.5,
+        export_csv: Annotated[bool, Field(description="Also export velocity point cloud CSV.")] = False,
+    ) -> dict:
+        """Export FluidX3D simulation results for 3D rendering.
+
+        Reads the VTK velocity field output and generates:
+        1. OBJ file with streamlines (polylines) — importable into
+           Unity3D, Resonite, Blender, and any 3D tool
+        2. Optional CSV with velocity point cloud for custom shader workflows
+
+        This bridges CFD simulation to virtual world visualization:
+        streamlines show the flow field as 3D curves that can be
+        rendered, animated, or used as path-following guides for
+        virtual bots (vbots) in game engines.
+
+        ## Return Format
+        {"success": bool, "data": {"streamline_obj": str, "csv_file": str|null, "n_streamlines": int, "bbox": {...}}}
+
+        ## Examples
+        await cfd_fluidx3d_export_for_render(case_name="pipe_gpu")
+        await cfd_fluidx3d_export_for_render(case_name="river_flow", n_streamlines=50, export_csv=True)
+        """
+        case_dir = os.path.join(F3D_CASE_DIR, case_name)
+        if not os.path.isdir(case_dir):
+            return {"success": False, "error": f"Case '{case_name}' not found."}
+
+        # Find latest VTK file
+        vtk_files = []
+        for root, _dirs, files in os.walk(case_dir):
+            for fn in files:
+                if fn.endswith(".vtk"):
+                    vtk_files.append(os.path.join(root, fn))
+        f3d_path = _find_fluidx3d()
+        if f3d_path:
+            export_dir = os.path.join(f3d_path, "bin", "export")
+            if os.path.isdir(export_dir):
+                for fn in os.listdir(export_dir):
+                    if fn.endswith(".vtk"):
+                        vtk_files.append(os.path.join(export_dir, fn))
+
+        if not vtk_files:
+            return {"success": False, "error": f"No VTK files found for case '{case_name}'. Run cfd_fluidx3d_run first."}
+
+        # Use largest VTK (last timestep)
+        vtk_path = max(vtk_files, key=os.path.getsize)
+        vtk_name = os.path.basename(vtk_path)
+
+        # Parse VTK structured grid velocity field
+        try:
+            with open(vtk_path, "rb") as f:
+                header = f.read(4096).decode("latin-1", errors="replace")
+
+            # Parse dimensions and velocity data
+            dim_match = re.search(r"DIMENSIONS\s+(\d+)\s+(\d+)\s+(\d+)", header)
+            origin_match = re.search(r"ORIGIN\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)", header)
+            space_match = re.search(r"SPACING\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)", header)
+
+            if not dim_match:
+                return {"success": False, "error": "Cannot parse VTK dimensions. Is this a structured grid?"}
+
+            Nx, Ny, Nz = int(dim_match.group(1)), int(dim_match.group(2)), int(dim_match.group(3))
+            ox = float(origin_match.group(1)) if origin_match else 0.0
+            oy = float(origin_match.group(2)) if origin_match else 0.0
+            oz = float(origin_match.group(3)) if origin_match else 0.0
+            sx = float(space_match.group(1)) if space_match else 1.0
+            sy = float(space_match.group(2)) if space_match else 1.0
+            sz = float(space_match.group(3)) if space_match else 1.0
+
+            # Read velocity binary data after headers
+            content = open(vtk_path, "rb").read()
+            vel_start = content.find(b"VECTORS")
+            if vel_start < 0:
+                vel_start = content.find(b"velocity")
+            if vel_start < 0:
+                return {"success": False, "error": "VTK has no velocity field (VECTORS)."}
+
+            # Skip ASCII header to binary data
+            data_start = content.index(b"\n", vel_start) + 1
+            # Try to find binary marker
+            if content[data_start:data_start + 10].strip():
+                data_start = content.index(b"\n", data_start) + 1
+
+            import struct
+            total_cells = Nx * Ny * Nz
+            try:
+                raw = content[data_start:data_start + total_cells * 3 * 4]
+                if len(raw) < total_cells * 3 * 4:
+                    # Try ASCII
+                    text = content[data_start:].decode("latin-1", errors="replace")
+                    values = [float(x) for x in text.split()[:total_cells * 3]]
+                else:
+                    values = list(struct.unpack(f"{total_cells * 3}f", raw))
+            except Exception:
+                # Best-effort ASCII fallback
+                text = content[data_start:].decode("latin-1", errors="replace")
+                values = [float(x) for x in text.split()[:total_cells * 3]]
+
+            if len(values) < total_cells * 3:
+                return {"success": False, "error": f"Incomplete velocity data: got {len(values)} values, need {total_cells * 3}"}
+
+            # Build velocity grid
+            vx = values[0::3]
+            vy = values[1::3]
+            vz = values[2::3]
+
+            def get_vel(x: int, y: int, z: int):
+                idx = x * Ny * Nz + y * Nz + z
+                return (vx[idx] if idx < len(vx) else 0,
+                        vy[idx] if idx < len(vy) else 0,
+                        vz[idx] if idx < len(vz) else 0)
+
+            # Generate streamlines via Euler integration
+            objs = []
+            csv_lines = ["x,y,z,vx,vy,vz"] if export_csv else []
+            bbox_min = [1e30, 1e30, 1e30]
+            bbox_max = [-1e30, -1e30, -1e30]
+
+            for sl in range(n_streamlines):
+                # Seed at inlet face (x=0) with uniform distribution
+                seed_y = int((Ny * 0.1) + (sl * Ny * 0.8) / max(1, n_streamlines - 1))
+                seed_z = int(Nz * 0.5)
+
+                cx, cy, cz = 0.5, float(seed_y) + 0.5, float(seed_z) + 0.5
+                streamline_pts = []
+                for step in range(streamline_length):
+                    ix, iy, iz = int(cx), int(cy), int(cz)
+                    ix = max(0, min(Nx - 2, ix))
+                    iy = max(0, min(Ny - 2, iy))
+                    iz = max(0, min(Nz - 2, iz))
+
+                    # Trilinear interpolation
+                    def interp(fx, fy, fz, field):
+                        d000 = field[ix * Ny * Nz + iy * Nz + iz]
+                        d100 = field[(ix + 1) * Ny * Nz + iy * Nz + iz]
+                        d010 = field[ix * Ny * Nz + (iy + 1) * Nz + iz]
+                        d110 = field[(ix + 1) * Ny * Nz + (iy + 1) * Nz + iz]
+                        d001 = d000
+                        d101 = d100
+                        d011 = d010
+                        d111 = d110
+                        if iz + 1 < Nz:
+                            d001 = field[ix * Ny * Nz + iy * Nz + (iz + 1)]
+                            d101 = field[(ix + 1) * Ny * Nz + iy * Nz + (iz + 1)]
+                            d011 = field[ix * Ny * Nz + (iy + 1) * Nz + (iz + 1)]
+                            d111 = field[(ix + 1) * Ny * Nz + (iy + 1) * Nz + (iz + 1)]
+                        c00 = d000 * (1 - fx) + d100 * fx
+                        c10 = d010 * (1 - fx) + d110 * fx
+                        c01 = d001 * (1 - fx) + d101 * fx
+                        c11 = d011 * (1 - fx) + d111 * fx
+                        c0 = c00 * (1 - fy) + c10 * fy
+                        c1 = c01 * (1 - fy) + c11 * fy
+                        return c0 * (1 - fz) + c1 * fz
+
+                    fx, fy, fz = cx - float(ix), cy - float(iy), cz - float(iz)
+                    u = interp(fx, fy, fz, vx)
+                    v = interp(fx, fy, fz, vy)
+                    w = interp(fx, fy, fz, vz)
+                    mag = (u * u + v * v + w * w) ** 0.5
+                    if mag < 1e-12:
+                        break
+                    u, v, w = u / mag * step_size, v / mag * step_size, w / mag * step_size
+                    cx += u
+                    cy += v
+                    cz += w
+                    if cx < 0 or cx >= Nx or cy < 0 or cy >= Ny or cz < 0 or cz >= Nz:
+                        break
+
+                    wx = ox + cx * sx
+                    wy = oy + cy * sy
+                    wz = oz + cz * sz
+                    streamline_pts.append((wx, wy, wz))
+                    bbox_min[0] = min(bbox_min[0], wx)
+                    bbox_min[1] = min(bbox_min[1], wy)
+                    bbox_min[2] = min(bbox_min[2], wz)
+                    bbox_max[0] = max(bbox_max[0], wx)
+                    bbox_max[1] = max(bbox_max[1], wy)
+                    bbox_max[2] = max(bbox_max[2], wz)
+
+                    if export_csv:
+                        vlx, vly, vlz = mag * u / step_size, mag * v / step_size, mag * w / step_size
+                        csv_lines.append(f"{wx},{wy},{wz},{vlx:.6f},{vly:.6f},{vlz:.6f}")
+
+                if len(streamline_pts) >= 2:
+                    obj_path = os.path.join(case_dir, f"streamline_{sl}.obj")
+                    with open(obj_path, "w") as f:
+                        f.write(f"# FluidX3D streamline {sl} — case {case_name}\n")
+                        f.write(f"# {len(streamline_pts)} points\n")
+                        for pt in streamline_pts:
+                            f.write(f"v {pt[0]:.6f} {pt[1]:.6f} {pt[2]:.6f}\n")
+                        for i in range(len(streamline_pts) - 1):
+                            f.write(f"l {i + 1} {i + 2}\n")
+                    objs.append(obj_path)
+
+            if not objs:
+                return {"success": False, "error": "No streamlines generated — check domain size or velocity field."}
+
+            # Write merged OBJ
+            merged_path = os.path.join(case_dir, f"{case_name}_streamlines.obj")
+            with open(merged_path, "w") as fout:
+                fout.write(f"# FluidX3D streamlines — case {case_name}\n")
+                fout.write(f"# {n_streamlines} streamlines, VTK: {vtk_name}\n")
+                vertex_offset = 0
+                for obj in objs:
+                    with open(obj) as fin:
+                        for line in fin:
+                            if line.startswith("v "):
+                                fout.write(line)
+                            elif line.startswith("l "):
+                                parts = line.strip().split()
+                                fout.write(f"l {int(parts[1]) + vertex_offset} {int(parts[2]) + vertex_offset}\n")
+                    vertex_offset += sum(1 for _ in open(obj)) - len([ln for ln in open(obj) if ln.startswith("l ")]) - 1
+
+            csv_path = None
+            if export_csv:
+                csv_path = os.path.join(case_dir, f"{case_name}_velocity.csv")
+                with open(csv_path, "w") as f:
+                    f.write("\n".join(csv_lines))
+
+            return {
+                "success": True,
+                "case_name": case_name,
+                "data": {
+                    "streamline_obj": merged_path,
+                    "obj_filename": os.path.basename(merged_path),
+                    "csv_file": csv_path,
+                    "n_streamlines": len(objs),
+                    "vtk_source": vtk_name,
+                    "bbox": {
+                        "xmin": bbox_min[0], "ymin": bbox_min[1], "zmin": bbox_min[2],
+                        "xmax": bbox_max[0], "ymax": bbox_max[1], "zmax": bbox_max[2],
+                    },
+                },
+            }
+        except Exception as e:
+            logger.exception("Export for render failed")
+            return {"success": False, "error": f"Export failed: {e}"}
+
     logger.info(
         "FluidX3D tools registered: cfd_fluidx3d_status, cfd_fluidx3d_prebuilt, cfd_fluidx3d_setup, cfd_fluidx3d_compile, "
-        "cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain"
+        "cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain, cfd_fluidx3d_export_for_render"
     )
 
     return {
@@ -1320,4 +1564,5 @@ def register_fluidx3d_tools(
         "cfd_fluidx3d_run": cfd_fluidx3d_run,
         "cfd_fluidx3d_results": cfd_fluidx3d_results,
         "cfd_fluidx3d_explain": cfd_fluidx3d_explain,
+        "cfd_fluidx3d_export_for_render": cfd_fluidx3d_export_for_render,
     }
