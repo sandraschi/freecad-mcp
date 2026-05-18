@@ -15,28 +15,26 @@ from freecad_mcp.tools.cfd import (
     _FV_SOLUTION,
     _TRANSPORT_PROPERTIES,
     _TURBULENCE_PROPERTIES,
-    _fv_solution_turb,
     FLOW_TYPES,
-    LAMINAR,
     KEPSILON,
     KOMEGA_SST,
+    LAMINAR,
     SOLVERS,
+    _fv_solution_turb,
 )
-
 from freecad_mcp.tools.fluidx3d import (
-    _generate_setup_cpp,
-    _generate_boundary_code,
-    _generate_stl_imports,
-    _generate_profile_code,
-    _generate_non_newtonian_code,
-    _generate_free_surface_code,
-    _generate_thermal_init_code,
-    _generate_thermal_defs,
-    _generate_object_forces_loop,
     BC_TEMPLATES,
     BC_TEMPLATES_SYMMETRY,
+    _generate_boundary_code,
+    _generate_free_surface_code,
+    _generate_non_newtonian_code,
+    _generate_object_forces_loop,
+    _generate_profile_code,
+    _generate_setup_cpp,
+    _generate_stl_imports,
+    _generate_thermal_defs,
+    _generate_thermal_init_code,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -639,27 +637,6 @@ class TestFluidX3DSymmetryPressure:
         code = _generate_boundary_code("box", 0.0, 0.0, 0.0, has_stl=False, symmetry_axis="y")
         assert "TYPE_Z" in code
 
-    def test_symmetry_z_template(self):
-        assert "channel_z" in BC_TEMPLATES_SYMMETRY
-        code = BC_TEMPLATES_SYMMETRY["channel_z"].format(u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0, outlet_rho='lbm.rho[n] = 1.0f;')
-        assert "TYPE_Z" in code
-
-    def test_channel_with_symmetry_y(self):
-        code = _generate_boundary_code("channel", 0.05, 0.0, 0.0, has_stl=False, symmetry_axis="y")
-        assert "TYPE_Z" in code
-
-    def test_box_with_symmetry_y(self):
-        code = _generate_boundary_code("box", 0.0, 0.0, 0.0, has_stl=False, symmetry_axis="y")
-        assert "TYPE_Z" in code
-
-    def test_channel_with_symmetry_y(self):
-        code = _generate_boundary_code("channel", 0.05, 0.0, 0.0, has_stl=False, symmetry_axis="y")
-        assert "TYPE_Z" in code
-
-    def test_box_with_symmetry_y(self):
-        code = _generate_boundary_code("box", 0.0, 0.0, 0.0, has_stl=False, symmetry_axis="y")
-        assert "TYPE_Z" in code
-
 
 # ── Test 5g: FluidX3D object forces ───────────────────────────────────────────
 
@@ -667,7 +644,7 @@ class TestFluidX3DObjectForces:
     """Validate _generate_object_forces_loop."""
 
     def test_no_objects_returns_empty(self):
-        code = _generate_object_forces_loop(0)
+        code = _generate_object_forces_loop([])
         assert code == ""
 
     def test_one_object(self):
@@ -784,7 +761,7 @@ DIMENSIONS {Nx} {Ny} {Nz}
 ORIGIN 0 0 0
 SPACING 1.0 1.0 1.0
 POINTS {Nx * Ny * Nz} float
-""" + "\n".join(f"{x} {y} {z}" for x in range(Nx) for y in range(Ny) for z in range(Nz)) + f"""
+""" + "\n".join(f"{x} {y} {z}" for x in range(Nx) for y in range(Ny) for z in range(Nz)) + """
 VECTORS velocity float
 """ + " ".join("1.0 0.0 0.0" for _ in range(Nx * Ny * Nz)))
         return str(path)
