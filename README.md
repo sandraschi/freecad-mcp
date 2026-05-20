@@ -1,9 +1,12 @@
 # FreeCAD MCP
 
-[![FastMCP Version](https://img.shields.io/badge/FastMCP-3.2.0-blue?style=flat-square&logo=python&logoColor=white)](https://github.com/sandraschi/fastmcp)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Linted with Biome](https://img.shields.io/badge/Linted_with-Biome-60a5fa?style=flat-square&logo=biome&logoColor=white)](https://biomejs.dev/)
-[![Built with Just](https://img.shields.io/badge/Built_with-Just-000000?style=flat-square&logo=gnu-bash&logoColor=white)](https://github.com/casey/just)
+<p align="center">
+  <a href="https://github.com/casey/just"><img src="https://img.shields.io/badge/just-ready_to_go-7c5cfc?style=flat-square&logo=just&logoColor=white" alt="Just"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
+  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://biomejs.dev"><img src="https://img.shields.io/badge/Linted_with-Biome-60a5fa?style=flat-square&logo=biome&logoColor=white" alt="Biome"></a>
+  <a href="https://github.com/PrefectHQ/fastmcp"><img src="https://img.shields.io/badge/FastMCP-3.2-7c5cfc?style=flat-square" alt="FastMCP"></a>
+</p>
 
 ## Two ways to use this
 
@@ -49,6 +52,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | **Mechanical parts** | Convert STEP files to 3D-printable STL meshes. Create boxes, cylinders, spheres, cones by describing them. Inspect part volumes and bounding boxes. |
 | **Architecture & construction** | Create walls, floor slabs, columns (rectangular or steel H-sections), windows, doors, and sloped roofs — all in millimeters. Export to `.ifc` files that architects and structural engineers can open. Import `.ifc` files from other design tools. *This is called BIM (Building Information Modeling) — 3D building design where every element knows what it is (a wall, a door, a load-bearing column), not just a shape. FreeCAD's Arch workbench handles this. QCAD is a 2D drafting tool — different domain.* |
 | **Fluid simulation** | Model pipes, channels, and nozzles. Run airflow or water-flow simulations through OpenFOAM (the same tool Formula 1 teams use). Or run GPU-accelerated simulations with FluidX3D — uses your graphics card instead of the CPU. Describe a flow problem in plain English and let an LLM write the solver config. |
+| **Structural analysis (FEM)** | Run finite element analysis with CalculiX: stress, strain, displacement, safety factor. 10 material presets (steel, aluminum, titanium, carbon fiber...), automatic meshing via Gmsh, and an end-to-end `run_fem_analysis` convenience tool. Same tool Formula 1 teams use for chassis and wing analysis. |
 | **3D printing** | Slice STL files into G-code for your printer. Configurable profiles for different printers, filaments, and layer heights. |
 | **Model marketplace** | Search Printables, Thingiverse, and GrabCAD for ready-made parts. Import them directly into your workspace. |
 | **Machine learning** | Export point clouds from fluid domains to train neural networks that replace slow physics simulations. Generate datasets by running parameter sweeps automatically. |
@@ -66,7 +70,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | :--- | :--- |
 | **[Installation](docs/install.md)** | Prerequisites, FreeCAD setup, PrusaSlicer, `just bootstrap` |
 | **[Architecture](docs/architecture.md)** | TCP bridge, subprocess fallback, port layout, file pipeline |
-| **[MCP Tools](docs/mcp-tools.md)** | All 36 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance |
+| **[MCP Tools](docs/mcp-tools.md)** | All 44 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance |
 | **[Fluid simulation guide](docs/cfd-guide.md)** | Full walkthrough: creating domains, configuring physics, setting boundary conditions, running solvers, reading results, parametric sweeps, natural language config, and exporting data for neural network training |
 | **[OpenFOAM & GPU solvers](docs/openfoam.md)** | Solver reference, turbulence model guide, GPU acceleration options (FluidX3D on RTX 4090 and Apple Silicon), Mac vs PC comparison |
 | **[AI Tooling](docs/ai-tooling.md)** | Ollama chat, agentic CAD reasoning, sampling workflows |

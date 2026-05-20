@@ -1,6 +1,6 @@
 # MCP Tools
 
-All 37 tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 9 for BIM/Arch, 10 for CFD/OpenFOAM, 7 for FluidX3D GPU, 3 for marketplace, 1 Prefab card.
+All 44 (37+7 FEM) tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, `src/freecad_mcp/tools/fem.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 9 for BIM/Arch, 10 for CFD/OpenFOAM, 8 for FEM/structural (CalculiX), 7 for FluidX3D GPU, 3 for marketplace, 1 Prefab card.
 
 ## Tool Manifest
 
@@ -36,6 +36,14 @@ All 37 tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/f
 | `cfd_parametric_study` | MUTATING | Parameter sweep for design optimization |
 | `cfd_nl2foam` | MUTATING | Natural language → OpenFOAM config via LLM |
 | `cfd_sample_for_pinns` | MUTATING | Export point clouds for PINN/GNN training |
+| `fem_status` | READ_ONLY | FEM workbench and CalculiX availability |
+| `fem_create_analysis` | MUTATING | Create structural analysis container on 3D model |
+| `fem_set_material` | MUTATING | Assign material (10 presets) with E, nu, density, yield |
+| `fem_set_constraint` | MUTATING | Apply fixed supports, forces, pressure to named faces |
+| `fem_mesh` | MUTATING | Generate finite element mesh via Gmsh (tetra4/tetra10) |
+| `fem_run` | MUTATING | Write .inp file and run CalculiX ccx solver |
+| `fem_read_results` | READ_ONLY | Parse von Mises stress, displacement, principal stresses |
+| `run_fem_analysis` | MUTATING | End-to-end FEM: create → material → constraints → mesh → solve → results |
 | `cfd_fluidx3d_status` | READ_ONLY | Check FluidX3D + compiler availability |
 | `cfd_fluidx3d_setup` | MUTATING | Generate FluidX3D C++ setup.cpp for GPU CFD |
 | `cfd_fluidx3d_compile` | MUTATING | Compile setup.cpp → GPU binary via g++/MSVC |
@@ -520,6 +528,173 @@ await cfd_sample_for_pinns(case_name="airfoil_cfd", n_boundary=10000, n_interior
 ```
 
 Output: CSV/JSON/NPZ with columns x, y, z, region (boundary/interior).
+
+---
+
+## FEM / Structural Analysis Tools
+
+All 8 FEM tools live in `src/freecad_mcp/tools/fem.py` and provide a complete structural FEA pipeline: create analysis container → set material properties → apply boundary conditions → generate mesh → solve with CalculiX → read results. A convenience `run_fem_analysis` tool chains the entire pipeline automatically.
+
+Requires: FreeCAD FEM workbench + CalculiX ccx solver (bundled with FreeCAD on Windows).
+
+### fem_status
+
+Check FEM workbench and CalculiX solver availability.
+
+```python
+await fem_status()
+# {"success": true, "fem_available": true, "bridge_mode": "tcp", "solver": "CalculiX (ccx)"}
+```
+
+---
+
+### fem_create_analysis
+
+Create a structural analysis container on a 3D model (STEP/FCStd).
+
+```python
+await fem_create_analysis(file_name="beam.step", analysis_name="BeamStatic")
+# {"success": true, "output": "beam_fem.fcstd", "data": {"analysis_name": "BeamStatic", "objects": [...]}}
+```
+
+Sets up `FemAnalysis` container + `FemSolverCalculixCxxtools` solver with working directory in `fem_output/`.
+
+---
+
+### fem_set_material
+
+Assign material properties to the FEM analysis. 10 built-in presets.
+
+```python
+# Structural steel (default)
+await fem_set_material(file_name="beam_fem.fcstd", material="steel")
+
+# Aluminum with custom elastic modulus
+await fem_set_material(file_name="bracket_fem.fcstd", material="aluminum", E_mpa=69000)
+
+# Custom material with full overrides
+await fem_set_material(file_name="beam_fem.fcstd", material="steel", E_mpa=200000, nu=0.28, density_kgm3=7850, yield_mpa=350)
+```
+
+| Material | E (MPa) | nu | Density (kg/m³) | Yield (MPa) |
+|:---|:---|:---|:---|:---|
+| steel | 210,000 | 0.30 | 7,800 | 250 |
+| stainless | 193,000 | 0.29 | 8,000 | 275 |
+| aluminum | 70,000 | 0.33 | 2,700 | 240 |
+| titanium | 110,000 | 0.34 | 4,420 | 880 |
+| concrete | 25,000 | 0.20 | 2,400 | 30 |
+| wood | 12,000 | 0.35 | 600 | 40 |
+| brass | 100,000 | 0.35 | 8,500 | 200 |
+| copper | 117,000 | 0.36 | 8,960 | 210 |
+| nylon | 3,000 | 0.39 | 1,150 | 75 |
+| carbon_fiber | 150,000 | 0.30 | 1,600 | 800 |
+
+---
+
+### fem_set_constraint
+
+Apply boundary conditions: fixed supports, force loads, pressure loads.
+
+```python
+# Cantilever: fixed at one end, force on the other
+await fem_set_constraint(file_name="beam_fem.fcstd", constraints=[
+    {"type": "fixed", "face_name": "Face1"},
+    {"type": "force", "face_name": "Face6", "fy": -5000},
+])
+
+# Pressure vessel: internal pressure
+await fem_set_constraint(file_name="tank_fem.fcstd", constraints=[
+    {"type": "fixed", "face_name": "Face2"},
+    {"type": "pressure", "face_name": "Face3", "value": 2.5},
+])
+```
+
+Constraint types: `fixed` (clamped), `force` (fx/fy/fz in N), `pressure` (value in MPa). Face names follow FreeCAD convention (Face1, Face2, etc.). Constraints are automatically linked to the analysis container.
+
+---
+
+### fem_mesh
+
+Generate a finite element mesh using Gmsh. Supports first-order (tetra4) and second-order (tetra10) elements.
+
+```python
+# Default mesh (50mm elements, second-order)
+await fem_mesh(file_name="beam_fem.fcstd")
+
+# Fine mesh for bending analysis
+await fem_mesh(file_name="beam_fem.fcstd", max_size_mm=10, min_size_mm=2, second_order=True)
+# {"success": true, "data": {"nodes": 15234, "elements": 8912, "element_size_mm": 10.0, "element_order": 2}}
+```
+
+Second-order elements (tetra10) strongly recommended for bending-dominated problems — they avoid shear locking that plagues linear tets. The mesh is automatically linked to the analysis container.
+
+---
+
+### fem_run
+
+Write the CalculiX input file (.inp) and execute the ccx solver.
+
+```python
+# Standard solve (5 min timeout)
+await fem_run(file_name="beam_fem.fcstd")
+
+# Large model with extended timeout
+await fem_run(file_name="large_assembly_fem.fcstd", timeout_s=1200)
+# {"success": true, "data": {"solver": "CalculiX ccx", "exit_code": 0, "result_files": ["beam_fem.frd", "beam_fem.dat", "beam_fem.inp"]}}
+```
+
+Requires all previous steps (analysis, material, constraints, mesh). Generates .frd (result) and .dat (log) files in `fem_output/`.
+
+---
+
+### fem_read_results
+
+Parse CalculiX result files to extract key metrics.
+
+```python
+await fem_read_results(file_name="beam_fem.fcstd")
+# {"success": true, "data": {
+#   "max_von_mises_MPa": 187.3,
+#   "max_displacement_mm": 2.45,
+#   "max_principal_MPa": 201.1,
+#   "min_principal_MPa": -15.2,
+#   "nodes": 15234
+# }}
+```
+
+Parses the .frd binary result file for von Mises stress, displacement magnitude, and principal stresses. Reads the full file (not truncated).
+
+---
+
+### run_fem_analysis
+
+End-to-end convenience tool. Chains the entire pipeline and returns actionable results with safety factor.
+
+```python
+# Cantilever beam: steel, 5000N tip load
+await run_fem_analysis(
+    file_name="beam.step",
+    material="steel",
+    constraints=[
+        {"type": "fixed", "face_name": "Face1"},
+        {"type": "force", "face_name": "Face6", "fy": -5000},
+    ],
+    mesh_size_mm=10,
+)
+
+# Shorthand: just constrain one face, force on opposite face
+await run_fem_analysis(
+    file_name="bracket.step",
+    material="aluminum",
+    force_N=2000,
+    mesh_size_mm=5,
+)
+# {"success": true,
+#  "message": "FEM complete. Max von Mises stress: 145.30 MPa (yield: 240 MPa, safety factor: 1.65). Max displacement: 0.8912 mm. Mesh: 28450 nodes, 15200 elements.",
+#  "data": {"max_von_mises_MPa": 145.3, "max_displacement_mm": 0.8912, "yield_MPa": 240, "safety_factor": 1.65, ...}}
+```
+
+This mirrors neka-nat/freecad-mcp's `run_fem_analysis` with added material presets, safety factor calculation, and mesh statistics. The `force_N` shorthand auto-applies a fixed constraint on Face1 and a downward (-Y) force on Face6.
 
 ---
 
