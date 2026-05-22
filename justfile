@@ -34,7 +34,7 @@ setup: clean bootstrap
 # ── Operation ─────────────────────────────────────────────────────────────────
 
 # Start the FreeCAD MCP server (Unified Gateway, dual mode)
-serve mode=dual port=PORT:
+serve mode="dual" port=PORT:
     uv run python -m freecad_mcp.server --mode {{mode}} --port {{port}}
 
 # Start in stdio mode (for MCP clients)
@@ -82,3 +82,26 @@ test:
 # Check FreeCAD status
 health:
     curl http://localhost:10944/api/v1/status
+
+# ── Native (Tauri) ────────────────────────────────────────────────────────────
+
+tauri-sidecar:
+    pwsh -NoLogo -File '{{justfile_directory()}}\native\build-sidecar.ps1'
+
+tauri-build:
+    Set-Location '{{justfile_directory()}}\native'
+    $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+    .\build.ps1
+
+tauri-dev:
+    Set-Location '{{justfile_directory()}}\native'
+    $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+    npm install
+    npx @tauri-apps/cli dev
+
+build-native: tauri-build
+
+build-native-debug:
+    Set-Location '{{justfile_directory()}}\native'
+    $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+    npx @tauri-apps/cli build --debug

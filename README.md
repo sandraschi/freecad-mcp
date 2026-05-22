@@ -102,7 +102,8 @@ start.ps1        # kills zombies, starts backend + frontend, opens browser
 
 - **Python**: [Ruff](https://astral.sh/ruff) linter + formatter (zero-config, sub-millisecond)
 - **Frontend**: [Biome](https://biomejs.dev/) linter + formatter
-- **Task runner**: [`just`](https://github.com/casey/just) — `just lint`, `just fix`, `just dev`
+- **Task runner**: [`just`](https://github.com/casey/just) — `just lint`, `just fix`, `just dev`, `just tauri-build`
+- **Native desktop**: Tauri 2.0 + PyInstaller sidecar — `just tauri-build` (ports 10944/10945)
 - **AI protocol**: FastMCP 3.2 with SSE transport
 
 ## See also — other construction & design tools in the fleet
