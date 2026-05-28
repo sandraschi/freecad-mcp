@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { Box, CheckCircle2, Cpu, FileText, Gauge, Loader2, Waves, XCircle, Zap } from "lucide-react";
+import { Box, CheckCircle2, Cpu, Database, FileText, Gauge, Loader2, Waves, XCircle, Zap } from "lucide-react";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>(null);
   const [health, setHealth] = useState<any>(null);
-  const [files, setFiles] = useState<{ uploads: number; outputs: number }>({ uploads: 0, outputs: 0 });
+  const [files, setFiles] = useState<{ uploads: number; outputs: number; depot: number }>({ uploads: 0, outputs: 0, depot: 0 });
 
   useEffect(() => {
     fetch("/api/v1/status").then(r => r.json()).then(setStatus).catch(() => setStatus({ freecad_ok: false }));
     fetch("/api/v1/health").then(r => r.json()).then(setHealth).catch(() => {});
-    fetch("/api/v1/files").then(r => r.json()).then(j => setFiles({ uploads: (j.uploads || []).length, outputs: (j.outputs || []).length })).catch(() => {});
+    fetch("/api/v1/files").then(r => r.json()).then(j => setFiles(p => ({ ...p, uploads: (j.uploads || []).length, outputs: (j.outputs || []).length }))).catch(() => {});
+    fetch("/api/v1/depot").then(r => r.json()).then(j => setFiles(p => ({ ...p, depot: (j.files || []).length }))).catch(() => {});
   }, []);
 
   return (
@@ -58,11 +59,11 @@ export default function Dashboard() {
           ) : <Loader2 className="animate-spin" />}
         </div>
 
-        {/* Files */}
+        {/* Depot */}
         <div className="bg-[#0f0f12] border border-white/5 rounded-2xl p-5 space-y-3">
-          <div className="flex items-center gap-2 text-sky-400"><Box size={18} /> Files</div>
-          <p className="text-2xl font-bold text-white">{files.uploads} <span className="text-sm font-normal text-slate-500">uploads</span></p>
-          <p className="text-2xl font-bold text-white">{files.outputs} <span className="text-sm font-normal text-slate-500">outputs</span></p>
+          <div className="flex items-center gap-2 text-indigo-400"><Database size={18} /> CAD Depot</div>
+          <p className="text-2xl font-bold text-white">{files.depot} <span className="text-sm font-normal text-slate-500">files</span></p>
+          <a href="/depot" className="text-xs text-indigo-400 hover:underline">Browse depot →</a>
         </div>
       </div>
 
@@ -70,7 +71,9 @@ export default function Dashboard() {
       <div className="bg-[#0f0f12] border border-white/5 rounded-2xl p-5">
         <div className="flex items-center gap-2 text-amber-400 mb-3"><Gauge size={18} /> Quick Actions</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <a href="/depot" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-indigo-400 text-center">CAD Depot</a>
           <a href="/convert" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-indigo-400 text-center">Convert STEP → STL</a>
+          <a href="/cfd-demos" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-cyan-400 text-center">CFD Demos</a>
           <a href="/cfd" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-emerald-400 text-center">OpenFOAM CFD</a>
           <a href="/fluidx3d" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-amber-400 text-center">FluidX3D GPU</a>
           <a href="/pipeline" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-purple-400 text-center">Pipeline Wizard</a>
