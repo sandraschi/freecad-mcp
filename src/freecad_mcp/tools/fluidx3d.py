@@ -50,23 +50,158 @@ def _find_fluidx3d() -> str | None:
     return None
 
 
+def _find_vs_vcvars64() -> str | None:
+    """Locate vcvars64.bat via vswhere (MSVC not always on PATH)."""
+    pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    vswhere = os.path.join(pf86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+    if not os.path.isfile(vswhere):
+        return None
+    try:
+        result = subprocess.run(  # noqa: S603
+            [
+                vswhere,
+                "-latest",
+                "-requires",
+                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                "-property",
+                "installationPath",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        vcvars = os.path.join(result.stdout.strip(), "VC", "Auxiliary", "Build", "vcvars64.bat")
+        return vcvars if os.path.isfile(vcvars) else None
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        logger.debug("vswhere lookup failed", exc_info=True)
+        return None
+
+
+def _opencl_paths(f3d_path: str) -> tuple[str, str]:
+    include_dir = os.path.join(f3d_path, "src", "OpenCL", "include")
+    lib_dir = os.path.join(f3d_path, "src", "OpenCL", "lib")
+    return include_dir, lib_dir
+
+
+def _read_stock_defines(f3d_path: str) -> str:
+    """Load upstream FluidX3D defines.hpp (git HEAD preferred over working tree)."""
+    git_exe = shutil.which("git")
+    if not git_exe:
+        git_exe = "git"
+    try:
+        result = subprocess.run(  # noqa: S603
+            [git_exe, "-C", f3d_path, "show", "HEAD:src/defines.hpp"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        logger.debug("git show defines.hpp failed", exc_info=True)
+
+    stock_path = os.path.join(f3d_path, "src", "defines.hpp")
+    with open(stock_path, encoding="utf-8") as f:
+        return f.read()
+
+
+def _generate_defines_hpp(
+    f3d_path: str,
+    case_name: str,
+    *,
+    enable_moving: bool = False,
+    enable_volume_force: bool = False,
+    enable_non_newtonian: bool = False,
+    enable_free_surface: bool = False,
+    enable_thermal: bool = False,
+) -> tuple[str, list[str]]:
+    """Patch stock defines.hpp for a case (never replace with a minimal stub)."""
+    content = _read_stock_defines(f3d_path)
+    content = re.sub(r"(?m)^#define BENCHMARK\b", "//#define BENCHMARK", content)
+
+    stock_extensions = {
+        "VOLUME_FORCE": enable_volume_force,
+        "FORCE_FIELD": True,
+        "EQUILIBRIUM_BOUNDARIES": True,
+        "MOVING_BOUNDARIES": enable_moving,
+        "SURFACE": enable_free_surface,
+        "TEMPERATURE": enable_thermal,
+    }
+    enabled: list[str] = []
+    for define_name, on in stock_extensions.items():
+        if on:
+            content = re.sub(rf"(?m)^//(#define {define_name}\b)", r"\1", content)
+            enabled.append(f"#define {define_name}")
+
+    extras: list[str] = []
+    if enable_non_newtonian:
+        extras.append("#define NON_NEWTONIAN")
+    if enable_thermal:
+        extras.append("#define THERMAL")
+
+    header = f"// FluidX3D defines -- auto-generated for case: {case_name}\n"
+    body = header + content
+    if extras:
+        body += "\n// freecad-mcp custom extension flags\n" + "\n".join(extras) + "\n"
+        enabled.extend(extras)
+
+    return body, enabled
+
+
+def _pick_velocity_vtk(vtk_files: list[str]) -> str | None:
+    """Prefer FluidX3D velocity VTK (u-*.vtk) over density/other fields."""
+    if not vtk_files:
+        return None
+    u_named = [p for p in vtk_files if re.search(r"^u-", os.path.basename(p), re.I)]
+    if u_named:
+        return max(u_named, key=os.path.getsize)
+    vectorish: list[str] = []
+    for path in vtk_files:
+        try:
+            with open(path, "rb") as f:
+                head = f.read(1024)
+        except OSError:
+            logger.debug("VTK head read failed for %s", path, exc_info=True)
+            continue
+        if b"VECTORS" in head or (b"SCALARS" in head and b"float 3" in head):
+            vectorish.append(path)
+    if vectorish:
+        return max(vectorish, key=os.path.getsize)
+    return max(vtk_files, key=os.path.getsize)
+
+
+def _vtk_velocity_data_offset(content: bytes, vel_start: int) -> int:
+    lookup = content.find(b"LOOKUP_TABLE", vel_start)
+    if lookup >= 0:
+        return content.index(b"\n", lookup) + 1
+    first_line_end = content.index(b"\n", vel_start) + 1
+    if content[vel_start:].startswith(b"VECTORS"):
+        return content.index(b"\n", first_line_end) + 1
+    return content.index(b"\n", first_line_end) + 1
+
+
 def _find_compiler() -> str | None:
-    """Find a C++ compiler (g++ preferred, then cl.exe)."""
+    """Find a C++ compiler (g++ preferred, then MSVC via vswhere)."""
     exes = ["g++", "g++-14", "g++-13", "g++-12", "clang++"]
     for exe in exes:
         try:
-            r = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)  # noqa: S603
-            if r.returncode == 0:
+            result = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)  # noqa: S603
+            if result.returncode == 0:
                 return exe
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
-    # Try MSVC
     try:
-        r = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602, S607
-        if "Microsoft" in r.stdout or "Microsoft" in r.stderr:
-            return "cl"
-    except Exception:
-        logger.debug("MSVC compiler not available")
+        result = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602, S607
+        if "Microsoft" in result.stdout or "Microsoft" in result.stderr:
+            return "msvc"
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        logger.debug("MSVC cl.exe not on PATH")
+    if _find_vs_vcvars64():
+        return "msvc"
     return None
 
 
@@ -96,9 +231,11 @@ def _find_prebuilt(
         if os.path.isdir(f3d_bin_dir):
             for fname in os.listdir(f3d_bin_dir):
                 fpath = os.path.join(f3d_bin_dir, fname)
-                if os.path.isfile(fpath) and (
-                    fname.startswith("fluidx3d") and fname.endswith(exe_suffix)
-                ):
+                if not os.path.isfile(fpath):
+                    continue
+                if fname in ("FluidX3D.exe", "FluidX3D"):
+                    return fpath
+                if fname.startswith("fluidx3d") and fname.endswith(exe_suffix):
                     return fpath
 
     return None
@@ -158,12 +295,36 @@ def _query_gpu_devices() -> list[dict]:
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         pass
 
+    try:
+        nvidia_smi = shutil.which("nvidia-smi")
+        if not nvidia_smi:
+            return devices
+        result = subprocess.run(  # noqa: S603
+            [nvidia_smi, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                name = line.strip()
+                if name:
+                    devices.append({"platform": "NVIDIA", "device": name, "vendor": "NVIDIA"})
+        if devices:
+            return devices
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+
     return devices
 
 
 # ── Setup template ───────────────────────────────────────────────────────────
 
-_TEMPLATE = """// FluidX3D setup — auto-generated by freecad-mcp cfd_fluidx3d_setup
+_TEMPLATE = """#include "setup.hpp"
+#include "info.hpp"
+
+// FluidX3D setup — auto-generated by freecad-mcp cfd_fluidx3d_setup
 // Case: {case_name} | Domain: {domain_type} | GPU CFD via OpenCL
 
 void main_setup() {{
@@ -176,7 +337,7 @@ void main_setup() {{
 
     const uint Nx = {Nx}u, Ny = {Ny}u, Nz = {Nz}u;
     const float nu = {nu}f;
-    LBM lbm(Nx, Ny, Nz, nu, {fx}f, {fy}f, {fz}f);
+{lbm_constructor}
 
     const uint N = lbm.get_N();
     const auto mid = lbm.center();
@@ -490,14 +651,19 @@ def _generate_setup_cpp(
     stl_files = stl_files or []
     has_stl = len(stl_files) > 0
 
+    if abs(fx) < 1e-12 and abs(fy) < 1e-12 and abs(fz) < 1e-12:
+        lbm_constructor = f"    LBM lbm(Nx, Ny, Nz, {nu}f);"
+    else:
+        lbm_constructor = f"    LBM lbm(Nx, Ny, Nz, {nu}f, {fx}f, {fy}f, {fz}f);"
+
     return _TEMPLATE.format(
         case_name=case_name,
         domain_type=domain_type,
         Nx=Nx, Ny=Ny, Nz=Nz,
         nu=nu,
+        lbm_constructor=lbm_constructor,
         lbm_length=lbm_length, lbm_velocity=lbm_velocity,
         si_length=si_length, si_velocity=si_velocity, si_density=si_density,
-        fx=fx, fy=fy, fz=fz,
         boundary_code=_generate_boundary_code(
             domain_type, u_inlet_x, u_inlet_y, u_inlet_z,
             has_stl, outlet_type, symmetry_axis,
@@ -764,8 +930,8 @@ def register_fluidx3d_tools(
         nu_si = viscosity_m2s
         lbm_nu = max(nu_si * lbm_velocity / (si_velocity * lbm_length) if si_velocity > 0 else 1.0 / 6.0, 0.001, min(0.2, 1.0 / 6.0))
 
-        # Volume force (pressure gradient) for periodic boundaries
-        fx = lbm_velocity * 1e-7
+        # Inlet-driven cases use zero volume force unless explicitly set later
+        fx = 0.0
         fy = 0.0
         fz = 0.0
 
@@ -805,24 +971,23 @@ def register_fluidx3d_tools(
         with open(setup_path, "w") as f:
             f.write(cpp_content)
 
-        # Generate defines.hpp with required extensions
-        defines_parts: list[str] = [
-            f"// FluidX3D extensions -- auto-generated for case: {case_name}",
-            "#define FORCE_FIELD",
-            "#define EQUILIBRIUM_BOUNDARIES",
-        ]
-        if stl_files:
-            defines_parts.append("#define MOVING_BOUNDARIES")
-        if non_newtonian:
-            defines_parts.append("#define NON_NEWTONIAN")
-        if free_surface:
-            defines_parts.append("#define FREE_SURFACE")
-        if thermal:
-            defines_parts.append("#define THERMAL")
-        defines_content = "\n".join(defines_parts) + "\n"
+        # Generate defines.hpp by patching stock FluidX3D template (do not replace wholesale)
+        f3d_path = _find_fluidx3d()
+        if not f3d_path:
+            return {"success": False, "error": "FluidX3D not found. Clone: git clone https://github.com/ProjectPhysX/FluidX3D.git"}
+
+        defines_content, enabled_defines = _generate_defines_hpp(
+            f3d_path,
+            case_name,
+            enable_moving=bool(stl_files),
+            enable_volume_force=abs(fx) >= 1e-12 or abs(fy) >= 1e-12 or abs(fz) >= 1e-12,
+            enable_non_newtonian=non_newtonian,
+            enable_free_surface=free_surface,
+            enable_thermal=thermal,
+        )
 
         defines_path = os.path.join(case_dir, "defines.hpp")
-        with open(defines_path, "w") as f:
+        with open(defines_path, "w", encoding="utf-8") as f:
             f.write(defines_content)
 
         # Save config for later tools
@@ -884,7 +1049,7 @@ def register_fluidx3d_tools(
                 "lbm_velocity": round(lbm_velocity, 4),
                 "stl_file_name": stl_file_name,
                 "features": active_features,
-                "defines": defines_parts[1:],
+                "defines": enabled_defines,
             },
         }
 
@@ -945,44 +1110,82 @@ def register_fluidx3d_tools(
 
         import time
         t0 = time.time()
+        compile_timeout = int(os.environ.get("FREECAD_F3D_COMPILE_TIMEOUT_S", "300"))
+        opencl_inc, opencl_lib = _opencl_paths(f3d_path)
+        stdout_text = ""
+        stderr_text = ""
 
-        if compiler == "cl":
-            # MSVC compilation
-            src_list = " ".join(f'"{f}"' for f in cpp_files)
-            cmd = f'cl /EHsc /O2 /std:c++17 /Fe:"{binary_path}" {src_list} OpenCL.lib'
+        if compiler == "msvc":
+            vcvars = _find_vs_vcvars64()
+            if not vcvars:
+                return {"success": False, "error": "MSVC vcvars64.bat not found. Install VS Build Tools C++ workload."}
+            vcxproj = os.path.join(f3d_path, "FluidX3D.vcxproj")
+            if not os.path.isfile(vcxproj):
+                return {"success": False, "error": f"FluidX3D.vcxproj not found at {vcxproj}"}
+            built_exe = os.path.join(f3d_path, "bin", "FluidX3D.exe")
+            cmd = (
+                f'call "{vcvars}" >nul && msbuild "{vcxproj}" /nologo '
+                f"/p:Configuration=Release /p:Platform=x64 /m"
+            )
             try:
                 proc = await asyncio.create_subprocess_shell(
                     cmd,
+                    cwd=f3d_path,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=compile_timeout)
+                stdout_text = stdout.decode("utf-8", errors="replace") if stdout else ""
+                stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
+                if proc.returncode == 0 and os.path.isfile(built_exe):
+                    shutil.copy2(built_exe, binary_path)
+                elif proc.returncode == 0 and not os.path.isfile(binary_path):
+                    proc.returncode = 1
+                    stderr_text = (stderr_text + "\n" if stderr_text else "") + f"Expected binary missing: {built_exe}"
             except TimeoutError:
-                return {"success": False, "error": "MSVC compilation timed out"}
+                return {"success": False, "error": f"MSBuild compilation timed out after {compile_timeout}s"}
         elif "g++" in compiler or "clang" in compiler:
-            # g++/clang++ compilation
             src_list = [os.path.join(f3d_src, f) for f in os.listdir(f3d_src) if f.endswith((".cpp", ".c"))]
-            cmd = [compiler, "-std=c++17", "-O3", "-o", binary_path, *src_list, "-lOpenCL"]
+            cmd = [
+                compiler,
+                "-std=c++17",
+                "-O3",
+                "-pthread",
+                "-Wno-comment",
+                f"-I{opencl_inc}",
+                f"-L{opencl_lib}",
+                "-o",
+                binary_path,
+                *src_list,
+                "-lOpenCL",
+            ]
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
+                    cwd=f3d_path,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=compile_timeout)
+                stdout_text = stdout.decode("utf-8", errors="replace") if stdout else ""
+                stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
             except TimeoutError:
-                return {"success": False, "error": "g++ compilation timed out"}
+                return {"success": False, "error": f"g++ compilation timed out after {compile_timeout}s"}
         else:
             return {"success": False, "error": f"Unsupported compiler: {compiler}"}
 
         dt = time.time() - t0
-        stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
+        compile_log = (stdout_text + "\n" + stderr_text).strip()
 
-        if proc.returncode != 0:
+        if proc.returncode != 0 or not os.path.isfile(binary_path):
             return {
                 "success": False,
                 "error": f"Compilation failed (exit {proc.returncode})",
-                "data": {"compiler": compiler, "stderr": stderr_text[-5000:]},
+                "data": {
+                    "compiler": compiler,
+                    "stderr": compile_log[-8000:],
+                    "binary_expected": binary_path,
+                },
             }
 
         return {
@@ -1073,32 +1276,35 @@ def register_fluidx3d_tools(
 
         import time
         t0 = time.time()
+        log_path = os.path.join(case_dir, "run.log")
+        proc: asyncio.subprocess.Process | None = None
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                binary_path, str(gpu_index),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+            with open(log_path, "wb") as log_file:
+                proc = await asyncio.create_subprocess_exec(
+                    binary_path,
+                    str(gpu_index),
+                    stdout=log_file,
+                    stderr=asyncio.subprocess.STDOUT,
+                    stdin=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(proc.wait(), timeout=timeout_s)
         except TimeoutError:
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
             return {
                 "success": False,
                 "error": f"Simulation timed out after {timeout_s}s",
-                "data": {"exit_code": -1},
+                "data": {"exit_code": -1, "log_file": log_path},
             }
 
         dt = time.time() - t0
-        out_text = stdout.decode("utf-8", errors="replace")
-        err_text = stderr.decode("utf-8", errors="replace")
-
-        # Save output to case directory for later analysis
-        log_path = os.path.join(case_dir, "run.log")
-        with open(log_path, "w") as f:
-            f.write(out_text)
-            if err_text:
-                f.write("\n=== STDERR ===\n")
-                f.write(err_text)
+        out_text = ""
+        if os.path.isfile(log_path):
+            with open(log_path, encoding="utf-8", errors="replace") as f:
+                out_text = f.read()
+        err_text = ""
 
         # Find VTK files
         vtk_files = []
@@ -1116,10 +1322,10 @@ def register_fluidx3d_tools(
                         vtk_files.append(os.path.join(export_dir, fn))
 
         return {
-            "success": proc.returncode == 0,
+            "success": proc is not None and proc.returncode == 0,
             "case_name": case_name,
             "data": {
-                "exit_code": proc.returncode or 0,
+                "exit_code": proc.returncode if proc is not None else -1,
                 "output": out_text[-10000:],
                 "stderr": err_text[-2000:] if err_text else "",
                 "runtime_s": round(dt, 2),
@@ -1179,7 +1385,10 @@ def register_fluidx3d_tools(
             })
 
         # Parse DONE line
-        done_match = re.search(r"DONE steps:(\d+) time:([\d.]+)s mlups:([\d.]+)", content)
+        done_match = re.search(
+            r"DONE steps:(\d+) time:([\d.eE+\-]+)s mlups:([\d.eE+\-]+)",
+            content,
+        )
         completed = done_match is not None
         total_steps = int(done_match.group(1)) if done_match else 0
         runtime = float(done_match.group(2)) if done_match else 0
@@ -1357,8 +1566,10 @@ def register_fluidx3d_tools(
         if not vtk_files:
             return {"success": False, "error": f"No VTK files found for case '{case_name}'. Run cfd_fluidx3d_run first."}
 
-        # Use largest VTK (last timestep)
-        vtk_path = max(vtk_files, key=os.path.getsize)
+        # Use velocity VTK (FluidX3D writes u-*.vtk with SCALARS data float 3)
+        vtk_path = _pick_velocity_vtk(vtk_files)
+        if not vtk_path:
+            return {"success": False, "error": f"No VTK files found for case '{case_name}'. Run cfd_fluidx3d_run first."}
         vtk_name = os.path.basename(vtk_path)
 
         # Parse VTK structured grid velocity field
@@ -1386,26 +1597,22 @@ def register_fluidx3d_tools(
             content = open(vtk_path, "rb").read()
             vel_start = content.find(b"VECTORS")
             if vel_start < 0:
-                vel_start = content.find(b"velocity")
+                vel_start = content.find(b"SCALARS")
             if vel_start < 0:
-                return {"success": False, "error": "VTK has no velocity field (VECTORS)."}
+                return {"success": False, "error": "VTK has no velocity field (VECTORS/SCALARS)."}
 
-            # Skip ASCII header to binary data
-            data_start = content.index(b"\n", vel_start) + 1
-            # Try to find binary marker
-            if content[data_start:data_start + 10].strip():
-                data_start = content.index(b"\n", data_start) + 1
+            data_start = _vtk_velocity_data_offset(content, vel_start)
 
             import struct
             total_cells = Nx * Ny * Nz
             try:
                 raw = content[data_start:data_start + total_cells * 3 * 4]
                 if len(raw) < total_cells * 3 * 4:
-                    # Try ASCII
                     text = content[data_start:].decode("latin-1", errors="replace")
-                    values = [float(x) for x in text.split()[:total_cells * 3]]
+                    values = [float(x) for x in text.split()[: total_cells * 3]]
                 else:
-                    values = list(struct.unpack(f"{total_cells * 3}f", raw))
+                    # FluidX3D writes binary VTK as big-endian floats
+                    values = list(struct.unpack(f">{total_cells * 3}f", raw))
             except Exception:
                 # Best-effort ASCII fallback
                 text = content[data_start:].decode("latin-1", errors="replace")
@@ -1419,11 +1626,16 @@ def register_fluidx3d_tools(
             vy = values[1::3]
             vz = values[2::3]
 
-            def get_vel(x: int, y: int, z: int):
-                idx = x * Ny * Nz + y * Nz + z
-                return (vx[idx] if idx < len(vx) else 0,
-                        vy[idx] if idx < len(vy) else 0,
-                        vz[idx] if idx < len(vz) else 0)
+            def cell_index(x: int, y: int, z: int) -> int:
+                return x + (y + z * Ny) * Nx
+
+            def get_vel(x: int, y: int, z: int) -> tuple[float, float, float]:
+                idx = cell_index(x, y, z)
+                return (
+                    vx[idx] if idx < len(vx) else 0.0,
+                    vy[idx] if idx < len(vy) else 0.0,
+                    vz[idx] if idx < len(vz) else 0.0,
+                )
 
             # Generate streamlines via Euler integration
             objs = []
@@ -1445,20 +1657,15 @@ def register_fluidx3d_tools(
                     iz = max(0, min(Nz - 2, iz))
 
                     # Trilinear interpolation
-                    def interp(fx, fy, fz, field):
-                        d000 = field[ix * Ny * Nz + iy * Nz + iz]
-                        d100 = field[(ix + 1) * Ny * Nz + iy * Nz + iz]
-                        d010 = field[ix * Ny * Nz + (iy + 1) * Nz + iz]
-                        d110 = field[(ix + 1) * Ny * Nz + (iy + 1) * Nz + iz]
-                        d001 = d000
-                        d101 = d100
-                        d011 = d010
-                        d111 = d110
-                        if iz + 1 < Nz:
-                            d001 = field[ix * Ny * Nz + iy * Nz + (iz + 1)]
-                            d101 = field[(ix + 1) * Ny * Nz + iy * Nz + (iz + 1)]
-                            d011 = field[ix * Ny * Nz + (iy + 1) * Nz + (iz + 1)]
-                            d111 = field[(ix + 1) * Ny * Nz + (iy + 1) * Nz + (iz + 1)]
+                    def interp(fx: float, fy: float, fz: float, field: list[float]) -> float:
+                        d000 = field[cell_index(ix, iy, iz)]
+                        d100 = field[cell_index(ix + 1, iy, iz)]
+                        d010 = field[cell_index(ix, iy + 1, iz)]
+                        d110 = field[cell_index(ix + 1, iy + 1, iz)]
+                        d001 = field[cell_index(ix, iy, iz + 1)] if iz + 1 < Nz else d000
+                        d101 = field[cell_index(ix + 1, iy, iz + 1)] if iz + 1 < Nz else d100
+                        d011 = field[cell_index(ix, iy + 1, iz + 1)] if iz + 1 < Nz else d010
+                        d111 = field[cell_index(ix + 1, iy + 1, iz + 1)] if iz + 1 < Nz else d110
                         c00 = d000 * (1 - fx) + d100 * fx
                         c10 = d010 * (1 - fx) + d110 * fx
                         c01 = d001 * (1 - fx) + d101 * fx

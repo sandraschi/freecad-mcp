@@ -4,6 +4,7 @@ Imports module-level constants and functions directly — no FreeCAD bridge need
 """
 
 import inspect
+import os
 import re
 
 import pytest
@@ -402,15 +403,17 @@ class TestFluidX3DSetup:
         nu=0.01,
         lbm_length=1.0, lbm_velocity=0.05,
         si_length=2.0, si_velocity=1.0, si_density=1000.0,
-        fx=1e-9, fy=0.0, fz=0.0,
+        fx=0.0, fy=0.0, fz=0.0,
         u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0,
         time_steps=5000, write_interval=100,
     )
 
     def test_contains_required_includes_and_main(self):
         cpp = _generate_setup_cpp(**self.SAMPLE_PARAMS)
+        assert '#include "setup.hpp"' in cpp
+        assert '#include "info.hpp"' in cpp
         assert "void main_setup()" in cpp
-        assert "LBM lbm(" in cpp
+        assert "LBM lbm(Nx, Ny, Nz," in cpp
         assert "TYPE_E" in cpp
         assert "TYPE_S" in cpp
         assert "units.set_m_kg_s" in cpp
@@ -927,3 +930,25 @@ class TestConstants:
         assert isinstance(sol, str)
         assert isinstance(res, str)
         assert isinstance(rel, str)
+
+
+class TestFluidx3dEnvironment:
+    def test_fluidx3d_path_detects_clone(self):
+        from freecad_mcp.tools.fluidx3d import _find_fluidx3d
+
+        path = _find_fluidx3d()
+        if os.path.isdir(r"D:\Dev\repos\FluidX3D\src"):
+            assert path is not None
+            assert os.path.isdir(os.path.join(path, "src"))
+
+    def test_compiler_detection_returns_string_or_none(self):
+        from freecad_mcp.tools.fluidx3d import _find_compiler
+
+        compiler = _find_compiler()
+        assert compiler is None or isinstance(compiler, str)
+
+    def test_gpu_query_returns_list(self):
+        from freecad_mcp.tools.fluidx3d import _query_gpu_devices
+
+        devices = _query_gpu_devices()
+        assert isinstance(devices, list)
