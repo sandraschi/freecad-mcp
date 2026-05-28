@@ -125,7 +125,8 @@ Only fleet repo with **OpenFOAM + GPU FluidX3D + NL2FOAM + PINN sampling + VTK/O
 
 ```powershell
 just fleet-e2e-offline   # CI-safe config chain smoke
-just fleet-e2e           # HTTP probe when qcad + freecad are running
+just fleet-e2e-integration   # GPU FluidX3D setup->compile->run (local)
+just fleet-e2e-chain     # qcad extrude -> freecad setup (HTTP)
 ```
 
 ## License

@@ -53,3 +53,57 @@ async def call_freecad_tool(
             return {**body, "success": True}
         return body
     return {"success": False, "error": "Invalid tool response", "tool": tool}
+
+
+async def call_qcad_tool(
+    base_url: str,
+    tool: str,
+    arguments: dict[str, Any] | None = None,
+    *,
+    timeout: float = 120.0,
+) -> dict[str, Any]:
+    """Execute an MCP tool via qcad-mcp REST control endpoint."""
+    return await call_freecad_tool(base_url, tool, arguments, timeout=timeout)
+
+
+async def upload_bytes(
+    base_url: str,
+    path: str,
+    filename: str,
+    content: bytes,
+    *,
+    timeout: float = 120.0,
+) -> dict[str, Any]:
+    """Multipart upload to fleet /api/v1/upload endpoints."""
+    url = base_url.rstrip("/") + path
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                url,
+                files={"file": (filename, content, "application/octet-stream")},
+            )
+            if response.status_code >= 400:
+                try:
+                    body = response.json()
+                except ValueError:
+                    body = {"error": response.text}
+                return {"success": False, "status_code": response.status_code, **body}
+            body = response.json()
+            return body if isinstance(body, dict) else {"success": True, "body": body}
+    except httpx.HTTPError as exc:
+        logger.warning("Upload failed base=%s file=%s error=%s", base_url, filename, exc)
+        return {"success": False, "error": str(exc), "filename": filename}
+
+
+async def download_bytes(
+    base_url: str,
+    path: str,
+    *,
+    timeout: float = 120.0,
+) -> bytes:
+    """Download binary artifact from fleet download endpoint."""
+    url = base_url.rstrip("/") + path
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.content

@@ -81,9 +81,25 @@ test:
 fleet-e2e-offline:
     uv run python scripts/fleet_e2e_smoke.py --offline --strict
 
+# FluidX3D GPU integration (local: FLUIDX3D_PATH + compiler + OpenCL)
+fleet-e2e-integration:
+    uv run python scripts/fleet_e2e_smoke.py --integration --strict
+
 # Fleet E2E smoke (HTTP probe when qcad + freecad running)
 fleet-e2e:
     uv run python scripts/fleet_e2e_smoke.py --strict
+
+# Live HTTP chain: qcad plan_extrude -> freecad FluidX3D setup
+fleet-e2e-chain:
+    uv run python scripts/fleet_e2e_smoke.py --live-chain --strict
+
+# Live chain + GPU compile/run (slow)
+fleet-e2e-chain-gpu:
+    uv run python scripts/fleet_e2e_smoke.py --live-chain --live-chain-gpu --strict
+
+# Pytest including integration marker
+test-integration:
+    uv run pytest -m integration
 
 e2e:
     pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"

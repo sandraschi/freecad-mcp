@@ -31,6 +31,10 @@ packages = ["src/freecad_mcp"]
 minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "integration: FluidX3D GPU tests requiring FLUIDX3D_PATH, compiler, and OpenCL (deselect with -m 'not integration')",
+]
+addopts = "-m 'not integration'"
 
 [tool.ruff]
 line-length = 120

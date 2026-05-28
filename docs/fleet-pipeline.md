@@ -92,15 +92,30 @@ Offline (CI — no Docker/GPU):
 
 ```powershell
 cd D:\Dev\repos\freecad-mcp
-uv run python scripts/fleet_e2e_smoke.py --offline --strict
+just fleet-e2e-offline
 ```
 
-HTTP (local fleet):
+FluidX3D GPU integration (local RTX 4090 + FluidX3D clone):
 
 ```powershell
-# Terminal A: just serve (freecad) + qcad start
-uv run python scripts/fleet_e2e_smoke.py --strict
+just fleet-e2e-integration
+uv run pytest -m integration
 ```
+
+HTTP probe:
+
+```powershell
+just fleet-e2e
+```
+
+Live chain (qcad :10966 + freecad :10944):
+
+```powershell
+just fleet-e2e-chain
+just fleet-e2e-chain-gpu   # optional compile + run
+```
+
+Sequence: upload DXF -> `plan_extrude` -> download STL -> freecad upload -> `cfd_fluidx3d_setup`.
 
 ## Competitive moat
 
