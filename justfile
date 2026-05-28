@@ -2,7 +2,7 @@ set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 
 export NAME := "FreeCAD MCP"
 export DESC := "CAD operations via MCP tools and REST API"
-export VER  := "0.1.0"
+export VER  := "0.5.0"
 export PORT := "10944"
 export HOST := "0.0.0.0"
 
@@ -77,6 +77,17 @@ check: lint test
 test:
     uv run pytest
 
+# Fleet E2E smoke (offline config chain for CI)
+fleet-e2e-offline:
+    uv run python scripts/fleet_e2e_smoke.py --offline --strict
+
+# Fleet E2E smoke (HTTP probe when qcad + freecad running)
+fleet-e2e:
+    uv run python scripts/fleet_e2e_smoke.py --strict
+
+e2e:
+    pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
+
 # ── Diagnostics ───────────────────────────────────────────────────────────────
 
 # Check FreeCAD status
@@ -94,6 +105,7 @@ tauri-build:
     .\build.ps1
 
 tauri-dev:
+    pwsh -NoLogo -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
     Set-Location '{{justfile_directory()}}\native'
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
     npm install
@@ -102,6 +114,7 @@ tauri-dev:
 build-native: tauri-build
 
 build-native-debug:
+    pwsh -NoLogo -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
     Set-Location '{{justfile_directory()}}\native'
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
     npx @tauri-apps/cli build --debug

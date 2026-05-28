@@ -49,7 +49,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 
 | Category | What you can do |
 |:---|:---|
-| **Mechanical parts** | Convert STEP files to 3D-printable STL meshes. Create boxes, cylinders, spheres, cones by describing them. Inspect part volumes and bounding boxes. |
+| **Mechanical parts** | Convert STEP files to 3D-printable STL meshes. Create boxes, cylinders, spheres, cones by describing them. Inspect part volumes and bounding boxes. All managed through the persistent CAD file depot with full CRUD. |
 | **Architecture & construction** | Create walls, floor slabs, columns (rectangular or steel H-sections), windows, doors, and sloped roofs — all in millimeters. Export to `.ifc` files that architects and structural engineers can open. Import `.ifc` files from other design tools. *This is called BIM (Building Information Modeling) — 3D building design where every element knows what it is (a wall, a door, a load-bearing column), not just a shape. FreeCAD's Arch workbench handles this. QCAD is a 2D drafting tool — different domain.* |
 | **Fluid simulation** | Model pipes, channels, and nozzles. Run airflow or water-flow simulations through OpenFOAM (the same tool Formula 1 teams use). Or run GPU-accelerated simulations with FluidX3D — uses your graphics card instead of the CPU. Describe a flow problem in plain English and let an LLM write the solver config. |
 | **Structural analysis (FEM)** | Run finite element analysis with CalculiX: stress, strain, displacement, safety factor. 10 material presets (steel, aluminum, titanium, carbon fiber...), automatic meshing via Gmsh, and an end-to-end `run_fem_analysis` convenience tool. Same tool Formula 1 teams use for chassis and wing analysis. |
@@ -59,7 +59,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 
 | | |
 |--:|--|
-| **Example use cases** | "What's inside this STEP file?" — "Convert this assembly to 3D-printable STL" — "Design a room with two windows and a door" — "Simulate water flow through this pipe at 2 m/s" — "Find me a gear on Printables and slice it for my MK4" — "Train a neural network to predict airflow instead of running the full simulation every time" |
+| **Example use cases** | "What's inside this STEP file?" — "Convert this assembly to 3D-printable STL" — "Design a room with two windows and a door" — "Simulate water flow through this pipe at 2 m/s" — "Find me a gear on Printables and slice it for my MK4" — "Train a neural network to predict airflow instead of running the full simulation every time" — "Browse my persistent CAD depot, create a test bracket, rename and tag it" |
 | **What it connects to** | FreeCAD 1.1.1+ (the CAD engine), OpenFOAM 10 via Docker (fluid simulation), FluidX3D via OpenCL (GPU-accelerated simulation), PrusaSlicer 2.8+ (3D printing), Ollama (local LLM), Printables / Thingiverse / GrabCAD (model search) |
 | **Ports** | **10944** = MCP server (AI agents), **10945** = web dashboard (humans), **10946** = FreeCAD bridge (internal) |
 | **Start** | `just bootstrap` then `start.ps1` |
@@ -70,7 +70,8 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | :--- | :--- |
 | **[Installation](docs/install.md)** | Prerequisites, FreeCAD setup, PrusaSlicer, `just bootstrap` |
 | **[Architecture](docs/architecture.md)** | TCP bridge, subprocess fallback, port layout, file pipeline |
-| **[MCP Tools](docs/mcp-tools.md)** | All 44 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance |
+| **[MCP Tools](docs/mcp-tools.md)** | All 46 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
+| **[Fleet CFD pipeline](docs/fleet-pipeline.md)** | qcad DXF → freecad OpenFOAM/FluidX3D → resonite/godot/robotics handoff |
 | **[Fluid simulation guide](docs/cfd-guide.md)** | Full walkthrough: creating domains, configuring physics, setting boundary conditions, running solvers, reading results, parametric sweeps, natural language config, and exporting data for neural network training |
 | **[OpenFOAM & GPU solvers](docs/openfoam.md)** | Solver reference, turbulence model guide, GPU acceleration options (FluidX3D on RTX 4090 and Apple Silicon), Mac vs PC comparison |
 | **[AI Tooling](docs/ai-tooling.md)** | Ollama chat, agentic CAD reasoning, sampling workflows |
@@ -117,6 +118,15 @@ start.ps1        # kills zombies, starts backend + frontend, opens browser
 | [**GIMP MCP**](https://github.com/sandraschi/gimp-mcp) | Raster image editing — photos, textures, pixel art |
 
 Each follows the same pattern: MCP server for AI agents + web dashboard for humans, sharing a common API.
+
+## CFD fleet moat
+
+Only fleet repo with **OpenFOAM + GPU FluidX3D + NL2FOAM + PINN sampling + VTK/OBJ export** for downstream Resonite/Godot/robotics handoff. Competitive analysis: [mcp-central-docs/projects/CAD_FLEET_COMPETITIVE.md](https://github.com/sandraschi/mcp-central-docs/blob/master/projects/CAD_FLEET_COMPETITIVE.md). Pipeline: [docs/fleet-pipeline.md](docs/fleet-pipeline.md).
+
+```powershell
+just fleet-e2e-offline   # CI-safe config chain smoke
+just fleet-e2e           # HTTP probe when qcad + freecad are running
+```
 
 ## License
 

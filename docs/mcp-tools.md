@@ -1,6 +1,6 @@
 # MCP Tools
 
-All 44 (37+7 FEM) tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, `src/freecad_mcp/tools/fem.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 9 for BIM/Arch, 10 for CFD/OpenFOAM, 8 for FEM/structural (CalculiX), 7 for FluidX3D GPU, 3 for marketplace, 1 Prefab card.
+All **46+** tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, `src/freecad_mcp/tools/fem.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 10 for BIM/Arch (incl. `mesh_to_solid`), 10 for CFD/OpenFOAM, 8 for FEM/structural (CalculiX), **8 for FluidX3D GPU**, 3 for marketplace, 1 Prefab card.
 
 ## Tool Manifest
 
@@ -22,6 +22,7 @@ All 44 (37+7 FEM) tools registered via `@mcp.tool()` in `src/freecad_mcp/server.
 | `bim_create_roof` | MUTATING | Sloped or flat roof → FCStd |
 | `bim_export_ifc` | MUTATING | Export FCStd document → IFC format |
 | `bim_import_ifc` | MUTATING | Import IFC file → FCStd document |
+| `mesh_to_solid` | MUTATING | qcad-mcp STL extrusion → FreeCAD B-Rep solid (TCP bridge) |
 | `marketplace_search` | READ_ONLY | Search Printables, Thingiverse, GrabCAD |
 | `marketplace_download` | MUTATING | Download model → uploads directory |
 | `marketplace_categories` | READ_ONLY | List categories for a marketplace source |
@@ -45,11 +46,13 @@ All 44 (37+7 FEM) tools registered via `@mcp.tool()` in `src/freecad_mcp/server.
 | `fem_read_results` | READ_ONLY | Parse von Mises stress, displacement, principal stresses |
 | `run_fem_analysis` | MUTATING | End-to-end FEM: create → material → constraints → mesh → solve → results |
 | `cfd_fluidx3d_status` | READ_ONLY | Check FluidX3D + compiler availability |
+| `cfd_fluidx3d_prebuilt` | READ_ONLY | Detect prebuilt FluidX3D binary (`FLUIDX3D_BINARY`) |
 | `cfd_fluidx3d_setup` | MUTATING | Generate FluidX3D C++ setup.cpp for GPU CFD |
 | `cfd_fluidx3d_compile` | MUTATING | Compile setup.cpp → GPU binary via g++/MSVC |
 | `cfd_fluidx3d_run` | MUTATING | Execute FluidX3D simulation on GPU via OpenCL |
 | `cfd_fluidx3d_results` | READ_ONLY | Parse forces, MLUPS throughput, completion status |
 | `cfd_fluidx3d_explain` | READ_ONLY | Explain flow physics: Reynolds number, regime, solver notes |
+| `cfd_fluidx3d_export_for_render` | MUTATING | VTK → OBJ streamlines + optional CSV for fleet viz |
 
 ---
 
@@ -700,7 +703,7 @@ This mirrors neka-nat/freecad-mcp's `run_fem_analysis` with added material prese
 
 ## FluidX3D GPU CFD Tools
 
-All 6 FluidX3D tools live in `src/freecad_mcp/tools/fluidx3d.py` and provide native GPU CFD via ProjectPhysX/FluidX3D (OpenCL — all GPU vendors). Generate C++, compile via g++/MSVC, run on GPU, parse forces/throughput.
+All 8 FluidX3D tools live in `src/freecad_mcp/tools/fluidx3d.py` and provide native GPU CFD via ProjectPhysX/FluidX3D (OpenCL — all GPU vendors). Generate C++, compile via g++/MSVC, run on GPU, parse forces/throughput.
 
 Requires: `git clone https://github.com/ProjectPhysX/FluidX3D.git` + a C++ compiler.
 
