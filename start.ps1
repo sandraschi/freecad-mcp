@@ -1,27 +1,56 @@
-#!/usr/bin/env bash
-# start.ps1 — FreeCAD MCP + Webapp
+﻿param(
+    [switch]$Headless,
+    [switch]$BackendOnly,
+    [switch]$FrontendOnly,
+    [switch]$NoBrowser
+)
+
 $WebPort = 10945
 $ApiPort = 10944
+$ProjectRoot = $PSScriptRoot
+$SrcDir = Join-Path $ProjectRoot "src"
 
-# Kill any existing processes on these ports
-Get-NetTCPConnection -LocalPort $ApiPort -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
-Get-NetTCPConnection -LocalPort $WebPort -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
-Start-Sleep -Seconds 1
-
-# Start backend (dual mode: REST + MCP SSE)
-$env:FREECAD_MCP_WORK_DIR = "$env:TEMP\freecad_mcp_work"
-$job = Start-Job -Name "freecad-mcp" -ScriptBlock {
-    Set-Location "$using:PWD\src"
-    uv run python -m freecad_mcp.server --mode dual --port $using:ApiPort
+$FleetStartPath = Join-Path $ProjectRoot "scripts\FleetStartMode.ps1"
+if (-not (Test-Path -LiteralPath $FleetStartPath)) {
+    Write-Host "ERROR: Missing vendored launcher helper: $FleetStartPath" -ForegroundColor Red
+    exit 1
 }
-Start-Sleep -Seconds 3
+. $FleetStartPath
+$FleetStart = Initialize-FleetStartMode @PSBoundParameters
+Enter-FleetHeadlessConsole -Headless:$Headless -BackendOnly:$BackendOnly
+Stop-FleetPortSquatters -Ports @($WebPort, $ApiPort) -Label "freecad-mcp"
 
-# Start webapp
-Push-Location webapp
-Start-Process cmd -ArgumentList "/c", "npm", "run", "dev"
-Pop-Location
+$env:FREECAD_MCP_WORK_DIR = "$env:TEMP\freecad_mcp_work"
+Set-Location $ProjectRoot
+uv sync --project $ProjectRoot
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: uv sync failed for freecad-mcp." -ForegroundColor Red
+    exit 1
+}
 
-Start-Sleep -Seconds 5
-Write-Host "FreeCAD MCP: http://localhost:$ApiPort/api/v1/status" -ForegroundColor Green
-Write-Host "Webapp:       http://localhost:$WebPort" -ForegroundColor Green
-Write-Host "MCP SSE:      http://localhost:$ApiPort/sse" -ForegroundColor Green
+$backendCmd = "Set-Location '$ProjectRoot'; uv run --project '$ProjectRoot' python -m freecad_mcp.server --mode http --host 127.0.0.1 --port $ApiPort"
+Write-Host "Starting FreeCAD MCP backend on port $ApiPort ..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoProfile", "-WindowStyle", "Normal", "-Command", $backendCmd
+
+$healthUrl = "http://127.0.0.1:$ApiPort/api/v1/status"
+$attempt = 0
+while ($attempt -lt 40) {
+    try {
+        $null = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+        Write-Host "Backend ready at $healthUrl" -ForegroundColor Green
+        break
+    } catch {
+        Start-Sleep -Seconds 2
+        $attempt++
+    }
+}
+
+if (-not $FleetStart.RunFrontend) {
+    while ($true) { Start-Sleep -Seconds 60 }
+}
+
+Push-Location (Join-Path $ProjectRoot "webapp")
+if (-not (Test-Path "node_modules")) { npm install }
+Write-Host "Starting Vite frontend on port $WebPort ..." -ForegroundColor Green
+npm run dev -- --port $WebPort --host 127.0.0.1 --strictPort
+

@@ -1,4 +1,4 @@
-set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
+﻿set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 
 export NAME := "FreeCAD MCP"
 export DESC := "CAD operations via MCP tools and REST API"
@@ -10,7 +10,7 @@ export HOST := "0.0.0.0"
 
 # Open the interactive recipe dashboard in the browser
 default:
-    @pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ../mcp-central-docs/scripts/just-dashboard.ps1 -Path .
+    @just --list
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -85,6 +85,14 @@ fleet-e2e-offline:
 fleet-e2e-integration:
     uv run python scripts/fleet_e2e_smoke.py --integration --strict
 
+# Bootstrap FluidX3D clone + verify compiler/GPU
+bootstrap-fluidx3d:
+    pwsh -NoLogo -File '{{justfile_directory()}}\scripts\bootstrap_fluidx3d.ps1'
+
+# Live HTTP chain with auto-start backends
+fleet-e2e-chain-run:
+    pwsh -NoLogo -File '{{justfile_directory()}}\scripts\run_live_chain.ps1'
+
 # Fleet E2E smoke (HTTP probe when qcad + freecad running)
 fleet-e2e:
     uv run python scripts/fleet_e2e_smoke.py --strict
@@ -103,6 +111,18 @@ test-integration:
 
 e2e:
     pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
+
+# Build an MCPB portable bundle from tool definitions
+mcpb-pack:
+    uvx mcpb build --server freecad_mcp.server:mcp --output freecad-mcp.mcpb
+
+# Register this MCP server with a client (stdio)
+install-mcp:
+    uv run python -m freecad_mcp.server --mode stdio
+
+# Regenerate LLM documentation files (llms.txt)
+llms-txt:
+    uv run python -m freecad_mcp.utils.llms_txt
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────
 
@@ -134,3 +154,4 @@ build-native-debug:
     Set-Location '{{justfile_directory()}}\native'
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
     npx @tauri-apps/cli build --debug
+
