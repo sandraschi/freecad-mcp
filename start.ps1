@@ -20,6 +20,8 @@ $FleetStart = Initialize-FleetStartMode @PSBoundParameters
 Enter-FleetHeadlessConsole -Headless:$Headless -BackendOnly:$BackendOnly
 Stop-FleetPortSquatters -Ports @($WebPort, $ApiPort) -Label "freecad-mcp"
 
+if (-not (Assert-FleetPortsAvailable -Ports @($WebPort, $ApiPort) -Label "freecad-mcp")) { exit 1 }
+
 $env:FREECAD_MCP_WORK_DIR = "$env:TEMP\freecad_mcp_work"
 Set-Location $ProjectRoot
 uv sync --project $ProjectRoot
@@ -53,4 +55,5 @@ Push-Location (Join-Path $ProjectRoot "webapp")
 if (-not (Test-Path "node_modules")) { npm install }
 Write-Host "Starting Vite frontend on port $WebPort ..." -ForegroundColor Green
 npm run dev -- --port $WebPort --host 127.0.0.1 --strictPort
+
 
