@@ -1,0 +1,60 @@
+{
+  "manifest_version": "0.2",
+  "name": "freecad-mcp",
+  "version": "0.5.0",
+  "description": "FreeCAD MCP server — CAD operations via MCP tools and REST API",
+  "author": {
+    "name": "sandraschi"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "run_server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${PWD}",
+        "run_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "${PWD}/src",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "step_to_stl",
+      "description": "step_to_stl"
+    },
+    {
+      "name": "bim_create_wall",
+      "description": "bim_create_wall"
+    },
+    {
+      "name": "freecad_bridge",
+      "description": "freecad_bridge"
+    },
+    {
+      "name": "cfd_create_domain",
+      "description": "cfd_create_domain"
+    },
+    {
+      "name": "cad_create",
+      "description": "cad_create"
+    },
+    {
+      "name": "fem_create_analysis",
+      "description": "fem_create_analysis"
+    },
+    {
+      "name": "cfd_fluidx3d_setup",
+      "description": "cfd_fluidx3d_setup"
+    },
+    {
+      "name": "freecad_model",
+      "description": "freecad_model"
+    }
+  ]
+}

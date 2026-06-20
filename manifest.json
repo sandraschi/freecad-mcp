@@ -1,0 +1,26 @@
+{
+  "manifest_version": "0.2",
+  "name": "freecad-mcp",
+  "version": "0.5.0",
+  "description": "FreeCAD MCP server â€” CAD operations via MCP tools and REST API",
+  "author": {
+    "name": "sandraschi"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "run_server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${PWD}",
+        "run_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "${PWD}/src",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
