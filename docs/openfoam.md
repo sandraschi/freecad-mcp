@@ -10,6 +10,7 @@
 |:---|:---|
 | Does `cfd_run_solver` use the RTX 4090? | **No.** The standard OpenFOAM Docker image is CPU-only MPI. |
 | Best free GPU CFD solver? | **[FluidX3D](https://github.com/ProjectPhysX/FluidX3D)** — 5k stars, OpenCL, runs on ANY GPU (AMD/Intel/NVIDIA/Apple Silicon), v3.7 released May 2026. |
+| Does the FluidX3D Runner need a C++ compiler? | **No** if you use a pre-built binary. `cfd_fluidx3d_setup` writes `config.json` → `fluidx3d-runner.exe` reads it at runtime. Build once, run any case. |
 | Should I use a Mac with 128GB RAM? | **Yes, excellent for the full pipeline.** Unified memory = massive simulation grids + large neural surrogate training. |
 | Where the 4090 matters? | FluidX3D simulation, PINN/GNN surrogate training (NVIDIA Modulus/PyTorch). |
 
@@ -216,6 +217,9 @@ case_name/
 | `cfd_parametric_study` | Duplicates case N times; runs each variant |
 | `cfd_nl2foam` | LLM generates all config files from natural language |
 | `cfd_sample_for_pinns` | `pinn_points.csv` / `.json` / `.npz` |
+| `cfd_fluidx3d_setup` | `config.json` (runner) + `setup.cpp` + `defines.hpp` (compile) |
+| `cfd_fluidx3d_run` | `config.json` → runner reads at runtime. VTK → `export/*.vtk` |
+| `cfd_fluidx3d_results` | Parses: run log, `RESULT {...}` JSON, VTK count |
 
 ---
 

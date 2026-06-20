@@ -895,20 +895,92 @@ Typical runtimes on a modern desktop (Ryzen 7 5800X, 32 GB, Docker):
 
 ---
 
+## FluidX3D Runner — GPU CFD Without Compilation
+
+The **FluidX3D Runner** is a pre-compiled GPU CFD binary that reads all simulation parameters from a JSON file at runtime. Build once, use for any case.
+
+### How it works
+
+```
+cfd_fluidx3d_setup → config.json + setup.cpp (both generated)
+                          │
+                          ▼
+fluidx3d-runner.exe  ──  reads config.json at runtime
+  (pre-compiled)          ├── resolution, viscosity, inlet velocity
+                          ├── boundary conditions (channel/pipe/box/STL)
+                          ├── time steps, write interval
+                          ├── STL imports (voxelized on GPU)
+                          └── force extraction, VTK export
+                          │
+                          ▼
+                    stdout: RESULT {"success": true, forces, MLUPS, ...}
+                    export/: velocity-*.vtk, density-*.vtk
+```
+
+### Benefits over compile-per-case
+
+| Aspect | Compile path | Runner path |
+|:---|:---|:---|
+| Compilation needed | Every case | Once (or use pre-built binary) |
+| Change resolution | Recompile | Edit config.json |
+| Change BC type | Recompile | Edit config.json |
+| Add STL geometry | Recompile | Edit config.json |
+| Time to first results | ~5s compile + run | Run immediately |
+| C++ compiler required | Yes | No (if pre-built binary) |
+
+### Building the runner
+
+```powershell
+# Windows — auto-detects FluidX3D, compiles via g++ or MSVC
+scripts/build-fluidx3d-runner.ps1
+
+# Or via CMake
+cmake -B build -S src/freecad_mcp/fluidx3d_runner/ \
+  -DFLUIDX3D_SOURCE_DIR=C:/path/to/FluidX3D
+cmake --build build
+```
+
+### Pre-built binary
+
+On tagged releases (`v*`), GitHub Actions compiles the runner for:
+- Windows (MSVC + g++ MinGW x86_64)
+- Linux (g++ x86_64)
+- macOS (clang++, ARM x86_64)
+
+The binary auto-detects the fastest GPU via OpenCL. Set `FLUIDX3D_BINARY` env var to use a custom path.
+
+### GPU selection
+
+```python
+# Run on fastest GPU (auto-detected)
+await cfd_fluidx3d_run(case_name="pipe_gpu")
+# On RTX 4090: ~770³ cells, ~456 million cells, ~60 time steps/sec
+
+# Specify GPU by name substring
+await cfd_fluidx3d_run(case_name="pipe_gpu", gpu_device="RTX 4090")
+```
+
+---
+
 ## GPU Acceleration & RTX 4090
 
-### Solver Execution: CPU-Only
+### OpenFOAM vs FluidX3D — Which to use
 
-**The standard OpenFOAM Docker image is CPU-only.** `cfd_run_solver` does not use the RTX 4090. OpenFOAM parallelises via MPI across CPU cores, not CUDA. For most engineering cases (up to a few million cells), CPU performance is sufficient — see benchmarks above.
+| Criterion | OpenFOAM (CPU) | FluidX3D (GPU) |
+|:---|:---|:---|
+| Execution hardware | CPU cores (MPI) | GPU via OpenCL (any vendor) |
+| RTX 4090 utilisation | None (idle during solve) | Full (D3Q19 LBM, 55 bytes/cell) |
+| Max cells on 4090 (24 GB) | ~5M (CPU RAM) | ~456M (770³, FP16) |
+| Max cells on Mac 128GB | ~40M | ~3.4B (1500³) |
+| Solver method | Finite Volume (FVM) | Lattice-Boltzmann (LBM) |
+| Turbulence models | kEpsilon, kOmegaSST, LES, DES | Smagorinsky-Lilly subgrid |
+| Mesh type | Structured + unstructured + polyhedral | Cartesian grid (voxelized STL) |
+| Multiphase | VOF (interFoam), Euler-Euler | Free surface (SURFACE extension) |
+| 30-year legacy | Yes | No (4 years, 5k stars) |
+| Setup complexity | Dictionary files (30+ year syntax) | JSON config (runner) or C++ (compile) |
+| MCP tool prefix | `cfd_*` | `cfd_fluidx3d_*` |
 
-### GPU-Accelerated OpenFOAM Options
-
-| Option | Approach | 4090 | Notes |
-|:---|:---|:---|:---|
-| [RapidCFD](https://github.com/Atizar/RapidCFD) | CUDA-ported solvers | Yes | Experimental, partial coverage |
-| [FluidX3D](https://github.com/ProjectPhysX/FluidX3D) | Lattice-Boltzmann (pure GPU) | Yes | Production, different physics model |
-
-### Where the 4090 Is Used: Neural Surrogates
+### Neural Surrogates Workflow (Uses GPU)
 
 The CFD pipeline is designed for a hybrid CPU/GPU workflow:
 
