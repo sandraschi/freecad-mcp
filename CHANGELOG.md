@@ -1,3 +1,24 @@
+
+## [Unreleased] — 2026-06-14
+
+### Added
+- Tauri CORS: tauri://localhost, http://tauri.localhost, https://tauri.localhost in CORS origins
+- Tauri CORS: _TAURI env var toggle with allow_origin_regex for secure WebView access
+- build.ps1: auto-copy NSIS installer to dist/ on build
+- CUA-NSIS: config-driven smoke test (`scripts/cua-smoke.py`, `scripts/cua-nsis-config.json`)
+- CUA-NSIS: `just build-native` + `just cua-nsis-test` recipes
+- CUA-NSIS: 11-phase smoke (install, launch, WebView OCR, feature route, diagnostics, uninstall)
+- CUA-NSIS: local certification — all 11 phases pass locally (2026-06-14)
+
+- **FluidX3D Runner**: Pre-compiled standalone GPU CFD binary system. `runner.cpp` reads `config.json` at runtime (no recompilation per case). Supports channel/pipe/box domains, STL import, force extraction, VTK export, structured JSON output for MCP parsing. Covers D3Q19 LBM with SRT collision.
+- **build-fluidx3d-runner.ps1**: Windows build script that clones FluidX3D, injects the runner, and compiles via g++ or MSVC. Auto-detects compiler and FluidX3D path.
+- **GitHub Actions workflow**: Cross-platform CI build (Windows MSVC, Windows g++, Linux g++, macOS clang++). Uploads binaries on tagged releases.
+- **Auto-detect runner**: `_find_prebuilt` now checks for `fluidx3d-runner.exe` first (env var, `` case bin/, runner build output).
+- **config.json generation**: `cfd_fluidx3d_setup` now writes both `.f3d_config.json` (for compile path) and `config.json` (for runner path).
+- **Runner-first execution**: `cfd_fluidx3d_run` detects runner binary and uses it with `F3D_CONFIG` env var. Falls back to compiled binary path. No recompilation needed for new cases.
+
+### Changed
+- CORS: llow_origins=["*"] → explicit origins list for Tauri webview compatibility
 # Changelog
 
 All notable changes to the FreeCAD MCP server and webapp.
@@ -81,3 +102,4 @@ All notable changes to the FreeCAD MCP server and webapp.
 - REST API: `/api/v1/status`, `/api/v1/upload`, `/api/v1/download/{name}`, `/api/v1/files`, `/api/v1/control/tool`.
 - Ollama chat integration (AI CAD Expert, model `gemma3:1b` on `192.168.1.11:11434`).
 - SSDP fleet discovery broadcast.
+

@@ -213,8 +213,9 @@ def _find_prebuilt(
 
     Checks, in priority order:
     1. FLUIDX3D_BINARY environment variable
-    2. <f3d_case_dir>/bin/fluidx3d_run.exe (Windows) or fluidx3d_run
-    3. <f3d_path>/bin/ for pre-existing compiled binaries
+    2. The FluidX3D Runner binary (fluidx3d-runner) — reads config.json at runtime
+    3. <f3d_case_dir>/bin/fluidx3d_run.exe (Windows) or fluidx3d_run
+    4. <f3d_path>/bin/ for pre-existing compiled binaries
     """
     exe_suffix = ".exe" if os.name == "nt" else ""
 
@@ -222,9 +223,16 @@ def _find_prebuilt(
     if env_bin and os.path.isfile(env_bin):
         return env_bin
 
-    run_bin = os.path.join(f3d_case_dir, "bin", f"fluidx3d_run{exe_suffix}")
-    if os.path.isfile(run_bin):
-        return run_bin
+    # The FluidX3D Runner (pre-compiled, reads config.json)
+    for name in (f"fluidx3d-runner{exe_suffix}", f"fluidx3d_runner{exe_suffix}"):
+        runner_bin = os.path.join(f3d_case_dir, "bin", name)
+        if os.path.isfile(runner_bin):
+            return runner_bin
+        # Also check the runner's build output directory
+        runner_dir = os.path.join(os.path.dirname(__file__), "..", "fluidx3d_runner", "bin")
+        runner_bin2 = os.path.join(os.path.abspath(runner_dir), name)
+        if os.path.isfile(runner_bin2):
+            return runner_bin2
 
     if f3d_path:
         f3d_bin_dir = os.path.join(f3d_path, "bin")
@@ -1016,6 +1024,26 @@ def register_fluidx3d_tools(
         with open(os.path.join(case_dir, ".f3d_config.json"), "w") as f:
             json.dump(cfg, f)
 
+        # Write config.json for the FluidX3D Runner (pre-compiled binary, no recompilation needed)
+        runner_cfg = {
+            "case_name": case_name,
+            "domain_type": domain_type,
+            "Nx": resolution_x, "Ny": resolution_y, "Nz": resolution_z,
+            "nu": round(lbm_nu, 6),
+            "fx": fx, "fy": fy, "fz": fz,
+            "inlet_velocity": [ux, uy, uz],
+            "time_steps": time_steps,
+            "write_interval": write_interval,
+            "si_length": si_length,
+            "si_velocity": si_velocity,
+            "si_density": density_kgm3,
+            "lbm_length": lbm_length,
+            "lbm_velocity": lbm_velocity,
+            "stl_files": [os.path.basename(s) for s in stl_files],
+        }
+        with open(os.path.join(case_dir, "config.json"), "w") as f:
+            json.dump(runner_cfg, f, indent=2)
+
         stl_file_name = os.path.basename(stl_files[0]) if stl_files else None
 
         # Collect enabled features for return
@@ -1279,15 +1307,31 @@ def register_fluidx3d_tools(
         log_path = os.path.join(case_dir, "run.log")
         proc: asyncio.subprocess.Process | None = None
 
+        # Determine if we're using the FluidX3D Runner (reads config.json, no compile)
+        is_runner = "runner" in os.path.basename(binary_path).lower()
+        config_path = os.path.join(case_dir, "config.json")
+        has_runner_config = is_runner and os.path.isfile(config_path)
+
         try:
             with open(log_path, "wb") as log_file:
-                proc = await asyncio.create_subprocess_exec(
-                    binary_path,
-                    str(gpu_index),
-                    stdout=log_file,
-                    stderr=asyncio.subprocess.STDOUT,
-                    stdin=asyncio.subprocess.DEVNULL,
-                )
+                if has_runner_config:
+                    # Runner path: set F3D_CONFIG env var, no GPU flag
+                    proc = await asyncio.create_subprocess_exec(
+                        binary_path,
+                        stdout=log_file,
+                        stderr=asyncio.subprocess.STDOUT,
+                        stdin=asyncio.subprocess.DEVNULL,
+                        env={**os.environ, "F3D_CONFIG": config_path},
+                    )
+                else:
+                    # Compiled FluidX3D path: pass GPU device index
+                    proc = await asyncio.create_subprocess_exec(
+                        binary_path,
+                        str(gpu_index),
+                        stdout=log_file,
+                        stderr=asyncio.subprocess.STDOUT,
+                        stdin=asyncio.subprocess.DEVNULL,
+                    )
                 await asyncio.wait_for(proc.wait(), timeout=timeout_s)
         except TimeoutError:
             if proc is not None and proc.returncode is None:
