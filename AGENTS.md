@@ -4,7 +4,7 @@
 FreeCAD MCP server — CAD operations via MCP tools and REST API
 
 ## Standards
-- FastMCP 3.2+ portmanteau tool pattern — tools use `operation` enum param
+- FastMCP 3.4+ portmanteau tool pattern with annotation constants — every `@mcp.tool()` includes `annotations=READ_ONLY` or `annotations=MUTATING`
 - Responses: structured dicts with `success`, `message`, domain-specific fields
 - Dual transport: stdio (Claude Desktop) + HTTP (`MCP_TRANSPORT=http`)
 - See [mcp-central-docs](https://github.com/sandraschi/mcp-central-docs) for fleet-wide coding standards

@@ -5,7 +5,7 @@ description = "FreeCAD MCP server — CAD operations via MCP tools and REST API"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastmcp==3.2.0",
+    "fastmcp>=3.4.2",
     "httpx>=0.27",
     "pydantic>=2.0",
     "fastapi>=0.104",
