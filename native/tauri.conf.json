@@ -11,6 +11,7 @@
     "windows": [
       {
         "title": "FreeCAD MCP",
+        "label": "main",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -23,7 +24,6 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -31,11 +31,28 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/freecad-mcp-backend"]
+    "resources": [
+      "resources/freecad-mcp-backend.exe"
+    ],
+    "targets": [
+      "nsis"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "skip"
+      },
+      "nsis": {}
+    }
   },
   "plugins": {
-    "shell": { "open": true },
-    "fs": { "requireLiteralLeadingDot": false },
-    "process": { "all": true }
+    "shell": {
+      "open": true
+    },
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "process": {
+      "all": true
+    }
   }
 }

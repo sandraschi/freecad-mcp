@@ -1,43 +1,58 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod backend;
+use backend::{BackendProcess, materialize_backend};
+use std::io::BufRead;
+use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
-use tauri_plugin_shell::ShellExt;
-
-struct BackendProcess(Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 #[tauri::command]
 async fn start_backend(
     app: tauri::AppHandle,
     state: tauri::State<'_, BackendProcess>,
 ) -> Result<String, String> {
-    let cmd = app
-        .shell()
-        .sidecar("freecad-mcp-backend")
-        .map_err(|e| format!("Sidecar error: {}", e))?
-        .args(["--mode", "dual", "--port", "10944"]);
-
-    let (mut rx, child) = cmd
+    let path = materialize_backend(&app)?;
+    let mut child = Command::new(&path)
+        .env("FREECAD_TAURI", "1")
+        .args(["--mode", "dual", "--port", "10944"])
+        .creation_flags(0x0800_0000)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to start backend: {}", e))?;
+        .map_err(|e| format!("Failed to start backend: {e}"))?;
+
+    let stdout = child.stdout.take().ok_or("No stdout")?;
+    let stderr = child.stderr.take().ok_or("No stderr")?;
     *state.0.lock().unwrap() = Some(child);
 
+    let ac1 = app.clone();
+    let ac2 = app.clone();
     tauri::async_runtime::spawn(async move {
-        use tauri_plugin_shell::process::CommandEvent;
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {
-                    let text = String::from_utf8_lossy(&line);
-                    eprintln!("[backend] {}", text.trim());
-                    if text.contains("Uvicorn running")
-                        || text.contains("Application startup complete")
-                        || text.contains("Starting FreeCAD MCP on")
-                    {
-                        let _ = app.emit("backend-status", "ready");
-                        break;
-                    }
-                }
-                _ => {}
+        let reader = std::io::BufReader::new(stdout);
+        for line in reader.lines().flatten() {
+            eprintln!("[backend] {}", line.trim());
+            if line.contains("Uvicorn running")
+                || line.contains("Application startup complete")
+                || line.contains("Starting FreeCAD MCP on")
+            {
+                let _ = ac1.emit("backend-status", "ready");
+                break;
+            }
+        }
+    });
+    tauri::async_runtime::spawn(async move {
+        let reader = std::io::BufReader::new(stderr);
+        for line in reader.lines().flatten() {
+            eprintln!("[backend] {}", line.trim());
+            if line.contains("Uvicorn running")
+                || line.contains("Application startup complete")
+                || line.contains("Starting FreeCAD MCP on")
+            {
+                let _ = ac2.emit("backend-status", "ready");
+                break;
             }
         }
     });
@@ -73,7 +88,7 @@ fn main() {
         .expect("error building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                if let Some(child) = app.state::<BackendProcess>().0.lock().unwrap().take() {
+                if let Some(mut child) = app.state::<BackendProcess>().0.lock().unwrap().take() {
                     let _ = child.kill();
                 }
             }
