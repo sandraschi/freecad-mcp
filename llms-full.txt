@@ -1,0 +1,250 @@
+# FreeCAD MCP — Full Agent Reference
+
+> FastMCP 3.2 server exposing FreeCAD geometry, BIM/architecture, CFD/OpenFOAM, FluidX3D GPU simulation, FEM/structural analysis (CalculiX), 3D printing, and marketplace search as MCP tools. Dual transport: SSE (port 10944) and web dashboard (port 10945).
+
+## Quick Links
+
+- Repo: `D:\Dev\repos\freecad-mcp`
+- README: [README.md](README.md)
+- MCP Tools docs: [docs/mcp-tools.md](docs/mcp-tools.md)
+- CFD guide: [docs/cfd-guide.md](docs/cfd-guide.md)
+- Fleet pipeline: [docs/fleet-pipeline.md](docs/fleet-pipeline.md)
+- Architecture: [docs/architecture.md](docs/architecture.md)
+- FreeCAD version: 1.1.1+
+- Backend port: 10944 (MCP SSE), 10945 (web dashboard)
+- Status endpoint: `GET /api/v1/health` or call `freecad_status()`
+- Depot path: `%LOCALAPPDATA%\freecad-mcp\depot`
+
+## Connection
+
+```json
+{
+  "mcpServers": {
+    "freecad": {
+      "url": "http://localhost:10944/sse",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+## Tool Reference
+
+### Core CAD (7 tools)
+
+| Tool | Annotation | Description |
+|------|-----------|-------------|
+| `freecad_status` | READ_ONLY | Check FreeCAD executable reachability and version. Call this first before any CAD operation. Returns `freecad_ok`, `version`, `work_dir`, `bridge_mode` (tcp/subprocess). |
+| `freecad_gui` | MUTATING | Launch the FreeCAD desktop GUI application as a separate process. Optionally open a file: `freecad_gui(file_name="bracket.step")`. Returns immediately after launch. |
+| `freecad_bridge` | READ_ONLY | Hands-In / Hands-Off bridge control for live FreeCAD GUI sessions. **Operations:** `status` (bridge connectivity), `set_execution_mode` (auto/hands_in/hands_off), `ensure_gui` (start bridge), `list_objects` (object tree), `screenshot_view` (viewport PNG capture at configurable size), `execute_script` (bounded Python in live document), `new_document` (empty document). Hands-In requires TCP bridge (FreeCAD.exe running). |
+| `freecad_model` | MUTATING | Parametric modeling portmanteau. **Operations:** `create_primitive` (box/cylinder/sphere/cone), `fuse`/`cut`/`common` (boolean operations), `mirror`, `extrude`, `fillet`, `transform` (reposition), `export` (STL/FCStd), `toy_car` (preset sports car via FreeCAD parametric solids, Blender sculpt, or marketplace download). Supports Hands-In (TCP bridge) and Hands-Off (FreeCADCmd subprocess) modes. |
+| `step_to_stl` | MUTATING | Convert STEP/STP assembly file to STL mesh. Upload via `POST /api/v1/upload` first. Uses TCP bridge for AP214 assemblies (full object extraction), falls back to FreeCADCmd for simple files. Returns object count and output size. |
+| `model_info` | READ_ONLY | Read CAD file metadata: object list, solid count, bounding box, volume. Supports STEP assemblies (per-object breakdown) and STL meshes (vertex/facet count). |
+| `create_shape` | MUTATING | Create geometric primitive (box/cylinder/sphere/cone) and export as STL. All dimensions in mm. Output downloadable via `GET /api/v1/download/{output_name}`. |
+| `mesh_to_solid` | MUTATING | Convert STL mesh to FreeCAD B-Rep solid via MeshPart. Bridges qcad-mcp extrusion pipeline. Requires TCP bridge (GUI mode). |
+| `cad_depot` | READ_ONLY | List all CAD files in the persistent file depot (STEP, STL, IFC, FCStd, IGES, OBJ, DXF) with metadata: file size, creation date, description, tags. |
+| `cad_create` | MUTATING | Create a shape (box/cylinder/sphere/cone) and save the STL directly to the persistent depot with metadata (description, tags, shape_type). |
+
+### BIM / Architecture (9 tools)
+
+All dimensions in mm. Output files are FreeCAD `.fcstd` documents. Requires FreeCAD's Arch workbench.
+
+| Tool | Annotation | Description |
+|------|-----------|-------------|
+| `bim_status` | READ_ONLY | Check BIM/Arch workbench availability. Returns `bim_available`, `bridge_mode`, `workbench`. |
+| `bim_create_wall` | MUTATING | Parametric architectural wall via `Arch.makeWall()`. Parameters: `length_mm` (1-inf), `width_mm` (thickness, 10-inf), `height_mm` (10-inf), `placement_x/y/z`, `rotation_z` (degrees). Output: FCStd. |
+| `bim_create_slab` | MUTATING | Floor slab as structural BIM element. Parameters: `width_mm`, `length_mm`, `thickness_mm` (20-min), `placement_x/y/z`. |
+| `bim_create_column` | MUTATING | Structural column with profile selection. `profile_type`: `rectangular`, `circular`, `h_section`. Parameters: `width_mm` (10-inf), `depth_mm` (10-inf), `height_mm` (10-inf), `placement_x/y/z`. |
+| `bim_create_window` | MUTATING | Window hosted in auto-generated wall (auto-cuts opening). `window_type`: `fixed`, `casement`, `sliding`, `awning`. Parameters: `width_mm` (200-inf), `height_mm` (200-inf), `sill_height_mm`, `placement_x/y/z`, `rotation_z`. |
+| `bim_create_door` | MUTATING | Door hosted in auto-generated wall (auto-cuts opening). `door_type`: `simple`, `glass`, `sliding_glass`. Parameters: `width_mm` (400-inf), `height_mm` (1500-inf), `placement_x/y/z`, `rotation_z`. |
+| `bim_create_roof` | MUTATING | Sloped or flat roof via `Arch.makeRoof()`. Parameters: `width_mm` (span), `length_mm` (ridge), `angle_deg` (0=flat, max 75), `thickness_mm` (10-inf), `placement_x/y/z`. |
+| `bim_export_ifc` | MUTATING | Export FCStd to IFC (Industry Foundation Classes) — the open BIM exchange standard. Retains material, type, and relationship data. |
+| `bim_import_ifc` | MUTATING | Import IFC file from architects/structural engineers → FreeCAD FCStd with parametric BIM objects. |
+
+
+### CFD / OpenFOAM (10 tools)
+
+All tools live in `src/freecad_mcp/tools/cfd.py`. Requires Docker with OpenFOAM image (`docker pull openfoam/openfoam10-paraview56`). Cases stored in `cfd_cases/` directory.
+
+| Tool | Annotation | Description |
+|------|-----------|-------------|
+| `cfd_status` | READ_ONLY | Check Docker, OpenFOAM image, FreeCAD bridge, and CFD case directory availability. |
+| `cfd_create_domain` | MUTATING | Create parametric fluid domain geometry in FreeCAD + generate OpenFOAM case skeleton with `blockMeshDict`. Domain types: `channel` (rectangular duct), `pipe` (cylindrical), `box` (all-sides closed), `nozzle` (convergent-divergent), `custom` (existing STEP). Parameters: `length_m`, `width_m`, `height_m`, `inlet_radius_m`, `outlet_radius_m`, `mesh_cells`, `case_name`, `step_file`. Output: STEP file + `constant/polyMesh/blockMeshDict`. |
+| `cfd_configure_physics` | MUTATING | Generate OpenFOAM physics dictionaries: `controlDict`, `fvSchemes`, `fvSolution`, `transportProperties`, `turbulenceProperties`. Parameters: `solver` (simpleFoam/pisoFoam/pimpleFoam), `flow_type` (laminar/kEpsilon/kOmegaSST), `fluid_nu` (kinematic viscosity, m^2/s), `fluid_density` (kg/m^3), `inlet_velocity` (m/s), `end_time`, `delta_t`, `write_interval`. |
+| `cfd_set_boundary` | MUTATING | Configure per-patch field boundary conditions (U, p, k, omega, nut, alphat). `bc_type`: fixedValue, zeroGradient, inletOutlet, noSlip, etc. `value` format: `"uniform (1 0 0)"` for velocity, `"uniform 0"` for pressure. Call per (patch, field) combination. |
+| `cfd_build_case` | READ_ONLY | Validate that all required OpenFOAM files exist (blockMeshDict, controlDict, fvSchemes, fvSolution, transportProperties, boundary fields). Reports missing files. |
+| `cfd_run_solver` | MUTATING | Execute OpenFOAM solver steps inside Docker container. Steps (comma-separated): `blockMesh`, `checkMesh`, `simpleFoam`/`pisoFoam`/`pimpleFoam`, `reconstructPar`, `postProcess`. Supports parallel execution (`parallel=True`, `n_cores=N`). |
+| `cfd_read_results` | READ_ONLY | Parse simulation results: time directories, force coefficients (lift/drag), residuals, convergence status. Returns `times`, `forces`, `residuals`, `converged`. |
+| `cfd_parametric_study` | MUTATING | Parameter sweep varying one design parameter across multiple cases. Each case inherits base config. Parameters: `inlet_velocity`, `length`, `width`, `height`, `fluid_nu`, `angle`. If `run=True`, executes each case sequentially. Useful for design optimization and ML training data generation. |
+| `cfd_nl2foam` | MUTATING | Convert natural language fluid dynamics description → OpenFOAM case via LLM. Uses configured Ollama or OpenAI-compatible endpoint. The LLM outputs structured JSON validated against OpenFOAM conventions. Example: "Laminar pipe flow, Re=500, D=0.1m, L=1m, inlet velocity 0.005 m/s". |
+| `cfd_sample_for_pinns` | MUTATING | Export coordinate point clouds from CFD domain geometry for PINN/GNN training (NVIDIA Modulus, PyTorch Geometric, DeepXDE). Output: CSV/JSON/NPZ with columns x, y, z, region (boundary/interior). |
+
+### FluidX3D GPU CFD (8 tools)
+
+All tools in `src/freecad_mcp/tools/fluidx3d.py`. Requires: `git clone https://github.com/ProjectPhysX/FluidX3D.git` + C++ compiler (g++ or MSVC). Runs on any GPU via OpenCL.
+
+| Tool | Annotation | Description |
+|------|-----------|-------------|
+| `cfd_fluidx3d_status` | READ_ONLY | Check FluidX3D source path, compiler availability, GPU devices (via OpenCL `clinfo`), and pipeline readiness. Call this first. |
+| `cfd_fluidx3d_prebuilt` | READ_ONLY | Detect pre-built FluidX3D binary from `FLUIDX3D_BINARY` env var, `fluidx3d_cases/bin/`, or the source tree's `bin/` directory. Skips compilation if found. |
+| `cfd_fluidx3d_setup` | MUTATING | Generate C++ `setup.cpp` + `defines.hpp` for GPU simulation. Domain types: `channel`, `pipe`, `box`, `stl` (custom STL geometry). Parameters: `resolution_x/y/z` (grid cells), `length_m`, `velocity_ms`, `viscosity_m2s`, `density_kgm3`, `time_steps`, `write_interval`. Advanced features: `profile_shape` (uniform/parabolic/blasius), `free_surface` (liquid-gas LBM), `thermal` (Boussinesq buoyancy), `mode_2d`, `non_newtonian` (power-law), `symmetry_axis`, `stl_configs_json` (multi-object), `outlet_type` (fixed_rho/neumann). STL auto-discovered from multiple sources. |
+| `cfd_fluidx3d_compile` | MUTATING | Compile `setup.cpp` into GPU executable. Copies into FluidX3D source tree, runs g++ (Linux/Mac/WSL) or MSVC (Windows). Returns binary path and compile time. |
+| `cfd_fluidx3d_run` | MUTATING | Execute compiled FluidX3D binary on GPU via OpenCL. Parameters: `gpu_device` (index 0=auto, or device name substring for multi-GPU), `timeout_s` (max 3600). VTK output written to `bin/export/` for ParaView. Captures stdout for force/residual parsing. |
+| `cfd_fluidx3d_results` | READ_ONLY | Parse simulation results: per-object forces, final forces (Fx/Fy/Fz), throughput (MLUPS), time steps completed, completion status. |
+| `cfd_fluidx3d_explain` | READ_ONLY | Explain flow physics: Reynolds number, flow regime (creeping/laminar/transitional/turbulent), expected behaviour, solver notes. Reads stored config. |
+| `cfd_fluidx3d_export_for_render` | MUTATING | Export FluidX3D VTK velocity field → OBJ streamlines (polylines) + optional CSV velocity point cloud. Bridges CFD to 3D rendering (Unity3D, Resonite, Blender) for game engine flow visualisation and vbot path-following. |
+
+### FEM / Structural Analysis (8 tools)
+
+All tools in `src/freecad_mcp/tools/fem.py`. Uses FreeCAD FEM workbench + CalculiX ccx solver (bundled with FreeCAD on Windows).
+
+| Tool | Annotation | Description |
+|------|-----------|-------------|
+| `fem_status` | READ_ONLY | Check FEM workbench and CalculiX solver availability. |
+| `fem_create_analysis` | MUTATING | Create structural analysis container on a 3D model (STEP/FCStd). Sets up `FemAnalysis` + `FemSolverCalculixCxxtools` with working directory. |
+| `fem_set_material` | MUTATING | Assign material properties. 10 built-in presets: steel, stainless, aluminum, titanium, concrete, wood, brass, copper, nylon, carbon_fiber. Full property overrides: `E_mpa`, `nu`, `density_kgm3`, `yield_mpa`. |
+| `fem_set_constraint` | MUTATING | Apply boundary conditions to named faces. Constraint types: `fixed` (clamped), `force` (fx/fy/fz in N), `pressure` (value in MPa). Face names follow FreeCAD convention (Face1, Face2...). Auto-linked to analysis container. |
+| `fem_mesh` | MUTATING | Generate finite element mesh via Gmsh. Parameters: `max_size_mm`, `min_size_mm`, `second_order` (tetra10 recommended for bending). Returns node/element counts. |
+| `fem_run` | MUTATING | Write `.inp` file and execute CalculiX ccx solver. Parameters: `timeout_s` (default 300, max 3600). Generates `.frd` and `.dat` files. |
+| `fem_read_results` | READ_ONLY | Parse `.frd` and `.dat` result files: max von Mises stress (MPa), max displacement (mm), max/min principal stresses, node count, available result components. |
+| `run_fem_analysis` | MUTATING | End-to-end FEM convenience tool. Chains: create analysis → set material → apply constraints → mesh → solve → read results. Returns safety factor against yield strength, mesh stats, and complete stress/displacement data. Shorthand: `force_N` applies fixed constraint on Face1 and downward force on Face6. |
+
+### 3D Printing (2 tools)
+
+| Tool | Annotation | Description |
+|------|-----------|-------------|
+| `slicer_status` | READ_ONLY | Check PrusaSlicer availability and version. Requires `PRUSA_SLICER_PATH` env var or default portable path. |
+| `slice_stl` | MUTATING | Slice STL file → G-code for 3D printing. Parameters: `printer_profile`, `filament_profile`, `quality` (layer height preset). Output downloadable via `GET /api/v1/download/{output_name}`. |
+
+### Marketplace (4 tools)
+
+Search and import CAD models from Printables, Thingiverse, and GrabCAD.
+
+| Tool | Annotation | Description |
+|------|-----------|-------------|
+| `marketplace_search` | READ_ONLY | Search model marketplace. Sources: `printables`, `thingiverse`, `grabcad`. Parameters: `query`, `category` (use `marketplace_categories` to list), `page`. Returns results with title, author, thumbnail, download/like counts, model URL. |
+| `marketplace_download` | MUTATING | Download marketplace model to uploads directory. Parameters: `source`, `model_id`, `file_url`, `filename`. Thingiverse ZIPs auto-extract STL/STEP files. |
+| `marketplace_categories` | READ_ONLY | List available categories for a marketplace source (15-17 per source). Returns `{id, label}` pairs. |
+| `show_marketplace_card` | PREFAB | Rich Prefab UI card showing marketplace search results (up to 6 with thumbnails). |
+
+### Sampling
+
+| Tool | Description |
+|------|-------------|
+| `_sampling_tool` | Use host LLM (via MCP sampling) to reason about a CAD, FEM, CFD, or BIM problem. Returns structured plan or explanation. Falls back gracefully if sampling unavailable. |
+
+## Example Workflows
+
+**STEP to print pipeline:**
+```
+step_to_stl(file_name="bracket.step", output_name="bracket.stl")
+slicer_status()
+slice_stl(file_name="bracket.stl", printer_profile="Prusa MK4")
+```
+
+**BIM building creation:**
+```
+bim_create_wall(length_mm=6000, width_mm=240, height_mm=3000, output_name="wall1.fcstd")
+bim_create_slab(width_mm=6000, length_mm=8000, thickness_mm=250, output_name="slab.fcstd")
+bim_create_column(profile_type="rectangular", width_mm=300, depth_mm=300, height_mm=3500)
+bim_export_ifc(file_name="building.fcstd", output_name="building.ifc")
+```
+
+**Full CFD pipeline (OpenFOAM):**
+```
+cfd_create_domain(domain_type="channel", length_m=1.0, width_m=0.1, height_m=0.05, case_name="channel_flow")
+cfd_configure_physics(case_name="channel_flow", solver="simpleFoam", flow_type="laminar", fluid_nu=1e-6, inlet_velocity=0.1)
+cfd_set_boundary(case_name="channel_flow", patch_name="inlet", field_name="U", bc_type="fixedValue", value="uniform (0.1 0 0)")
+cfd_set_boundary(case_name="channel_flow", patch_name="outlet", field_name="p", bc_type="fixedValue", value="uniform 0")
+cfd_set_boundary(case_name="channel_flow", patch_name="walls", field_name="U", bc_type="noSlip", value="uniform (0 0 0)")
+cfd_build_case(case_name="channel_flow")
+cfd_run_solver(case_name="channel_flow")
+cfd_read_results(case_name="channel_flow")
+```
+
+**GPU FluidX3D pipeline:**
+```
+cfd_fluidx3d_status()
+cfd_fluidx3d_setup(case_name="pipe_gpu", domain_type="pipe", resolution_x=512, resolution_y=128, resolution_z=128, length_m=2.0, velocity_ms=0.05)
+cfd_fluidx3d_compile(case_name="pipe_gpu")
+cfd_fluidx3d_run(case_name="pipe_gpu")
+cfd_fluidx3d_results(case_name="pipe_gpu")
+cfd_fluidx3d_export_for_render(case_name="pipe_gpu", n_streamlines=20)
+```
+
+**Full FEM analysis:**
+```
+run_fem_analysis(
+    file_name="beam.step",
+    material="steel",
+    constraints=[
+        {"type": "fixed", "face_name": "Face1"},
+        {"type": "force", "face_name": "Face6", "fy": -5000}
+    ],
+    mesh_size_mm=10
+)
+```
+
+**Natural language CFD:**
+```
+cfd_nl2foam(description="Turbulent air flow over NACA 0012 at 10 deg AoA, Re=1e6", case_name="nl_foam")
+```
+
+## Prompts
+
+| Prompt | Description |
+|--------|-------------|
+| `freecad_expert` | Get FreeCAD expertise and tool guidance. |
+| `freecad_convert_step` | Guide for converting STEP files to STL. |
+
+## Resources
+
+| URI | Content |
+|-----|---------|
+| `cad://depot` | List all files in persistent CAD depot. |
+| `cad://depot/{filename}` | Metadata about a specific depot file. |
+
+## Architecture
+
+- **FreeCAD backends**: TCP bridge (FreeCAD.exe GUI + fc_bridge.py) for live modeling, FreeCADCmd subprocess as fallback
+- **CFD solvers**: OpenFOAM 10 via Docker, FluidX3D via OpenCL (GPU)
+- **FEM solver**: CalculiX ccx (bundled with FreeCAD on Windows)
+- **Slicing**: PrusaSlicer 2.8+ (`PRUSA_SLICER_PATH`)
+- **LLM**: Ollama / OpenAI-compatible for nl2foam
+- **Depot**: `%LOCALAPPDATA%\freecad-mcp\depot` (persistent)
+- **Uploads**: temporary directory for file upload
+- **Outputs**: generated files directory
+- **REST**: `http://localhost:10944/api/v1/`
+- **Webapp**: `http://localhost:10945`
+
+## File Pipeline
+
+```
+uploads/ (POST /api/v1/upload) → FreeCAD subprocess/bridge → outputs/ (GET /api/v1/download/{name})
+                                                                    ↘ depot/ (persistent)
+```
+
+## Fleet Integration
+
+- qcad-mcp DXF extrusion → freecad-mcp `mesh_to_solid` → BIM tools
+- freecad-mcp CFD/FluidX3D → VTK → OBJ streamlines → resonite/godot/unity visualisation
+- ML pipeline: parametric sweeps → cfd_sample_for_pinns → NVIDIA Modulus/PyTorch Geometric
+- Marketplace: printables/thingiverse/grabcad search → download → process
+
+## Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `FREECAD_PATH` | Custom FreeCAD installation path |
+| `PRUSA_SLICER_PATH` | Custom PrusaSlicer path |
+| `FLUIDX3D_BINARY` | Pre-built FluidX3D binary path |
+| `MCP_TRANSPORT` | `http` for streamable HTTP transport |
+
+## Troubleshooting
+
+- **FreeCAD not found**: Set `FREECAD_PATH` or check default install location
+- **Bridge not connecting**: FreeCAD GUI may need to be launched first with `freecad_gui()` or `freecad_bridge(operation="ensure_gui")`
+- **Docker not available**: CFD setup still works (generates case files), only solver execution fails
+- **OpenFOAM image missing**: `docker pull openfoam/openfoam10-paraview56`
+- **FluidX3D compilation fails**: Ensure C++ compiler (MSVC or g++) is on PATH and `FLUIDX3D_PATH` is set
+- **PrusaSlicer not found**: Set `PRUSA_SLICER_PATH` to the full executable path

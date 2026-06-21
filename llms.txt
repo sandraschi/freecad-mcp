@@ -1,0 +1,76 @@
+# FreeCAD MCP
+
+> FreeCAD-based CAD operations via FastMCP 3.2 server — STEP/STL conversion, BIM (walls/slabs/columns/doors/windows/roofs), CFD/OpenFOAM fluid simulation, FluidX3D GPU CFD, FEM structural analysis (CalculiX), PrusaSlicer G-code, marketplace search (Printables/Thingiverse/GrabCAD), and persistent CAD file depot with full CRUD.
+
+## Tools (32 total)
+
+### Core CAD
+- `freecad_status` — FreeCAD availability + version
+- `step_to_stl` — STEP/STP assembly to STL mesh
+- `model_info` — Object count, solids, volume, bounding box
+- `create_shape` — Box/cylinder/sphere/cone to STL
+- `freecad_gui` — Launch FreeCAD desktop app
+- `cad_depot` — List persistent CAD depot files with metadata
+- `cad_create` — Create shape and save STL to depot
+
+### BIM / Architecture
+- `bim_create_wall` — Parametric wall (length, height, thickness)
+- `bim_create_slab` — Floor slab
+- `bim_create_column` — Rectangular/circular/H-section column
+- `bim_create_window` — Window in auto-generated wall
+- `bim_create_door` — Door in auto-generated wall
+- `bim_create_roof` — Sloped or flat roof
+- `bim_export_ifc` — FCStd to IFC export
+- `bim_import_ifc` — IFC import to FCStd
+
+### CFD / OpenFOAM (Docker)
+- `cfd_status` — Docker + image availability
+- `cfd_create_domain` — Parametric channel/pipe/nozzle
+- `cfd_configure_physics` — Solver, turbulence, fluid properties
+- `cfd_set_boundary` — Boundary conditions (14 types)
+- `cfd_build_case` — Validate case completeness
+- `cfd_run_solver` — blockMesh + solver via Docker
+- `cfd_read_results` — Forces, residuals, convergence
+- `cfd_parametric_study` — Parameter sweeps for ML datasets
+- `cfd_nl2foam` — Natural language to OpenFOAM case
+- `cfd_sample_for_pinns` — Point cloud export for PINN training
+
+### FluidX3D (GPU CFD)
+- `cfd_fluidx3d_status/prebuilt/setup/compile/run/results/explain`
+
+### FEM / Structural
+- `fem_status/create_analysis/set_material/set_constraint/mesh/run/read_results`
+- `run_fem_analysis` — End-to-end FEM pipeline
+
+### 3D Printing
+- `slicer_status` — PrusaSlicer availability
+- `slice_stl` — STL to G-code
+
+### Marketplace
+- `marketplace_search` — Search Printables, Thingiverse, GrabCAD
+- `marketplace_download` — Download model to depot
+- `marketplace_categories` — List categories per source
+
+## Prompts
+- `freecad_expert` — Get FreeCAD expertise and tool guidance
+- `freecad_convert_step` — Convert a STEP file to STL mesh
+
+## Resources
+- `cad://depot` — List all files in persistent depot
+- `cad://depot/{filename}` — Get info about a depot file
+
+## Architecture
+- Backend: FreeCAD 1.1.1+ (TCP bridge + subprocess fallback)
+- CFD: OpenFOAM via Docker, FluidX3D via OpenCL
+- FEM: CalculiX via Docker
+- Slicing: PrusaSlicer 2.8+
+- Persistent depot: %LOCALAPPDATA%\freecad-mcp\depot
+- REST API: http://localhost:10944/api/v1/
+- Webapp: http://localhost:10945
+- FreeCAD bridge: port 10946 (internal)
+
+## Links
+- Repo: D:\Dev\repos\freecad-mcp
+- FreeCAD: https://www.freecad.org
+- OpenFOAM: https://www.openfoam.com
+- FluidX3D: https://github.com/ProjectPhysX/FluidX3D
