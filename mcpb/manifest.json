@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "freecad-mcp",
   "version": "0.5.0",
-  "description": "FreeCAD MCP server — CAD operations via MCP tools and REST API",
+  "description": "FreeCAD MCP server — 46+ CAD/BIM/CFD/FEM/slicing/marketplace tools via MCP and REST API",
   "author": {
     "name": "sandraschi"
   },
@@ -24,37 +24,57 @@
     }
   },
   "tools": [
-    {
-      "name": "step_to_stl",
-      "description": "step_to_stl"
-    },
-    {
-      "name": "bim_create_wall",
-      "description": "bim_create_wall"
-    },
-    {
-      "name": "freecad_bridge",
-      "description": "freecad_bridge"
-    },
-    {
-      "name": "cfd_create_domain",
-      "description": "cfd_create_domain"
-    },
-    {
-      "name": "cad_create",
-      "description": "cad_create"
-    },
-    {
-      "name": "fem_create_analysis",
-      "description": "fem_create_analysis"
-    },
-    {
-      "name": "cfd_fluidx3d_setup",
-      "description": "cfd_fluidx3d_setup"
-    },
-    {
-      "name": "freecad_model",
-      "description": "freecad_model"
-    }
+    {"name": "freecad_status", "description": "Check FreeCAD executable availability and version"},
+    {"name": "step_to_stl", "description": "Convert STEP/STP assembly to STL mesh"},
+    {"name": "model_info", "description": "Read CAD file metadata (objects, solids, bounding box)"},
+    {"name": "create_shape", "description": "Create geometric primitive and export as STL"},
+    {"name": "slicer_status", "description": "Check PrusaSlicer availability and version"},
+    {"name": "slice_stl", "description": "Slice STL to G-code for 3D printing"},
+    {"name": "freecad_gui", "description": "Launch FreeCAD GUI application"},
+    {"name": "freecad_bridge", "description": "Manage FreeCAD TCP bridge connection"},
+    {"name": "freecad_model", "description": "Portmanteau CAD model operations"},
+    {"name": "cad_sampling", "description": "Use host LLM to reason about CAD/engineering problems"},
+    {"name": "cad_depot", "description": "Manage persistent CAD file depot"},
+    {"name": "cad_create", "description": "Create shape and save directly to depot"},
+    {"name": "bim_status", "description": "Check Arch workbench and IFC module availability"},
+    {"name": "bim_create_wall", "description": "Create parametric architectural wall"},
+    {"name": "bim_create_slab", "description": "Create floor slab as BIM structure element"},
+    {"name": "bim_create_column", "description": "Create structural column with profile type"},
+    {"name": "bim_create_window", "description": "Create window with auto-generated hosting wall"},
+    {"name": "bim_create_door", "description": "Create door with auto-generated hosting wall"},
+    {"name": "bim_create_roof", "description": "Create sloped or flat roof"},
+    {"name": "bim_export_ifc", "description": "Export FCStd document to IFC format"},
+    {"name": "bim_import_ifc", "description": "Import IFC file to FCStd with parametric objects"},
+    {"name": "mesh_to_solid", "description": "Convert STL mesh to solid B-Rep shape"},
+    {"name": "cfd_status", "description": "Check Docker/OpenFOAM availability for CFD pipeline"},
+    {"name": "cfd_create_domain", "description": "Create parametric fluid domain with blockMeshDict"},
+    {"name": "cfd_configure_physics", "description": "Configure solver, turbulence, fluid properties"},
+    {"name": "cfd_set_boundary", "description": "Set boundary conditions for patches and fields"},
+    {"name": "cfd_build_case", "description": "Validate OpenFOAM case completeness"},
+    {"name": "cfd_run_solver", "description": "Execute OpenFOAM solver steps in Docker"},
+    {"name": "cfd_read_results", "description": "Parse simulation forces, residuals, convergence"},
+    {"name": "cfd_parametric_study", "description": "Run parameter sweep across multiple values"},
+    {"name": "cfd_nl2foam", "description": "Convert natural language CFD description to OpenFOAM case"},
+    {"name": "cfd_sample_for_pinns", "description": "Sample point clouds for PINN training data"},
+    {"name": "cfd_fluidx3d_status", "description": "Check FluidX3D clone and compiler availability"},
+    {"name": "cfd_fluidx3d_prebuilt", "description": "Check for pre-compiled FluidX3D runner binary"},
+    {"name": "cfd_fluidx3d_setup", "description": "Generate FluidX3D C++ setup and config.json"},
+    {"name": "cfd_fluidx3d_compile", "description": "Compile FluidX3D setup against source tree"},
+    {"name": "cfd_fluidx3d_run", "description": "Execute FluidX3D simulation on GPU via OpenCL"},
+    {"name": "cfd_fluidx3d_results", "description": "Parse FluidX3D forces, MLUPS, completion status"},
+    {"name": "cfd_fluidx3d_explain", "description": "Explain flow physics from simulation config"},
+    {"name": "cfd_fluidx3d_export_for_render", "description": "Export streamlines for VR visualization"},
+    {"name": "fem_status", "description": "Check FEM workbench and CalculiX solver availability"},
+    {"name": "fem_create_analysis", "description": "Create FEM analysis container from CAD file"},
+    {"name": "fem_set_material", "description": "Assign material preset to FEM analysis parts"},
+    {"name": "fem_set_constraint", "description": "Apply boundary conditions (fixed, force, pressure)"},
+    {"name": "fem_mesh", "description": "Generate finite element mesh for analysis"},
+    {"name": "fem_run", "description": "Run CalculiX solver on prepared FEM analysis"},
+    {"name": "fem_read_results", "description": "Parse FEM solver output (stress, displacement)"},
+    {"name": "run_fem_analysis", "description": "End-to-end FEM analysis convenience tool"},
+    {"name": "marketplace_search", "description": "Search Printables/Thingiverse/GrabCAD for models"},
+    {"name": "marketplace_download", "description": "Download model from marketplace to uploads"},
+    {"name": "marketplace_categories", "description": "List available categories for marketplace source"},
+    {"name": "show_marketplace_card", "description": "Display marketplace results as Prefab card"}
   ]
 }

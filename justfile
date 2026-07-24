@@ -124,9 +124,9 @@ certify: gates-green
 e2e:
     pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
 
-# Build an MCPB portable bundle from tool definitions
+# Build an MCPB portable bundle for Claude Desktop
 mcpb-pack:
-    uvx mcpb build --server freecad_mcp.server:mcp --output freecad-mcp.mcpb
+    npx @anthropic-ai/mcpb pack mcpb dist/freecad-mcp-v{{VER}}.mcpb
 
 # Register this MCP server with a client (stdio)
 install-mcp:
