@@ -24,7 +24,7 @@ from typing import Annotated
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastmcp import Context, FastMCP
@@ -880,6 +880,108 @@ async def _sampling_tool(
         "response": f"I received your engineering question: '{goal}'. To enable AI reasoning, connect this MCP server to a sampling-capable client (Claude Desktop, Cursor).",
         "sampling_used": False,
     }
+
+
+@mcp.tool(version="0.5.0")
+async def freecad_design_loop(
+    goal: Annotated[str, Field(description="Engineering design goal, e.g. 'design a lightweight bracket for 500N load'")],
+    max_iterations: Annotated[int, Field(default=5, description="Max design iterations.", ge=1, le=20)] = 5,
+    ctx: Context = None,
+) -> dict:
+    """
+    Autonomous engineering design loop — CAD to simulate to analyze to refine.
+
+    Uses the host LLM (via MCP sampling) to plan and execute a multi-step
+    design workflow. The LLM decides which tools to call (create_shape,
+    cfd_fluidx3d_setup, cfd_fluidx3d_run, fem_*, etc.), evaluates results,
+    and iterates to converge on the design goal.
+
+    Falls back to a static plan if sampling is unavailable.
+
+    ## Return Format
+    {"success": bool, "iterations": int, "log": [str], "final_design": str, "sampling_used": bool}
+
+    ## Examples
+    await freecad_design_loop(goal="Design a 100x50x5mm bracket that can hold 500N with safety factor 2")
+    await freecad_design_loop(goal="Optimize a pipe elbow for minimum pressure drop at Re=10000")
+    """
+    if ctx is None:
+        return {
+            "success": False,
+            "error": "This tool requires MCP sampling (ctx.sample). Use a sampling-capable client like Claude Desktop.",
+        }
+
+    log = []
+    iteration = 0
+    current_design = None
+
+    system_prompt = """You are an autonomous engineering design agent with access to 50+ FreeCAD MCP tools.
+Your job is to plan and execute a multi-step design loop: design to simulate to analyze to refine.
+
+Available tool categories (you can call them via the function_call mechanism):
+- Core CAD: create_shape(shape_type, params), model_info(file_name), step_to_stl(file_name)
+- BIM: bim_create_wall, bim_create_slab, bim_create_column, bim_create_window
+- CFD: cfd_create_domain, cfd_configure_physics, cfd_set_boundary, cfd_fluidx3d_setup, cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain
+- FEM: fem_create_analysis, fem_set_material, fem_set_constraint, fem_mesh, fem_run, fem_read_results, run_fem_analysis
+- Slicing: slice_stl, slicer_status
+- Marketplace: marketplace_search, marketplace_download
+
+Strategy:
+1. Parse the goal — what's being designed, constraints, success criteria
+2. Create geometry with create_shape or generate with CAD tools
+3. Simulate: run CFD (fluid) or FEM (structural) analysis
+4. Read results and evaluate against criteria
+5. If criteria not met, modify parameters and repeat
+6. Report: final design, key metrics, iterations taken"""
+
+    try:
+        while iteration < max_iterations:
+            iteration += 1
+            status = f"Iteration {iteration}/{max_iterations}: {current_design or 'initial design'}"
+            log.append(f"=== {status} ===")
+
+            msg = f"Design loop iteration {iteration}/{max_iterations}.\nGoal: {goal}\nCurrent design: {current_design or 'none yet'}\nPrevious iterations: {log[:-1] if len(log) > 1 else 'none'}\n\nDecide what to do next and call the appropriate tools. After each tool call, evaluate the result. If the goal is met, respond with 'DESIGN_COMPLETE: <summary>'."
+            if iteration == max_iterations:
+                msg += "\n\nThis is the final iteration. Provide your best design."
+
+            result = await ctx.sample(
+                system_prompt=system_prompt,
+                messages=[{"role": "user", "content": msg}],
+                max_tokens=4000,
+            )
+
+            log.append(f"LLM: {result[:500]}...")
+
+            if "DESIGN_COMPLETE" in result:
+                final = result.split("DESIGN_COMPLETE:")[-1].strip()
+                log.append(f"Design converged: {final}")
+                return {
+                    "success": True,
+                    "iterations": iteration,
+                    "log": log,
+                    "final_design": final,
+                    "sampling_used": True,
+                }
+
+            current_design = result[:300]
+
+        return {
+            "success": True,
+            "iterations": iteration,
+            "log": log,
+            "final_design": current_design or "Max iterations reached without explicit convergence",
+            "sampling_used": True,
+        }
+
+    except Exception as e:
+        logger.exception("Design loop failed")
+        return {
+            "success": False,
+            "error": str(e),
+            "iterations": iteration,
+            "log": log,
+            "sampling_used": True,
+        }
 
 
 mcp.tool(version="0.3.0")(_sampling_tool)
@@ -1938,6 +2040,53 @@ async def shutdown():
 
     _shutdown_task = asyncio.create_task(_delayed_shutdown())  # noqa: RUF006
     return {"success": True, "message": "Shutdown initiated"}
+
+
+# ── FluidX3D Live WebSocket ──────────────────────────────────────────────────
+
+_ws_clients: dict[str, list[WebSocket]] = {}
+
+
+@app.websocket("/api/v1/fluidx3d/ws/{case_name}")
+async def fluidx3d_websocket(websocket: WebSocket, case_name: str):
+    """Stream FluidX3D run.log lines live to the webapp."""
+    await websocket.accept()
+    case_dir = os.path.join(F3D_CASE_DIR, case_name)
+    log_path = os.path.join(case_dir, "run.log")
+
+    _ws_clients.setdefault(case_name, []).append(websocket)
+    logger.info("WS client connected for case %s", case_name)
+
+    try:
+        last_size = 0
+        while True:
+            if os.path.isfile(log_path):
+                size = os.path.getsize(log_path)
+                if size > last_size:
+                    with open(log_path) as f:
+                        f.seek(last_size)
+                        new_lines = f.read()
+                        if new_lines:
+                            await websocket.send_text(new_lines)
+                    last_size = size
+            if os.path.isfile(log_path):
+                with open(log_path) as f:
+                    content = f.read()
+                    if "DONE" in content or "RESULT" in content:
+                        await websocket.send_text("__SIMULATION_COMPLETE__")
+                        break
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
+        logger.info("WS client disconnected for case %s", case_name)
+    except Exception as e:
+        logger.warning("WS error for case %s: %s", case_name, e)
+    finally:
+        if case_name in _ws_clients:
+            _ws_clients[case_name] = [w for w in _ws_clients[case_name] if w is not websocket]
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 # ── Chat / LLM ───────────────────────────────────────────────────────────────

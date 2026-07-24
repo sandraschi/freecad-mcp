@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, BarChart3, Binary, Box, Cpu, FileCode2, Film, Gauge, Info, Loader2, Play, RefreshCw, Rocket, Zap } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Activity, AlertTriangle, BarChart3, Binary, Box, Cpu, FileCode2, Film, Gauge, Info, Loader2, Play, RefreshCw, Rocket, Zap } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import StlViewer from "../components/StlViewer";
 
 const API = "/api/v1";
@@ -24,6 +25,7 @@ const tabs = [
   { id: "setup", label: "Setup", icon: FileCode2 },
   { id: "compile", label: "Compile", icon: Binary },
   { id: "run", label: "Run GPU", icon: Zap },
+  { id: "live", label: "Live", icon: Activity },
   { id: "results", label: "Results", icon: BarChart3 },
   { id: "video", label: "Video", icon: Film },
   { id: "explain", label: "Explain", icon: Info },
@@ -56,8 +58,43 @@ export default function Fluidx3dPage() {
   const [timeoutS, setTimeoutS] = useState(3600);
   const [fps, setFps] = useState(10);
 
+  // Live monitor state
+  const [liveLog, setLiveLog] = useState("");
+  const [liveConnected, setLiveConnected] = useState(false);
+  const [forceHistory, setForceHistory] = useState<Array<{step: number; Fx: number; Fy: number; Fz: number}>>([]);
+  const [mlups, setMlups] = useState(0);
+  const [stepsCompleted, setStepsCompleted] = useState(0);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const connectWS = useCallback(() => {
+    if (wsRef.current) { wsRef.current.close(); }
+    const ws = new WebSocket(`ws://127.0.0.1:10944/api/v1/fluidx3d/ws/${encodeURIComponent(caseName)}`);
+    ws.onopen = () => setLiveConnected(true);
+    ws.onmessage = (e) => {
+      const text = e.data;
+      if (text === "__SIMULATION_COMPLETE__") { setLiveConnected(false); return; }
+      setLiveLog((prev) => (prev + text).slice(-50000));
+      const lines = text.split("\n");
+      for (const line of lines) {
+        const m = line.match(/STEP\s+(\d+)\s+F\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/);
+        if (m) {
+          setForceHistory((prev) => [...prev.slice(-500), { step: parseInt(m[1]), Fx: parseFloat(m[2]), Fy: parseFloat(m[3]), Fz: parseFloat(m[4]) }]);
+        }
+        const d = line.match(/DONE\s+steps:(\d+)\s+time:[\d.]+\s+mlups:([\d.]+)/);
+        if (d) {
+          setStepsCompleted(parseInt(d[1]));
+          setMlups(parseFloat(d[2]));
+        }
+      }
+    };
+    ws.onclose = () => setLiveConnected(false);
+    ws.onerror = () => setLiveConnected(false);
+    wsRef.current = ws;
+  }, [caseName]);
+
   useEffect(() => {
     fetchStatus();
+    return () => { if (wsRef.current) wsRef.current.close(); };
   }, []);
 
   const fetchStatus = async () => {
@@ -367,6 +404,62 @@ export default function Fluidx3dPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Live Monitor */}
+        {activeTab === "live" && (
+          <div className="space-y-4 max-w-4xl">
+            <h2 className="text-lg font-bold text-slate-200">Live Monitor</h2>
+            <div className="flex items-end gap-3">
+              {field("Case Name", input(caseName, (v) => setCaseName(v)))}
+              {field("GPU Device", input(gpuDevice, (v) => setGpuDevice(Number(v)), { min: 0 }))}
+              {field("Timeout (s)", input(timeoutS, (v) => setTimeoutS(Number(v)), { min: 10, step: 60 }))}
+            </div>
+            <div className="flex gap-2">
+              {btn("Start & Connect", async () => {
+                callTool("cfd_fluidx3d_run", { case_name: caseName, gpu_device: Number(gpuDevice), timeout_s: Number(timeoutS) });
+                connectWS();
+              }, <Play size={14} />)}
+              {btn("Connect Only", connectWS, <RefreshCw size={14} />)}
+            </div>
+            {liveConnected && <span className="text-xs text-emerald-400">Connected</span>}
+            <div className="grid grid-cols-2 gap-4">
+              {forceHistory.length > 0 && (
+                <div className="bg-white/5 rounded-xl p-4 border border-white/10" style={{ height: 250 }}>
+                  <p className="text-xs text-slate-500 mb-2">Force History</p>
+                  <ResponsiveContainer width="100%" height="85%">
+                    <LineChart data={forceHistory.map((f: {step: number; Fx: number; Fy: number; Fz: number}, i: number) => ({...f, idx: i}))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+                      <XAxis dataKey="step" stroke="#ffffff40" tick={{fontSize: 10}} />
+                      <YAxis stroke="#ffffff40" tick={{fontSize: 10}} />
+                      <Tooltip contentStyle={{backgroundColor: '#1e1e2e', border: '1px solid #ffffff20', borderRadius: 8, fontSize: 12}} />
+                      <Line type="monotone" dataKey="Fx" stroke="#10b981" dot={false} name="Fx" />
+                      <Line type="monotone" dataKey="Fy" stroke="#f59e0b" dot={false} name="Fy" />
+                      <Line type="monotone" dataKey="Fz" stroke="#6366f1" dot={false} name="Fz" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              <div className="space-y-2">
+                {mlups > 0 && (
+                  <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-center">
+                    <p className="text-xs text-slate-500">MLUPS</p>
+                    <p className="text-2xl font-bold text-emerald-400">{mlups.toFixed(1)}</p>
+                  </div>
+                )}
+                {stepsCompleted > 0 && (
+                  <div className="p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20 text-center">
+                    <p className="text-xs text-slate-500">Steps</p>
+                    <p className="text-2xl font-bold text-indigo-400">{stepsCompleted.toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="bg-black/40 rounded-xl p-4 border border-white/5">
+              <p className="text-xs text-slate-500 mb-2">Simulation Log</p>
+              <pre className="text-xs font-mono text-slate-400 max-h-60 overflow-y-auto whitespace-pre-wrap">{liveLog}</pre>
+            </div>
           </div>
         )}
 
