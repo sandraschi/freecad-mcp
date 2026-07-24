@@ -16,6 +16,28 @@
 
 ---
 
+## 0. Why OpenFOAM Doesn't Use the GPU
+
+This comes up constantly. OpenFOAM doesn't ignore the GPU out of neglect — it's a fundamental algorithmic mismatch:
+
+**OpenFOAM uses the Finite Volume Method on unstructured meshes** (arbitrary polyhedral cells, tetrahedra, hexahedra, prisms). Every cell has a different number of neighbours, different face orientations, and different connectivity patterns. Computing fluxes across these faces requires indirect memory addressing — for each face, look up the left and right cell indices, then gather/scatter from those arbitrary memory locations.
+
+GPU architectures (SIMT — Single Instruction Multiple Threads) are designed for **regular, predictable memory access**: the same operation on a contiguous array of data (matrix multiply, image convolution, LBM stencil). Unstructured FVM causes:
+- **Warp divergence**: adjacent threads need different instructions for different cell types
+- **Uncoalesced memory**: scattered reads instead of contiguous blocks
+- **Atomic contention**: multiple threads writing to the same cell from different faces
+
+**The linear solver step** (solving Au = b) is the one part that can be GPU-accelerated, because it's a well-studied sparse linear algebra problem. OpenFOAM v2312+ ships `module-amgx` wrapping NVIDIA AmgX for exactly this. But that's only ~30-40% of the total solve time — the flux assembly, gradient computation, and limiters remain on CPU.
+
+**LBM (FluidX3D) maps to GPU naturally** because it's a regular stencil on a Cartesian grid — every cell applies the same collision-and-stream pattern to its 18 neighbours (D3Q19). This is a textbook GPU workload: regular memory access, no branching per cell, trivially parallel. That's why FluidX3D achieves full GPU utilisation while OpenFOAM cannot for general unstructured meshes.
+
+**Bottom line**: If you want GPU CFD with complex geometry, the path is not "GPU OpenFOAM" — it's either:
+1. **FluidX3D** (LBM, Cartesian grids, auto-voxelizes STL) — best for this server
+2. **Lethe** (FEM on GPU, supports complex geometry via deal.II, CUDA)
+3. **Custom OpenFOAM + module-amgx image** (DIY build, partial GPU benefit)
+
+---
+
 ## 1. GPU-Native CFD Solvers (Free, Production-Ready)
 
 ### FluidX3D — The Gold Standard
@@ -52,7 +74,7 @@ lbm.run(100000u);  // 100k time steps on GPU
 | **Lethe** | FEM Navier-Stokes | CUDA (NVIDIA) | Production | Incompressible flow, validated against OpenFOAM |
 | **GPUSPH** | Smoothed Particle Hydrodynamics | CUDA | Production | Free surface, multiphase, sloshing |
 | **HiFiLES** | High-order FVM (compressible) | CUDA | Active research | Supersonic, shock waves |
-| **RapidCFD** | FVM (OpenFOAM fork) | CUDA | Experimental | If you MUST have OpenFOAM-compatible output |
+| **RapidCFD** | FVM (OpenFOAM 4.0 fork) | CUDA | **Dead** (repo 404) | Based on 2016 OF. No successor. Not viable. |
 | **PyFR** | Flux Reconstruction | CUDA/Metal | Production | High-order, GPU-accelerated, compressible |
 
 ---

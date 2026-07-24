@@ -483,20 +483,24 @@ function CfdHelp() {
 function OpenfoamHelp() {
   return (
     <>
-      <p><strong className="text-slate-200">OpenFOAM</strong> is the industry-standard CPU CFD toolkit (finite-volume, MPI-parallel). It runs inside Docker — <strong className="text-slate-300">your GPU is not used during OpenFOAM solves</strong>. For GPU-native CFD, use <a href="https://github.com/ProjectPhysX/FluidX3D" target="_blank" className="text-indigo-400 hover:underline">FluidX3D</a> (OpenCL, any GPU).</p>
+      <p><strong className="text-slate-200">OpenFOAM</strong> is the industry-standard CPU CFD toolkit (finite-volume, MPI-parallel). It runs inside Docker — <strong className="text-slate-300">your GPU is not used during OpenFOAM solves</strong>.</p>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Why No GPU in OpenFOAM?</h3>
+      <p className="text-xs text-slate-400">OpenFOAM uses the Finite Volume Method on <strong className="text-slate-300">unstructured meshes</strong> (arbitrary polyhedral cells). This requires irregular memory access patterns and indirect addressing — which maps poorly to GPU SIMT architecture (warp divergence, uncoalesced memory). GPU accelerations exist for the <strong className="text-slate-300">linear solver</strong> step (module-amgx for NVIDIA AmgX, shipped with OpenFOAM v2312+) but the full FVM assembly remains CPU-bound. No production-grade GPU Docker image exists; building one requires <code className="text-indigo-400">-Damgx=on</code> compilation and <code className="text-indigo-400">nvidia-container-toolkit</code> on the host.</p>
+      <p className="text-xs text-slate-500 mt-1">Previous GPU forks (RapidCFD, ExaFOAM) are based on OpenFOAM 4.x (2016) and unmaintained. The lattice-Boltzmann method used by FluidX3D maps naturally to GPU architecture — that's why it achieves full GPU utilisation while OpenFOAM cannot for general unstructured meshes.</p>
 
       <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">GPU: Real Options (2026)</h3>
       <div className="space-y-2">
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
-          <p className="text-emerald-400 font-bold text-sm">FluidX3D</p>
-          <p className="text-xs text-slate-400 mt-1">OpenCL — all GPUs (NVIDIA, AMD, Intel Arc, Apple Silicon). FP16 memory: 770³ cells on 24GB 4090 (~456M cells). Free surfaces, moving boundaries, thermal convection, STL import, interactive 3D viz, video export.</p>
+          <p className="text-emerald-400 font-bold text-sm">FluidX3D <span className="text-xs font-normal text-slate-500">— Best GPU CFD for this server</span></p>
+          <p className="text-xs text-slate-400 mt-1">Native LBM on GPU via OpenCL — NVIDIA, AMD, Intel Arc, Apple Silicon. Auto-installs, auto-clones. Cartesian grids (voxelizes STL). Free surfaces, thermal, STL import, interactive 3D viz, automatic WebM video + OBJ streamline output. This is what you should use for fast GPU CFD.</p>
         </div>
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
-          <p className="text-emerald-400 font-bold text-sm">Lethe</p>
-          <p className="text-xs text-slate-400 mt-1">CUDA-accelerated FEM Navier-Stokes solver. Validated against OpenFOAM benchmarks. Supports incompressible flow with complex geometry.</p>
+        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4">
+          <p className="text-indigo-400 font-bold text-sm">OpenFOAM v2312+ module-amgx <span className="text-xs font-normal text-slate-500">— DIY GPU linear solver</span></p>
+          <p className="text-xs text-slate-400 mt-1">GPU acceleration for the linear solver step only (not the full FVM assembly). Requires building a custom Docker image from <code className="text-indigo-400">nvidia/cuda:12.x-devel</code> with OpenFOAM v2312 compiled with <code className="text-indigo-400">-Damgx=on</code>. Then <code className="text-indigo-400">cfd_run_solver</code> needs <code className="text-indigo-400">--gpus all</code> flag. 2-3x speedup on large cases for the linear solver portion. Not pre-built — you build it yourself.</p>
         </div>
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-          <p className="text-amber-400 font-bold text-sm">Standard OpenFOAM</p>
+          <p className="text-amber-400 font-bold text-sm">Standard OpenFOAM (current)</p>
           <p className="text-xs text-slate-400 mt-1">CPU-only MPI. The <code className="text-indigo-400">openfoam/openfoam10-paraview56</code> image does NOT use GPU. RTX 4090 is idle during cfd_run_solver.</p>
         </div>
       </div>
