@@ -2,6 +2,38 @@
 
 All notable changes to the FreeCAD MCP server and webapp.
 
+## [0.5.1] — 2026-07-24
+
+### Security
+- **CRITICAL**: `build.ps1` and `tauri.conf.json` no longer bundle `.env` (personal API keys). Now bundle `.env.example` only.
+- **CRITICAL**: Created `.env.example` at repo root with template variables.
+
+### Added
+- **FluidX3D auto-clone**: `_ensure_fluidx3d()` auto-clones to `%TEMP%/fluidx3d` on first tool call. No manual `git clone` needed.
+- **Video render pipeline**: `cfd_fluidx3d_render` produces WebM heatmap video from VTK velocity fields. `utils/vtk_renderer.py` — lightweight VTK structured-points parser, PNG heatmap renderer, ffmpeg video stitcher.
+- **ffmpeg auto-install**: `_ensure_ffmpeg()` auto-installs via `winget install ffmpeg` on Windows. Pillow auto-installed via `uv pip install Pillow`.
+- **FluidX3D Video tab**: New 7th tab in FluidX3D webapp page with HTML5 player.
+- **Visualization docs**: Rewrote `docs/flow-visualization.md` with glossary, game engine pipeline (Unity3D/Godot/Blender/Resonite), format comparison table.
+- **Help Visualization tab**: New 12th tab in webapp Help page with format table and game engine pipeline grid.
+- **CORS**: Unconditional `allow_origin_regex` with Tailscale/LAN/CGNAT coverage.
+- **Session injection**: `.claude-plugin/`, `.cursorrules`, `.windsurfrules`, `.github/copilot-instructions.md`, `.opencode/skills/` for Claude Code, Cursor, Windsurf, Copilot, OpenCode.
+- **REST endpoints**: `POST /api/v1/shutdown`, `GET /api/v1/diagnostics`, `GET /api/v1/capabilities`, `GET /api/skills`, `GET /api/skills/{name}`.
+- **Skills directory**: `src/freecad_mcp/skills/freecad-expert/SKILL.md` with full tool surface documentation.
+- **Error helper**: `_error_response()` with `logger.exception()` auto-logging.
+
+### Fixed
+- Bare `except: pass` in `server.py` → `logger.debug(exc_info=True)` (4 instances).
+- `backend.rs free_port()` — multi-layer kill (Stop-Process, taskkill, UAC, 240s poll).
+- Pre-existing 60+ TypeScript errors in webapp fixed.
+- MCPB manifest now lists all 53 tools (was 8 stubs), proper `src/freecad_mcp/` package structure.
+
+### Documentation
+- README: OpenFOAM vs FluidX3D decision guide, ParaView optional install.
+- Help page: OpenFOAM vs FluidX3D comparison, ParaView section, "Why no GPU OpenFOAM" explanation.
+- `docs/openfoam.md`: New §0 explaining why unstructured FVM doesn't map to GPU SIMT.
+- `docs/cfd-guide.md`: Comparison table at top.
+- `justfile`: Added `gates-green`, `certify`, `install-paraview`, fixed `mcpb-pack` recipe.
+
 ## [Unreleased] — 2026-06-20
 
 ### Added
