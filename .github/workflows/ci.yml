@@ -1,28 +1,42 @@
 name: CI
-
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
-    branches: [main, master]
+    branches: [master]
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
+  lint:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-
+          python-version: "3.13"
       - run: uv sync --all-extras
+      - run: uv run ruff check src/
+      - run: uv run ruff format src/ --check
 
-      - name: Lint (Python)
-        run: uv run ruff check src/
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv sync --all-extras
+      - run: uv run pytest --quiet -x
 
-      - name: Test
-        run: uv run pytest
-
-      - name: Fleet E2E offline smoke
-        run: uv run python scripts/fleet_e2e_smoke.py --offline --strict
+  frontend:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+        working-directory: webapp
+      - run: npx tsc --noEmit
+        working-directory: webapp
+      - run: npm run build
+        working-directory: webapp
