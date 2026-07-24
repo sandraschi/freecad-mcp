@@ -36,6 +36,8 @@ _FLUIDX3D_DEFAULT_PATHS = [
     os.path.expanduser("~/FluidX3D"),
     os.path.expanduser("~/fluidx3d"),
     "/opt/FluidX3D",
+    os.path.join(os.environ.get("TEMP", ""), "fluidx3d"),
+    os.path.join(os.environ.get("FLUIDX3D_CACHE_DIR", ""), "fluidx3d") if os.environ.get("FLUIDX3D_CACHE_DIR") else "",
 ]
 
 
@@ -48,6 +50,45 @@ def _find_fluidx3d() -> str | None:
         if os.path.isdir(p) and os.path.isdir(os.path.join(p, "src")):
             return p
     return None
+
+
+def _ensure_fluidx3d(auto_clone: bool = True) -> str | None:
+    """Find FluidX3D installation; auto-clone to %TEMP% if missing.
+
+    Returns path to FluidX3D clone, or None if unavailable.
+    When auto_clone=True, clones the repo and prints the clone URL.
+    """
+    existing = _find_fluidx3d()
+    if existing:
+        return existing
+
+    if not auto_clone:
+        return None
+
+    # Auto-clone to temporary location (survives server restarts)
+    clone_dir = os.path.join(
+        os.environ.get("FLUIDX3D_CACHE_DIR") or os.environ.get("TEMP", ""),
+        "fluidx3d",
+    )
+    if os.path.isdir(clone_dir) and os.path.isdir(os.path.join(clone_dir, "src")):
+        return clone_dir
+
+    # Not found anywhere — clone
+    repo_url = "https://github.com/ProjectPhysX/FluidX3D.git"
+    try:
+        logger.info("FluidX3D not found — cloning from %s to %s ...", repo_url, clone_dir)
+        r = subprocess.run(  # noqa: S603
+            ["git", "clone", "--depth", "1", repo_url, clone_dir],  # noqa: S607
+            capture_output=True, text=True, timeout=120,
+        )
+        if r.returncode != 0:
+            logger.warning("Clone failed: %s", r.stderr[:500])
+            return None
+        logger.info("FluidX3D cloned to %s", clone_dir)
+        return clone_dir if os.path.isdir(os.path.join(clone_dir, "src")) else None
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.warning("Could not clone FluidX3D: %s", e)
+        return None
 
 
 def _find_vs_vcvars64() -> str | None:
@@ -751,7 +792,7 @@ def register_fluidx3d_tools(
         ## Examples
         await cfd_fluidx3d_status()
         """
-        f3d_path = _find_fluidx3d()
+        f3d_path = _ensure_fluidx3d(auto_clone=True)
         compiler = _find_compiler()
         gpu_devices = _query_gpu_devices()
         ready = f3d_path is not None and compiler is not None
@@ -1911,9 +1952,93 @@ def register_fluidx3d_tools(
             logger.exception("Export for render failed")
             return {"success": False, "error": f"Export failed: {e}"}
 
+    # ── cfd_fluidx3d_render ─────────────────────────────────────────────
+
+    @mcp.tool(annotations=_README_ONLY)
+    async def cfd_fluidx3d_render(
+        case_name: Annotated[str, Field(description="Case directory name.")],
+        fps: Annotated[int, Field(default=10, description="Video frames per second.")] = 10,
+        quality: Annotated[
+            int, Field(default=23, description="Video CRF quality 0-51 (lower=better).", ge=0, le=51)
+        ] = 23,
+    ) -> dict:
+        """Render FluidX3D simulation results as a WebM video.
+
+        Reads VTK velocity field files from the case directory, renders
+        each time step as a velocity-magnitude heatmap (XY slice at mid-Z),
+        and stitches them into a WebM video via ffmpeg.
+
+        Requires: Pillow (PIL) for PNG rendering, ffmpeg for video encoding.
+        If ffmpeg is not available, falls back to PNG frames only.
+
+        ## Return Format
+        {"success": bool, "video_path": str|null, "frame_count": int, "duration_s": float}
+
+        ## Examples
+        await cfd_fluidx3d_render(case_name="pipe_gpu")
+        """
+        from freecad_mcp.utils.vtk_renderer import HAS_PIL, parse_vtk_structured_points, render_video
+
+        if not HAS_PIL:
+            return {"success": False, "error": "Pillow not installed — run 'uv sync --extra rag' or 'pip install Pillow'"}
+
+        case_dir = os.path.join(F3D_CASE_DIR, case_name)
+        if not os.path.isdir(case_dir):
+            return {"success": False, "error": f"Case '{case_name}' not found."}
+
+        # Collect VTK files sorted by step number
+        vtk_files = sorted(
+            [
+                os.path.join(case_dir, f)
+                for f in os.listdir(case_dir)
+                if f.endswith(".vtk") and (f.startswith("u_") or f.startswith("velocity_"))
+            ]
+        )
+        f3d_path = _find_fluidx3d()
+        if f3d_path:
+            export_dir = os.path.join(f3d_path, "bin", "export")
+            if os.path.isdir(export_dir):
+                for fn in sorted(os.listdir(export_dir)):
+                    if fn.endswith(".vtk") and (fn.startswith("u_") or fn.startswith("velocity_")):
+                        vtk_files.append(os.path.join(export_dir, fn))
+
+        if not vtk_files:
+            return {
+                "success": False,
+                "error": f"No VTK velocity files found for '{case_name}'. Run cfd_fluidx3d_run first.",
+            }
+
+        video_path = os.path.join(case_dir, f"{case_name}_simulation.webm")
+
+        result = render_video(case_dir, vtk_files, video_path, fps=fps, quality=quality)
+
+        if not result.get("success"):
+            # Fallback: render single frame
+            try:
+                data = parse_vtk_structured_points(vtk_files[-1])
+                png_path = os.path.join(case_dir, f"{case_name}_result.png")
+                from freecad_mcp.utils.vtk_renderer import render_slice_png
+                render_slice_png(data, data["dims"][2] // 2, png_path)
+                result = {"success": True, "video_path": None, "png_path": png_path, "frame_count": 1}
+            except Exception as e2:
+                return {"success": False, "error": f"Render failed: {result.get('error')}. PNG fallback: {e2}"}
+
+        return {
+            "success": True,
+            "case_name": case_name,
+            "data": {
+                "video_path": result.get("output_path") or result.get("video_path"),
+                "png_path": result.get("png_path"),
+                "frame_count": result.get("frame_count", 0),
+                "duration_s": result.get("duration_s", 0),
+                "vtk_files": len(vtk_files),
+                "fps": fps,
+            },
+        }
+
     logger.info(
         "FluidX3D tools registered: cfd_fluidx3d_status, cfd_fluidx3d_prebuilt, cfd_fluidx3d_setup, cfd_fluidx3d_compile, "
-        "cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain, cfd_fluidx3d_export_for_render"
+        "cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain, cfd_fluidx3d_export_for_render, cfd_fluidx3d_render"
     )
 
     return {
@@ -1925,4 +2050,5 @@ def register_fluidx3d_tools(
         "cfd_fluidx3d_results": cfd_fluidx3d_results,
         "cfd_fluidx3d_explain": cfd_fluidx3d_explain,
         "cfd_fluidx3d_export_for_render": cfd_fluidx3d_export_for_render,
+        "cfd_fluidx3d_render": cfd_fluidx3d_render,
     }

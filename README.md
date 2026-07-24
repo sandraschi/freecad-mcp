@@ -73,6 +73,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | **[MCP Tools](docs/mcp-tools.md)** | All 46 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
 | **[Fleet CFD pipeline](docs/fleet-pipeline.md)** | qcad DXF → freecad OpenFOAM/FluidX3D → resonite/godot/robotics handoff |
 | **[Fluid simulation guide](docs/cfd-guide.md)** | Full walkthrough: creating domains, configuring physics, setting boundary conditions, running solvers, reading results, parametric sweeps, natural language config, and exporting data for neural network training |
+| **[Flow visualization & render guide](docs/flow-visualization.md)** | What FluidX3D produces (VTK, OBJ, WebM, PNG, CSV). How to turn it into video, game engine assets, or VR visuals. Glossary of terms (VTK, OBJ, streamlines, LBM, MLUPS, heatmaps). Integration with Unity3D, Godot, Blender, Resonite. |
 | **[OpenFOAM & GPU solvers](docs/openfoam.md)** | Solver reference, turbulence model guide, GPU acceleration options (FluidX3D on RTX 4090 and Apple Silicon), Mac vs PC comparison |
 | **[AI Tooling](docs/ai-tooling.md)** | Ollama chat, agentic CAD reasoning, sampling workflows |
 | **[About FreeCAD](docs/about-freecad.md)** | History, community, Python scripting, 300+ workbenches, vs SolidWorks/Fusion |

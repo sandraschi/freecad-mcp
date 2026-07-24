@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, BarChart3, Binary, Box, Cpu, FileCode2, Gauge, Info, Loader2, Play, RefreshCw, Rocket, Zap } from "lucide-react";
+import { AlertTriangle, BarChart3, Binary, Box, Cpu, FileCode2, Film, Gauge, Info, Loader2, Play, RefreshCw, Rocket, Zap } from "lucide-react";
 import StlViewer from "../components/StlViewer";
 
 const API = "/api/v1";
@@ -25,6 +25,7 @@ const tabs = [
   { id: "compile", label: "Compile", icon: Binary },
   { id: "run", label: "Run GPU", icon: Zap },
   { id: "results", label: "Results", icon: BarChart3 },
+  { id: "video", label: "Video", icon: Film },
   { id: "explain", label: "Explain", icon: Info },
 ] as const;
 
@@ -53,6 +54,7 @@ export default function Fluidx3dPage() {
   const [openclLib, setOpenclLib] = useState("");
   const [gpuDevice, setGpuDevice] = useState(0);
   const [timeoutS, setTimeoutS] = useState(3600);
+  const [fps, setFps] = useState(10);
 
   useEffect(() => {
     fetchStatus();
@@ -223,19 +225,19 @@ export default function Fluidx3dPage() {
             <div className="grid grid-cols-2 gap-3">
               {field("Case Name", input(caseName, setCaseName))}
               {field("Domain Type", select(domainType, setDomainType, ["channel", "pipe", "box", "stl"]))}
-              {field("Resolution X", input(resX, setResX, { min: 16, step: 64 }))}
-              {field("Resolution Y", input(resY, setResY, { min: 16, step: 32 }))}
-              {field("Resolution Z", input(resZ, setResZ, { min: 16, step: 32 }))}
+              {field("Resolution X", input(resX, (v) => setResX(Number(v)), { min: 16, step: 64 }))}
+              {field("Resolution Y", input(resY, (v) => setResY(Number(v)), { min: 16, step: 32 }))}
+              {field("Resolution Z", input(resZ, (v) => setResZ(Number(v)), { min: 16, step: 32 }))}
               <div className="col-span-2 flex items-center gap-2 text-xs text-slate-500">
                 <Cpu size={12} />
                 Total cells: {(resX * resY * resZ).toLocaleString()} | ~{((resX * resY * resZ * 55) / 1e9).toFixed(2)} GB VRAM (FP32) | ~{((resX * resY * resZ * 55) / 2 / 1e9).toFixed(2)} GB (FP16)
               </div>
-              {field("Length (m)", input(lengthM, setLengthM, { step: 0.1 }))}
-              {field("Velocity (m/s)", input(velocityMs, setVelocityMs, { step: 0.001 }))}
+              {field("Length (m)", input(lengthM, (v) => setLengthM(Number(v)), { step: 0.1 }))}
+              {field("Velocity (m/s)", input(velocityMs, (v) => setVelocityMs(Number(v)), { step: 0.001 }))}
               {field("Viscosity (m²/s)", input(viscosity, setViscosity))}
-              {field("Density (kg/m³)", input(density, setDensity))}
-              {field("Time Steps", input(timeSteps, setTimeSteps, { step: 10000 }))}
-              {field("Write Interval", input(writeInterval, setWriteInterval, { step: 100 }))}
+              {field("Density (kg/m³)", input(density, (v) => setDensity(Number(v))))}
+              {field("Time Steps", input(timeSteps, (v) => setTimeSteps(Number(v)), { step: 10000 }))}
+              {field("Write Interval", input(writeInterval, (v) => setWriteInterval(Number(v)), { step: 100 }))}
               {domainType === "stl" && field("STL File", input(stlFile, setStlFile))}
             </div>
 
@@ -266,7 +268,7 @@ export default function Fluidx3dPage() {
                   </p>
                   <p className="text-xs text-slate-500 font-mono">{String(result.data.setup_file)}</p>
                 </div>
-                {result.data.stl_file_name && (
+                {!!result.data.stl_file_name && (
                   <StlViewer
                     url={`/api/v1/case-files/${caseName}/${result.data.stl_file_name}`}
                     height={400}
@@ -295,7 +297,7 @@ export default function Fluidx3dPage() {
                 <p className="text-sm text-emerald-300">Compiled in {String(result.data.compile_time_s)}s</p>
                 <p className="text-xs text-slate-400">Compiler: {String(result.data.compiler)}</p>
                 <p className="text-xs text-slate-500 font-mono">{String(result.data.binary)}</p>
-                {result.data.warnings && <p className="text-xs text-amber-400 mt-1">{String(result.data.warnings).slice(0, 500)}</p>}
+                {!!result.data.warnings && <p className="text-xs text-amber-400 mt-1">{String(result.data.warnings).slice(0, 500)}</p>}
               </div>
             )}
           </div>
@@ -308,8 +310,8 @@ export default function Fluidx3dPage() {
             <p className="text-xs text-slate-500">Executes the compiled FluidX3D binary on the GPU via OpenCL</p>
             <div className="grid grid-cols-2 gap-3">
               {field("Case Name", input(caseName, setCaseName))}
-              {field("GPU Device Index", input(gpuDevice, setGpuDevice, { min: 0 }))}
-              {field("Timeout (s)", input(timeoutS, setTimeoutS, { min: 10, step: 60 }))}
+              {field("GPU Device Index", input(gpuDevice, (v) => setGpuDevice(Number(v)), { min: 0 }))}
+              {field("Timeout (s)", input(timeoutS, (v) => setTimeoutS(Number(v)), { min: 10, step: 60 }))}
             </div>
             {btn("Run on GPU", () =>
               callTool("cfd_fluidx3d_run", { case_name: caseName, gpu_device: Number(gpuDevice), timeout_s: Number(timeoutS) }),
@@ -325,7 +327,7 @@ export default function Fluidx3dPage() {
                     <p className="text-xs text-emerald-400">Simulation completed successfully</p>
                   )}
                 </div>
-                {result.data.output && (
+                {!!result.data.output && (
                   <details className="p-3 bg-black/20 rounded-xl">
                     <summary className="text-xs text-slate-500 cursor-pointer">Console output</summary>
                     <pre className="text-xs text-slate-400 mt-2 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">{String(result.data.output).slice(-5000)}</pre>
@@ -365,7 +367,7 @@ export default function Fluidx3dPage() {
                   </div>
                 </div>
 
-                {result.data.final_forces && (
+                {!!result.data.final_forces && (
                   <div className="p-4 bg-white/5 rounded-xl border border-white/10">
                     <p className="text-sm font-medium text-slate-300 mb-2">Final Forces (N)</p>
                     <div className="grid grid-cols-3 gap-2 text-center">
@@ -403,6 +405,47 @@ export default function Fluidx3dPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Video */}
+        {activeTab === "video" && (
+          <div className="space-y-4 max-w-3xl">
+            <h2 className="text-lg font-bold text-slate-200">Simulation Video</h2>
+            {field("Case Name", input(caseName, (v) => setCaseName(v)))}
+            {field("FPS", input(fps, (v) => setFps(Number(v)), { min: 1, max: 30, step: 1 }))}
+            {btn("Render Video", () => callTool("cfd_fluidx3d_render", { case_name: caseName, fps: Number(fps) }), <Film size={14} />)}
+            {loading && <Loader2 className="animate-spin text-amber-400" size={24} />}
+            {result?.data && (
+              <div className="space-y-4">
+                {!!result.data.video_path && (
+                  <video controls autoPlay loop className="w-full rounded-xl border border-white/10 bg-black/40" style={{ maxHeight: "500px" }}>
+                    <source src={`/api/v1/case-files/${encodeURIComponent(caseName)}/${encodeURIComponent(caseName)}_simulation.webm`} type="video/webm" />
+                  </video>
+                )}
+                {!result.data.video_path && !!result.data.png_path && (
+                  <img
+                    src={`/api/v1/case-files/${encodeURIComponent(caseName)}/${encodeURIComponent(caseName)}_result.png`}
+                    alt="Simulation result"
+                    className="w-full rounded-xl border border-white/10"
+                  />
+                )}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-3 bg-slate-800/50 rounded-xl text-center">
+                    <p className="text-xs text-slate-500">Frames</p>
+                    <p className="text-lg font-mono text-cyan-400">{String(result.data.frame_count)}</p>
+                  </div>
+                  <div className="p-3 bg-slate-800/50 rounded-xl text-center">
+                    <p className="text-xs text-slate-500">Duration</p>
+                    <p className="text-lg font-mono text-cyan-400">{String(result.data.duration_s)}s</p>
+                  </div>
+                  <div className="p-3 bg-slate-800/50 rounded-xl text-center">
+                    <p className="text-xs text-slate-500">VTK Files</p>
+                    <p className="text-lg font-mono text-cyan-400">{String(result.data.vtk_files)}</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>

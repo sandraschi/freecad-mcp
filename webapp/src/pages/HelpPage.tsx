@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Cpu, Code2, ExternalLink, HelpCircle, Package, Printer, ShoppingBag, Wrench, Layers, History, GitCompare, Waves } from "lucide-react";
+import { BookOpen, Cpu, Code2, ExternalLink, HelpCircle, Package, Printer, ShoppingBag, Wrench, Layers, History, GitCompare, Waves, Film } from "lucide-react";
 
 const sections = [
   { id: "intro", label: "FreeCAD", icon: BookOpen },
@@ -10,6 +10,7 @@ const sections = [
   { id: "tools", label: "MCP Tools", icon: Wrench },
   { id: "cfd", label: "CFD", icon: Waves },
   { id: "openfoam", label: "OpenFOAM", icon: Cpu },
+  { id: "visualization", label: "Visualization", icon: Film },
   { id: "marketplace", label: "Marketplace", icon: ShoppingBag },
   { id: "printing", label: "3D Printing", icon: Printer },
   { id: "links", label: "Links", icon: ExternalLink },
@@ -41,6 +42,7 @@ export default function HelpPage() {
         {tab === "openfoam" && <OpenfoamHelp />}
         {tab === "marketplace" && <MarketplaceHelp />}
         {tab === "printing" && <Printing />}
+        {tab === "visualization" && <Visualization />}
         {tab === "links" && <Links />}
       </div>
     </div>
@@ -202,7 +204,25 @@ function Comparison() {
 function Tools() {
   return (
     <>
-      <p><strong className="text-slate-200">30 MCP tools</strong> registered in the server. Available via MCP SSE and the REST proxy.</p>
+      <p><strong className="text-slate-200">32 MCP tools</strong> registered in the server. Available via MCP SSE and the REST proxy. All files are stored in a persistent depot at <code className="text-indigo-400">%LOCALAPPDATA%\freecad-mcp\depot</code> with full CRUD via the Depot page and REST API.</p>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">CAD Depot</h3>
+      <div className="space-y-2">
+        {[
+          { name: "cad_depot", tag: "READ", desc: "List all files in the persistent CAD file depot with metadata (size, created date, description, tags, shape type). Supports STEP, STL, IFC, FCStd, IGES, OBJ, and DXF." },
+          { name: "cad_create", tag: "MUTATE", desc: "Create a box/cylinder/sphere/cone shape, save the resulting STL directly to the depot with metadata. All dimensions in mm." },
+        ].map((t) => (
+          <div key={t.name} className="bg-white/5 rounded-xl p-3 flex items-start gap-3">
+            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${t.tag === "READ" ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>{t.tag}</span>
+            <div>
+              <code className="text-indigo-400 font-bold">{t.name}()</code>
+              <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-slate-500 text-xs mt-2">Depot CRUD via REST: <code className="text-indigo-400">GET/PUT/DELETE /api/v1/depot/{'{name}'}</code>, <code className="text-indigo-400">POST /api/v1/depot/create</code>, <code className="text-indigo-400">POST /api/v1/depot/upload</code></p>
 
       <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Core CAD</h3>
       <div className="space-y-2">
@@ -551,6 +571,56 @@ function OpenfoamHelp() {
       </div>
 
       <p className="text-slate-500 italic mt-4">Full reference: <code className="text-indigo-400">docs/openfoam.md</code> — GPU solvers, Mac vs 4090 analysis, FluidX3D integration plan, solver reference, mesh quality targets.</p>
+    </>
+  );
+}
+
+function Visualization() {
+  return (
+    <>
+      <p><strong className="text-slate-200">FluidX3D simulation results</strong> can be visualized as video, 3D streamlines, or imported into game engines.</p>
+
+      <h3 className="text-white font-bold mt-6">Output Formats</h3>
+      <div className="grid grid-cols-2 gap-3 mt-2">
+        {[
+          ["VTK (.vtk)", "Raw velocity + density field data. Needs ParaView or our render pipeline to view. Not human-readable directly."],
+          ["OBJ (.obj)", "3D streamlines — curves that follow the flow path. Importable into Unity, Godot, Blender, Resonite. Standard format since the 80s."],
+          ["WebM (.webm)", "Heatmap video of velocity magnitude. Plays in any browser. Produced by cfd_fluidx3d_render."],
+          ["PNG (.png)", "Single heatmap frame. Good for reports, documentation, quick inspection."],
+          ["CSV (.csv)", "Velocity point cloud with coordinates. Import into Python, Excel, or ML training pipelines."],
+          ["JSON (.json)", "Structured force history, MLUPS throughput, simulation config."],
+        ].map(([fmt, desc]) => (
+          <div key={String(fmt)} className="p-3 bg-white/5 rounded-xl border border-white/10">
+            <p className="text-amber-400 font-bold text-xs uppercase mb-1">{String(fmt)}</p>
+            <p className="text-xs text-slate-400">{String(desc)}</p>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-white font-bold mt-6">Automatic Video (WebM)</h3>
+      <p>Run <code className="text-indigo-400">cfd_fluidx3d_render(case_name="pipe_gpu")</code> — the server reads VTK velocity fields, renders each time step as a colored heatmap, and stitches them into a WebM video via ffmpeg. No manual steps. View in the FluidX3D page <strong className="text-slate-200">Video</strong> tab.</p>
+
+      <h3 className="text-white font-bold mt-6">Game Engine Pipeline (OBJ streamlines)</h3>
+      <p>Run <code className="text-indigo-400">cfd_fluidx3d_export_for_render(case_name="pipe_gpu")</code> to generate OBJ streamlines. These are 3D curves you can import anywhere:</p>
+      <div className="grid grid-cols-3 gap-3 mt-2">
+        {[
+          ["Unity3D", "Import .obj → Line Renderer with velocity gradient. VR: place in scene at 1:1 scale."],
+          ["Godot 4", "Import .obj as Mesh → MeshInstance3D → Emission shader. Animate with script."],
+          ["Resonite", "Import .obj as MeshRenderer → PBS_Metallic material. Walk through flow in VR."],
+          ["Blender", "Import .obj → Bevel modifier for thickness → Emission shader. Render for production video."],
+          ["Unreal Engine", "Import .obj as Static Mesh → Niagara particles along spline for animated flow."],
+          ["Three.js (web)", "Load .obj with THREE/OBJLoader → animate line opacity/color in browser."],
+        ].map(([engine, desc]) => (
+          <div key={String(engine)} className="p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/20">
+            <p className="text-indigo-400 font-bold text-xs mb-1">{String(engine)}</p>
+            <p className="text-xs text-slate-500">{String(desc)}</p>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-white font-bold mt-6">Professional Post-Processing (ParaView)</h3>
+      <p>For publication-quality rendering: download VTK files from <code className="text-indigo-400">GET /api/v1/case-files/{'{case_name}'}/{'{filename}'}</code> and open in <a href="https://www.paraview.org" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">ParaView</a>. Supports slices, contours, streamlines, volume rendering, and animation export.</p>
+      <p className="text-xs text-slate-500 mt-2">See <code className="text-indigo-400">docs/flow-visualization.md</code> for the full reference.</p>
     </>
   );
 }

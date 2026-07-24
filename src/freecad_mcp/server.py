@@ -1124,10 +1124,41 @@ async def download_file(filename: str):
 async def serve_case_file(case_name: str, filename: str):
     """Serve a file from a FluidX3D case directory."""
     path = os.path.join(F3D_CASE_DIR, case_name, filename)
+    not_found = False
     if not os.path.isfile(path):
+        # Also check FluidX3D export dir
+        f3d_path = None
+        for p in [
+            os.environ.get("FLUIDX3D_PATH", ""),
+            r"D:\Dev\repos\FluidX3D",
+            os.path.join(os.environ.get("TEMP", ""), "fluidx3d"),
+        ]:
+            if p and os.path.isdir(p):
+                f3d_path = p
+                break
+        if f3d_path:
+            alt = os.path.join(f3d_path, "bin", "export", filename)
+            if os.path.isfile(alt):
+                path = alt
+                not_found = False
+            else:
+                not_found = True
+        else:
+            not_found = True
+    if not_found or not os.path.isfile(path):
         raise HTTPException(404, f"File {filename} not found in case {case_name}")
     ext = os.path.splitext(filename)[1].lower()
-    media = "application/sla" if ext == ".stl" else "application/octet-stream"
+    media_map = {
+        ".stl": "application/sla",
+        ".webm": "video/webm",
+        ".png": "image/png",
+        ".vtk": "application/octet-stream",
+        ".csv": "text/csv",
+        ".obj": "text/plain",
+        ".json": "application/json",
+        ".log": "text/plain",
+    }
+    media = media_map.get(ext, "application/octet-stream")
     return FileResponse(path, media_type=media, filename=filename)
 
 
