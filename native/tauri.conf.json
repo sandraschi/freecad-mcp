@@ -32,7 +32,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "resources/freecad-mcp-backend.exe"
+      "resources/freecad-mcp-backend.exe",
+            "resources/.env.example"
     ],
     "targets": [
       "nsis"
@@ -41,7 +42,10 @@
       "webviewInstallMode": {
         "type": "skip"
       },
-      "nsis": {}
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "./windows/hooks.nsh"
+      }
     }
   },
   "plugins": {
@@ -56,3 +60,4 @@
     }
   }
 }
+

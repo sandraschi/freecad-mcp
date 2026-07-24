@@ -10,3 +10,11 @@ htmlcov/
 .coverage
 *.egg-info/
 _dashboard/
+.env
+*.bak
+native/resources/*.exe
+native/binaries/*.exe
+native/target/
+native/gen/
+reports/
+*.mcpb

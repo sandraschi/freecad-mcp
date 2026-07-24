@@ -1,4 +1,5 @@
-﻿set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
+set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
+import 'scripts/just/fleet.just'
 
 export NAME := "FreeCAD MCP"
 export DESC := "CAD operations via MCP tools and REST API"
@@ -109,6 +110,17 @@ fleet-e2e-chain-gpu:
 test-integration:
     uv run pytest -m integration
 
+# Run all verification gates (lint + typecheck + tests)
+gates-green:
+    uv run ruff check src/ --quiet
+    uv run ruff format src/ --check --quiet
+    Set-Location '{{justfile_directory()}}\webapp'
+    npx tsc --noEmit --quiet
+    uv run pytest --quiet -x
+
+# Run cert gates
+certify: gates-green
+
 e2e:
     pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
 
@@ -155,3 +167,6 @@ build-native-debug:
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
     npx @tauri-apps/cli build --debug
 
+# Run CUA smoke test against installed NSIS app
+cua-nsis-test:
+    C:\Windows\py.exe scripts/cua-smoke.py

@@ -13,10 +13,12 @@ import collections
 import json
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -25,12 +27,20 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 from fastmcp.server import create_proxy
 from prefab_ui.app import PrefabApp
 from pydantic import BaseModel, Field
 
-from freecad_mcp.tools import register_bim_tools, register_cfd_tools, register_fem_tools, register_fluidx3d_tools
+from freecad_mcp.tools import (
+    register_bim_tools,
+    register_bridge_tools,
+    register_cfd_tools,
+    register_depot_tools,
+    register_fem_tools,
+    register_fluidx3d_tools,
+    register_model_tools,
+)
 
 logger = logging.getLogger("freecad-mcp")
 
@@ -64,9 +74,14 @@ os.makedirs(WORK_DIR, exist_ok=True)
 UPLOAD_DIR = os.path.join(WORK_DIR, "uploads")
 OUTPUT_DIR = os.path.join(WORK_DIR, "output")
 F3D_CASE_DIR = os.path.join(WORK_DIR, "fluidx3d_cases")
+DEPOT_DIR = os.environ.get(
+    "FREECAD_MCP_DEPOT",
+    os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "freecad-mcp", "depot"),
+)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(F3D_CASE_DIR, exist_ok=True)
+os.makedirs(DEPOT_DIR, exist_ok=True)
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
@@ -132,6 +147,7 @@ def _freecad_already_running() -> bool:
         )
         return "FreeCAD.exe" in r.stdout
     except Exception:
+        logger.debug("tasklist check failed", exc_info=True)
         return False
 
 
@@ -143,6 +159,9 @@ def _start_freecad_bridge():
         return False
     if not os.path.isfile(FREECAD_PATH):
         logger.warning("FreeCAD not found at %s", FREECAD_PATH)
+        return False
+    if "FreeCADCmd" in FREECAD_PATH:
+        logger.info("FreeCADCmd detected — skipping TCP bridge (headless subprocess mode)")
         return False
     if not os.path.isfile(BRIDGE_SCRIPT):
         logger.warning("Bridge script not found at %s", BRIDGE_SCRIPT)
@@ -163,13 +182,53 @@ def _start_freecad_bridge():
         return False
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup: launch FreeCAD bridge (if not already running), connect, then serve."""
-    logger.info("FreeCAD MCP startup")
-    _state["freecad_ok"] = False
+def _init_freecad():
+    """Detect FreeCAD and populate _state. Idempotent -- safe to call from main() and lifespan()."""
+    if _state.get("freecad_initialized"):
+        return
+    _state["freecad_initialized"] = True
     _state["freecad_version"] = None
     _state["bridge_mode"] = "none"
+    _state["execution_mode"] = "auto"
+
+    if not os.path.isfile(FREECAD_PATH):
+        logger.warning("FreeCAD not found at %s", FREECAD_PATH)
+        return
+
+    try:
+        r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)
+        ver = r.stdout.strip() or r.stderr.strip()
+        if ver:
+            _state["freecad_version"] = ver
+    except Exception as e:
+        logger.warning("FreeCAD version check failed: %s", e)
+
+    # Try FreeCADCmd subprocess fallback
+    if _state.get("freecad_version"):
+        _state["freecad_ok"] = True
+        _state["bridge_mode"] = "subprocess"
+        logger.info("FreeCAD detected: %s (subprocess mode)", _state["freecad_version"])
+    else:
+        cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
+        if cmd_path != FREECAD_PATH and os.path.isfile(cmd_path):
+            try:
+                r = subprocess.run([cmd_path, "--version"], capture_output=True, text=True, timeout=10, check=False)
+                ver = r.stdout.strip() or r.stderr.strip()
+                if ver:
+                    _state["freecad_version"] = ver
+                    _state["freecad_ok"] = True
+                    _state["bridge_mode"] = "subprocess"
+                    logger.info("FreeCADCmd detected: %s (subprocess mode)", ver)
+            except Exception:
+                logger.debug("FreeCADCmd version check failed", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: connect to an existing bridge; launch GUI only when opted in."""
+    logger.info("FreeCAD MCP startup")
+    _init_freecad()
+    skip_auto_launch = os.environ.get("FREECAD_SKIP_AUTO_LAUNCH", "").lower() in ("1", "true", "yes")
 
     # Check if FreeCAD bridge is already running on its port
     bridge_already_running = False
@@ -182,7 +241,7 @@ async def lifespan(app: FastAPI):
     except (TimeoutError, ConnectionRefusedError, OSError):
         pass
 
-    if not bridge_already_running:
+    if not bridge_already_running and not skip_auto_launch:
         if not os.path.isfile(FREECAD_PATH):
             logger.warning("FreeCAD not found at %s", FREECAD_PATH)
         else:
@@ -204,8 +263,21 @@ async def lifespan(app: FastAPI):
                     logger.info("Waiting for bridge (attempt %d/5)...", attempt + 1)
 
             if not _state.get("freecad_ok"):
+                # Subprocess fallback — FreeCADCmd works even if bridge/version hangs
+                try:
+                    cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
+                    r = subprocess.run([cmd_path, "--version"], capture_output=True, text=True, timeout=10, check=False)
+                    ver = r.stdout.strip() or r.stderr.strip()
+                    if ver:
+                        _state["freecad_version"] = ver
+                        _state["freecad_ok"] = True
+                except Exception:
+                    pass
                 _state["bridge_mode"] = "subprocess"
-                logger.info("Falling back to subprocess mode (limited STEP support)")
+                logger.info("Falling back to subprocess mode (FreeCADCmd)")
+    elif not bridge_already_running and skip_auto_launch:
+        _state["bridge_mode"] = "subprocess"
+        logger.info("FREECAD_SKIP_AUTO_LAUNCH set — not starting FreeCAD GUI bridge")
     else:
         # Bridge already running, just connect
         _state["freecad_version"] = "bridge_running"
@@ -229,7 +301,15 @@ async def lifespan(app: FastAPI):
             _bridge_writer.close()
             await _bridge_writer.wait_closed()
         except Exception:
-            pass
+            logger.debug("Bridge shutdown", exc_info=True)
+
+    # Kill bridge process if we started it
+    if _bridge_proc and not bridge_already_running:
+        try:
+            _bridge_proc.kill()
+            _bridge_proc.wait(timeout=5)
+        except Exception:
+            logger.debug("Bridge process kill", exc_info=True)
 
 
 # ── Subprocess Fallback ───────────────────────────────────────────────────────
@@ -265,7 +345,23 @@ async def _run_freecad(script: str, timeout: int = 120) -> tuple[str, str, int]:
 # ── FastAPI App ──────────────────────────────────────────────────────────────
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:10944",
+        "http://localhost:10944",
+        "http://127.0.0.1:10945",
+        "http://localhost:10945",
+        "http://goliath:10944",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+        "tauri://localhost",
+    ],
+    allow_origin_regex=r"https?://(?:[a-zA-Z0-9-]+\.ts\.net|.*?\.tail-[a-f0-9]+\.ts\.net|tauri\.localhost|localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|100\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?$|^tauri://localhost$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 mcp = FastMCP.from_fastapi(app, name="FreeCAD MCP")
 
@@ -348,6 +444,15 @@ _fem_tools = register_fem_tools(
     build_result=_build_result,
 )
 
+_bridge_tools = register_bridge_tools(
+    mcp=mcp,
+    state=_state,
+    bridge_send=_bridge_send,
+    output_dir=OUTPUT_DIR,
+    freecad_path=FREECAD_PATH,
+    start_bridge=_start_freecad_bridge,
+    connect_bridge=_bridge_connect,
+)
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
@@ -503,7 +608,8 @@ for o in doc.Objects:
                 "volume": round(s.Volume, 3) if s.Volume else 0,
                 "bbox": {{"xmin": bb.XMin, "ymin": bb.YMin, "zmin": bb.ZMin, "xmax": bb.XMax, "ymax": bb.YMax, "zmax": bb.ZMax}}
             }})
-    except: pass
+    except Exception:
+        logger.debug("Skipping object without shape in model_info", exc_info=True)
 print(json.dumps({{"objects": infos, "total": len(infos)}}))
 FreeCAD.closeDocument(doc.Name)
 """
@@ -583,6 +689,15 @@ async def create_shape(
     script += f"\nimport os; print(os.path.getsize(r'{stl_path}'))"
     out, err, code = await _run_freecad(script, timeout=30)
     return _build_result("create_shape", out, err, code, extra={"output": output_name})
+
+
+# Register CAD file depot tools (cad_depot, cad_create) — must be after create_shape definition
+_depot_tools = register_depot_tools(
+    mcp=mcp,
+    state=_state,
+    depot_dir=DEPOT_DIR,
+    create_shape_func=create_shape,
+)
 
 
 # ── PrusaSlicer Tools ────────────────────────────────────────────────────────
@@ -729,6 +844,151 @@ async def freecad_gui(
         return {"success": False, "error": str(e)}
 
 
+# ── FastMCP 3.2 Features — Sampling, Prompts, Resources ──────────────────────
+
+
+async def _sampling_tool(
+    goal: Annotated[str, Field(description="The CAD/engineering question or operation to reason about.")],
+    ctx: Context = None,
+) -> dict:
+    """
+    Use the host LLM (via MCP sampling) to reason about a CAD, FEM, CFD, or BIM problem.
+
+    The host LLM analyzes the goal and returns a structured plan or explanation.
+    Falls back to a static response if sampling is unavailable.
+
+    ## Return Format
+    {"success": bool, "response": str, "sampling_used": bool}
+
+    ## Examples
+    await cad_sampling(goal="What material should I use for a bracket under 500N load?")
+    await cad_sampling(goal="Plan the steps to run a CFD simulation on this pipe geometry")
+    """
+    if ctx is not None:
+        try:
+            result = await ctx.sample(
+                system_prompt="You are a CAD, FEA, CFD, and manufacturing engineering expert. Answer concisely and technically.",
+                messages=[{"role": "user", "content": goal}],
+                max_tokens=2000,
+            )
+            return {"success": True, "response": result, "sampling_used": True}
+        except Exception as e:
+            logger.warning("Sampling failed: %s", e)
+
+    return {
+        "success": True,
+        "response": f"I received your engineering question: '{goal}'. To enable AI reasoning, connect this MCP server to a sampling-capable client (Claude Desktop, Cursor).",
+        "sampling_used": False,
+    }
+
+
+mcp.tool(version="0.3.0")(_sampling_tool)
+
+
+@mcp.prompt()
+async def freecad_expert(topic: str = "") -> str:
+    """Get FreeCAD expertise and tool guidance."""
+    base = """You are a FreeCAD MCP assistant. You have access to the following tool categories:
+
+Core CAD: freecad_status, step_to_stl, model_info, create_shape, freecad_gui
+Depot: cad_depot, cad_create
+BIM: bim_create_wall, bim_create_slab, bim_create_column, bim_create_window, bim_create_door, bim_create_roof, bim_export_ifc, bim_import_ifc, bim_status, mesh_to_solid
+CFD: cfd_status, cfd_create_domain, cfd_configure_physics, cfd_set_boundary, cfd_build_case, cfd_run_solver, cfd_read_results, cfd_parametric_study, cfd_nl2foam, cfd_sample_for_pinns
+FluidX3D: cfd_fluidx3d_status, cfd_fluidx3d_prebuilt, cfd_fluidx3d_setup, cfd_fluidx3d_compile, cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain
+FEM: fem_status, fem_create_analysis, fem_set_material, fem_set_constraint, fem_mesh, fem_run, fem_read_results, run_fem_analysis
+Slicing: slicer_status, slice_stl
+Marketplace: marketplace_search, marketplace_download, marketplace_categories, show_marketplace_card
+
+File depot is at %LOCALAPPDATA%\\freecad-mcp\\depot. All files persist across restarts.
+Use REST CRUD: GET/PUT/DELETE /api/v1/depot/{name}
+
+Help the user with their engineering task. Be precise and suggest concrete tool calls.
+"""
+    if topic:
+        return f"{base}\n\nThe user specifically asked about: {topic}"
+    return base
+
+
+@mcp.prompt()
+async def freecad_convert_step(file_name: str) -> str:
+    """Convert a STEP file to STL mesh."""
+    return f"""Convert STEP file '{file_name}' to STL:
+1. Upload via POST /api/v1/upload or place in depot
+2. Call step_to_stl(file_name="{file_name}")
+3. The STL is ready for download, inspection with model_info, or slicing with slice_stl"""
+
+
+@mcp.resource("cad://depot")
+async def freecad_depot_list_resource() -> str:
+    """List all files in the persistent CAD file depot."""
+    files = _depot_list()
+    if not files:
+        return "Depot is empty. Upload a CAD file or create a shape to get started."
+    lines = ["# CAD Depot Files\n"]
+    for f in files:
+        lines.append(f"- **{f['name']}** ({f['size_kb']} KB, modified {f['modified'][:10]})")
+        meta = f.get("meta", {})
+        if meta.get("description"):
+            lines.append(f"  - {meta['description']}")
+        if meta.get("tags"):
+            lines.append(f"  - Tags: {', '.join(meta['tags'])}")
+        if meta.get("shape_type"):
+            lines.append(f"  - Type: {meta['shape_type']}")
+    return "\n".join(lines)
+
+
+@mcp.resource("cad://depot/{filename}")
+async def freecad_depot_file_resource(filename: str) -> str:
+    """Get information about a specific file in the depot."""
+    meta = _depot_read_meta(filename)
+    path = os.path.join(DEPOT_DIR, filename)
+    if not os.path.isfile(path):
+        return f"File '{filename}' not found in depot."
+    size_kb = round(os.path.getsize(path) / 1024, 1)
+    return json.dumps(
+        {
+            "name": filename,
+            "size_kb": size_kb,
+            "path": path,
+            "meta": meta,
+        },
+        indent=2,
+    )
+
+
+# ── Error Helper ──────────────────────────────────────────────────────────────
+
+
+def _error_response(error: str, error_type: str = "general", **kwargs) -> dict:
+    """Auto-logging error response — traceback logged before returning to caller."""
+    logger.exception("Tool error: %s [%s]", error, error_type)
+    return {"success": False, "error": error, "error_type": error_type, **kwargs}
+
+
+# ── Skills ────────────────────────────────────────────────────────────────────
+
+
+_SKILLS_DIR = Path(__file__).parent / "skills"
+
+
+@app.get("/api/skills")
+async def list_skills():
+    """List available skill names."""
+    if not _SKILLS_DIR.is_dir():
+        return {"skills": []}
+    skills = [d.name for d in _SKILLS_DIR.iterdir() if d.is_dir() and (d / "SKILL.md").exists()]
+    return {"skills": skills}
+
+
+@app.get("/api/skills/{skill_name}")
+async def get_skill(skill_name: str):
+    """Return the raw SKILL.md content for a skill."""
+    skill_path = _SKILLS_DIR / skill_name / "SKILL.md"
+    if not skill_path.exists():
+        raise HTTPException(404, f"Skill '{skill_name}' not found")
+    return skill_path.read_text(encoding="utf-8")
+
+
 # ── REST Endpoints ────────────────────────────────────────────────────────────
 
 
@@ -769,7 +1029,9 @@ async def health_check():
         try:
             r = subprocess.run(
                 ["docker", "images", "openfoam/openfoam", "-q"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             openfoam_image = bool(r.stdout.strip())
         except Exception:
@@ -832,6 +1094,11 @@ async def upload_file(file: UploadFile):
     content = await file.read()
     with open(dest, "wb") as f:
         f.write(content)
+    # Also save to persistent depot
+    depot_dest = os.path.join(DEPOT_DIR, file.filename)
+    if not os.path.isfile(depot_dest):
+        shutil.copy2(dest, depot_dest)
+        _depot_ensure_meta(file.filename)
     return {"success": True, "filename": file.filename, "size_bytes": len(content), "path": dest}
 
 
@@ -885,6 +1152,180 @@ async def list_files():
     return {"uploads": uploads, "outputs": outputs, "gcodes": gcodes}
 
 
+# ── Depot Metadata Helpers ───────────────────────────────────────────────────
+
+
+def _depot_meta_path(filename: str) -> str:
+    return os.path.join(DEPOT_DIR, f"{filename}.meta.json")
+
+
+def _depot_read_meta(filename: str) -> dict:
+    mp = _depot_meta_path(filename)
+    if os.path.isfile(mp):
+        try:
+            with open(mp) as f:
+                return json.load(f)
+        except Exception:
+            logger.debug("Failed to read meta for %s", filename, exc_info=True)
+    return {}
+
+
+def _depot_write_meta(filename: str, meta: dict):
+    with open(_depot_meta_path(filename), "w") as f:
+        json.dump(meta, f, indent=2, default=str)
+
+
+def _depot_ensure_meta(filename: str) -> dict:
+    meta = _depot_read_meta(filename)
+    changed = False
+    if "created" not in meta:
+        meta["created"] = datetime.now().isoformat()
+        changed = True
+    if "description" not in meta:
+        meta["description"] = ""
+        changed = True
+    if "tags" not in meta:
+        meta["tags"] = []
+        changed = True
+    if changed:
+        _depot_write_meta(filename, meta)
+    return meta
+
+
+_EXT_CAD = {".step", ".stp", ".stl", ".ifc", ".ifcxml", ".fcstd", ".iges", ".igs", ".obj", ".dxf", ".dwg"}
+
+
+def _depot_list() -> list[dict]:
+    files = {}
+    for f in os.listdir(DEPOT_DIR):
+        fp = os.path.join(DEPOT_DIR, f)
+        if not os.path.isfile(fp):
+            continue
+        _base, ext = os.path.splitext(f)
+        if ext == ".meta.json":
+            continue
+        if ext.lower() not in _EXT_CAD:
+            continue
+        meta = _depot_ensure_meta(f)
+        files[f] = {
+            "name": f,
+            "size_bytes": os.path.getsize(fp),
+            "size_kb": round(os.path.getsize(fp) / 1024, 1),
+            "modified": datetime.fromtimestamp(os.path.getmtime(fp)).isoformat(),
+            "meta": meta,
+        }
+    return sorted(files.values(), key=lambda x: x["modified"], reverse=True)
+
+
+# ── REST Endpoints — Depot CRUD ──────────────────────────────────────────────
+
+
+@app.get("/api/v1/depot")
+async def depot_list():
+    return {"files": _depot_list()}
+
+
+@app.get("/api/v1/depot/{filename}")
+async def depot_get(filename: str):
+    path = os.path.join(DEPOT_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(404, f"File '{filename}' not found in depot.")
+    ext = Path(filename).suffix.lower()
+    media_types = {
+        ".stl": "application/sla",
+        ".step": "application/x-step",
+        ".stp": "application/x-step",
+        ".ifc": "application/x-step",
+        ".fcstd": "application/octet-stream",
+    }
+    return FileResponse(path, media_type=media_types.get(ext, "application/octet-stream"), filename=filename)
+
+
+@app.put("/api/v1/depot/{filename}")
+async def depot_rename(filename: str, body: dict):
+    new_name = body.get("name", "")
+    description = body.get("description")
+    tags = body.get("tags")
+    old_path = os.path.join(DEPOT_DIR, filename)
+    if not os.path.isfile(old_path):
+        raise HTTPException(404, f"File '{filename}' not found.")
+    if new_name and new_name != filename:
+        new_path = os.path.join(DEPOT_DIR, new_name)
+        if os.path.isfile(new_path):
+            raise HTTPException(409, f"File '{new_name}' already exists.")
+        os.rename(old_path, new_path)
+        om = _depot_meta_path(filename)
+        if os.path.isfile(om):
+            os.rename(om, _depot_meta_path(new_name))
+        filename = new_name
+    if description is not None or tags is not None:
+        meta = _depot_read_meta(filename)
+        if description is not None:
+            meta["description"] = description
+        if tags is not None:
+            meta["tags"] = tags
+        _depot_write_meta(filename, meta)
+    return {"success": True, "filename": filename}
+
+
+@app.delete("/api/v1/depot/{filename}")
+async def depot_delete(filename: str):
+    path = os.path.join(DEPOT_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(404, f"File '{filename}' not found.")
+    os.remove(path)
+    mp = _depot_meta_path(filename)
+    if os.path.isfile(mp):
+        os.remove(mp)
+    logger.info("Deleted %s from depot", filename)
+    return {"success": True, "filename": filename}
+
+
+@app.post("/api/v1/depot/create")
+async def depot_create(body: dict):
+    shape_type = body.get("shape_type", "box")
+    params = body.get("params", {})
+    out = body.get("output_name", "")
+    desc = body.get("description", "")
+    result = await create_shape(shape_type=shape_type, params=params, output_name=out)
+    if not result.get("success"):
+        raise HTTPException(400, result.get("error", "Creation failed"))
+    out_name = result.get("output", "")
+    src = os.path.join(OUTPUT_DIR, out_name)
+    dst = os.path.join(DEPOT_DIR, out_name)
+    if os.path.isfile(src):
+        shutil.copy2(src, dst)
+    _depot_write_meta(
+        out_name,
+        {
+            "created": datetime.now().isoformat(),
+            "description": desc,
+            "tags": ["created"],
+            "shape_type": shape_type,
+        },
+    )
+    return {"success": True, "filename": out_name, "data": result.get("data")}
+
+
+@app.post("/api/v1/depot/upload")
+async def depot_upload(file: UploadFile):
+    if not file.filename:
+        raise HTTPException(400, "No filename")
+    ext = Path(file.filename).suffix.lower()
+    if ext not in _EXT_CAD:
+        raise HTTPException(
+            400, f"Unsupported format: {ext}. Use .step, .stp, .stl, .ifc, .fcstd, .iges, .obj, or .dxf."
+        )
+    dest = os.path.join(DEPOT_DIR, file.filename)
+    if os.path.isfile(dest):
+        raise HTTPException(409, f"File '{file.filename}' already exists.")
+    content = await file.read()
+    with open(dest, "wb") as f:
+        f.write(content)
+    _depot_ensure_meta(file.filename)
+    return {"success": True, "filename": file.filename, "size_bytes": len(content)}
+
+
 @app.post("/api/v1/control/tool")
 async def execute_tool(req: ToolRequest):
     """Execute an MCP tool via REST (for webapp convenience)."""
@@ -917,6 +1358,13 @@ async def execute_tool(req: ToolRequest):
     # FEM tool dispatch (registered via register_fem_tools closures)
     elif tool_name in _fem_tools:
         return await _fem_tools[tool_name](**args)
+    # Depot tool dispatch (cad_depot, cad_create)
+    elif tool_name in _depot_tools:
+        return await _depot_tools[tool_name](**args)
+    elif tool_name in _bridge_tools:
+        return await _bridge_tools[tool_name](**args)
+    elif tool_name in _model_tools:
+        return await _model_tools[tool_name](**args)
     else:
         raise HTTPException(400, f"Unknown tool: {tool_name}")
 
@@ -1243,6 +1691,18 @@ async def _marketplace_download(source: str, model_id: str, file_url: str, filen
         return {"success": False, "error": f"Download failed: {e}"}
 
 
+_model_tools = register_model_tools(
+    mcp=mcp,
+    state=_state,
+    bridge_send=_bridge_send,
+    run_freecad=_run_freecad,
+    output_dir=OUTPUT_DIR,
+    build_result=_build_result,
+    marketplace_search=_marketplace_search,
+    marketplace_download=_marketplace_download,
+)
+
+
 @app.get("/api/v1/marketplace/categories")
 async def categories_endpoint(source: str = ""):
     """List categories for a marketplace source."""
@@ -1399,8 +1859,57 @@ async def show_marketplace_card(
     return PrefabApp(view=view, title=f"Marketplace — {query}")
 
 
-# ── Chat / LLM ───────────────────────────────────────────────────────────────
+# ── Shutdown / Diagnostics / Capabilities ─────────────────────────────────────
 
+
+@app.get("/api/v1/diagnostics")
+async def diagnostics():
+    """Return server diagnostics for CUA smoke test."""
+    tool_count = len(mcp._tool_manager._tools) if hasattr(mcp, "_tool_manager") else 0
+    return {
+        "status": "ok",
+        "server": "freecad-mcp",
+        "version": "0.5.0",
+        "uptime_seconds": round(time.time() - _START_TIME, 1),
+        "tool_count": tool_count,
+        "tools": [{"name": name} for name in (mcp._tool_manager._tools if hasattr(mcp, "_tool_manager") else [])],
+        "system": {"windows": True},
+        "errors": [],
+    }
+
+
+@app.get("/api/v1/capabilities")
+async def capabilities():
+    """List server capabilities."""
+    tool_count = len(mcp._tool_manager._tools) if hasattr(mcp, "_tool_manager") else 0
+    return {
+        "service": "freecad-mcp",
+        "version": "0.5.0",
+        "freecad_ok": _state.get("freecad_ok", False),
+        "freecad_version": _state.get("freecad_version"),
+        "bridge_mode": _state.get("bridge_mode", "none"),
+        "tool_count": tool_count,
+        "features": ["cad", "bim", "cfd", "fem", "slicing", "marketplace", "fluidx3d", "sampling", "prefab"],
+    }
+
+
+@app.post("/api/v1/shutdown")
+async def shutdown():
+    """Gracefully shut down the server."""
+    logger.warning("Shutdown requested via API")
+
+    async def _delayed_shutdown():
+        await asyncio.sleep(0.5)
+        import os
+        import signal
+
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    _shutdown_task = asyncio.create_task(_delayed_shutdown())  # noqa: RUF006
+    return {"success": True, "message": "Shutdown initiated"}
+
+
+# ── Chat / LLM ───────────────────────────────────────────────────────────────
 
 
 class ChatRequest(BaseModel):
@@ -1474,7 +1983,7 @@ async def chat_completion(req: ChatRequest):
 
 async def _run_stdio():
     """Serve MCP over stdio (for CLI MCP clients)."""
-    await mcp.run_stdio_async()
+    await mcp.run_stdio_async(show_banner=False)
 
 
 def main():
@@ -1489,6 +1998,12 @@ def main():
 
     if args.freecad_path:
         os.environ["FREECAD_PATH"] = args.freecad_path
+
+    # MCP stdio clients (Cursor/Claude) must not spawn FreeCAD GUI on every reconnect.
+    if args.mode == "stdio":
+        os.environ.setdefault("FREECAD_SKIP_AUTO_LAUNCH", "1")
+
+    _init_freecad()
 
     if args.mode == "stdio":
         asyncio.run(_run_stdio())

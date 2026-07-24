@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-07-24T18:00:00",
+  "score": 45,
+  "gates": "ruff:pass, tsc:pass, mcpb:skipped",
+  "fixed": "CRITICAL=3, HIGH=6, MEDIUM=8, LOW=3",
+  "remaining": "webapp-sota, llm-discover, annotations, dialogic-returns"
+}

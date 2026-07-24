@@ -273,11 +273,13 @@ def _query_gpu_devices() -> list[dict]:
                 plat_name = line.split(" ", 1)[1].strip()
             if line.startswith("CL_DEVICE_NAME ") and plat_name:
                 dev_name = line.split(" ", 1)[1].strip()
-                devices.append({
-                    "platform": plat_name,
-                    "device": dev_name,
-                    "vendor": "",
-                })
+                devices.append(
+                    {
+                        "platform": plat_name,
+                        "device": dev_name,
+                        "vendor": "",
+                    }
+                )
         if devices:
             return devices
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -293,11 +295,13 @@ def _query_gpu_devices() -> list[dict]:
         for line in r.stdout.splitlines():
             m = re.match(r".*Device #(\d+):\s+(.+)", line)
             if m:
-                devices.append({
-                    "platform": "",
-                    "device": m.group(2).strip(),
-                    "vendor": "",
-                })
+                devices.append(
+                    {
+                        "platform": "",
+                        "device": m.group(2).strip(),
+                        "vendor": "",
+                    }
+                )
         if devices:
             return devices
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -459,13 +463,17 @@ def _generate_boundary_code(
         key = f"{domain_type}_{symmetry_axis}"
         template = BC_TEMPLATES_SYMMETRY.get(key, _BC_SYMMETRY_Y)
         return template.format(
-            u_inlet_x=u_inlet_x, u_inlet_y=u_inlet_y, u_inlet_z=u_inlet_z,
+            u_inlet_x=u_inlet_x,
+            u_inlet_y=u_inlet_y,
+            u_inlet_z=u_inlet_z,
             outlet_rho=outlet_rho,
         )
 
     template = BC_TEMPLATES.get(domain_type, _BC_BOX)
     return template.format(
-        u_inlet_x=u_inlet_x, u_inlet_y=u_inlet_y, u_inlet_z=u_inlet_z,
+        u_inlet_x=u_inlet_x,
+        u_inlet_y=u_inlet_y,
+        u_inlet_z=u_inlet_z,
         outlet_rho=outlet_rho,
     )
 
@@ -594,14 +602,12 @@ def _generate_object_forces_loop(stl_configs: list[dict]) -> str:
         flag = cfg.get("type_flag", "TYPE_S")
         if flag not in seen_flags:
             seen_flags.add(flag)
-        lines.append(
-            f'    const float3 f_o{i} = lbm.object_force({flag});'
-        )
+        lines.append(f"    const float3 f_o{i} = lbm.object_force({flag});")
         lines.append(
             f'    print_info("OBJ_FORCE " + to_string({i}) + " Fx:" + '
             f'to_string(units.si_F(f_o{i}.x)) + " Fy:" + '
             f'to_string(units.si_F(f_o{i}.y)) + " Fz:" + '
-            f'to_string(units.si_F(f_o{i}.z)));'
+            f"to_string(units.si_F(f_o{i}.z)));"
         )
     if lines:
         lines.insert(0, "")
@@ -632,13 +638,23 @@ def _generate_stl_imports(
 def _generate_setup_cpp(
     case_name: str,
     domain_type: str,
-    Nx: int, Ny: int, Nz: int,
+    Nx: int,
+    Ny: int,
+    Nz: int,
     nu: float,
-    lbm_length: float, lbm_velocity: float,
-    si_length: float, si_velocity: float, si_density: float,
-    fx: float, fy: float, fz: float,
-    u_inlet_x: float, u_inlet_y: float, u_inlet_z: float,
-    time_steps: int, write_interval: int,
+    lbm_length: float,
+    lbm_velocity: float,
+    si_length: float,
+    si_velocity: float,
+    si_density: float,
+    fx: float,
+    fy: float,
+    fz: float,
+    u_inlet_x: float,
+    u_inlet_y: float,
+    u_inlet_z: float,
+    time_steps: int,
+    write_interval: int,
     stl_files: list[str] | None = None,
     stl_configs: list[dict] | None = None,
     profile_shape: str = "uniform",
@@ -667,14 +683,24 @@ def _generate_setup_cpp(
     return _TEMPLATE.format(
         case_name=case_name,
         domain_type=domain_type,
-        Nx=Nx, Ny=Ny, Nz=Nz,
+        Nx=Nx,
+        Ny=Ny,
+        Nz=Nz,
         nu=nu,
         lbm_constructor=lbm_constructor,
-        lbm_length=lbm_length, lbm_velocity=lbm_velocity,
-        si_length=si_length, si_velocity=si_velocity, si_density=si_density,
+        lbm_length=lbm_length,
+        lbm_velocity=lbm_velocity,
+        si_length=si_length,
+        si_velocity=si_velocity,
+        si_density=si_density,
         boundary_code=_generate_boundary_code(
-            domain_type, u_inlet_x, u_inlet_y, u_inlet_z,
-            has_stl, outlet_type, symmetry_axis,
+            domain_type,
+            u_inlet_x,
+            u_inlet_y,
+            u_inlet_z,
+            has_stl,
+            outlet_type,
+            symmetry_axis,
         ),
         profile_code=_generate_profile_code(profile_shape, domain_type, u_inlet_x, u_inlet_y, u_inlet_z),
         free_surface_code=_generate_free_surface_code(free_surface, fill_fraction),
@@ -788,7 +814,9 @@ def register_fluidx3d_tools(
         domain_type: Annotated[str, Field(description="Domain shape: channel, pipe, box, nozzle, stl.")] = "channel",
         resolution_x: Annotated[int, Field(description="Grid cells in X direction.", ge=2)] = 512,
         resolution_y: Annotated[int, Field(description="Grid cells in Y direction.", ge=2)] = 128,
-        resolution_z: Annotated[int, Field(description="Grid cells in Z direction (auto-set to 1 when mode_2d=True).", ge=1)] = 128,
+        resolution_z: Annotated[
+            int, Field(description="Grid cells in Z direction (auto-set to 1 when mode_2d=True).", ge=1)
+        ] = 128,
         length_m: Annotated[float, Field(description="Physical length in metres.", ge=0.001)] = 1.0,
         velocity_ms: Annotated[float, Field(description="Inlet velocity in m/s.", ge=0.0001)] = 0.01,
         viscosity_m2s: Annotated[float, Field(description="Kinematic viscosity in m²/s.", ge=1e-10)] = 1e-6,
@@ -796,28 +824,57 @@ def register_fluidx3d_tools(
         time_steps: Annotated[int, Field(description="Total simulation time steps.", ge=100)] = 50000,
         write_interval: Annotated[int, Field(description="Write results every N steps.", ge=10)] = 1000,
         stl_file: Annotated[str, Field(description="STL filename in uploads for 'stl' domain type.")] = "",
-        of_case_name: Annotated[str, Field(description="OpenFOAM case name for auto-discovering STL from cfd_cases/<name>/geometry.stl.")] = "",
+        of_case_name: Annotated[
+            str, Field(description="OpenFOAM case name for auto-discovering STL from cfd_cases/<name>/geometry.stl.")
+        ] = "",
         # Gap 1: Inlet profiles
-        profile_shape: Annotated[str, Field(description="Inlet velocity profile shape: uniform, parabolic, blasius.")] = "uniform",
+        profile_shape: Annotated[
+            str, Field(description="Inlet velocity profile shape: uniform, parabolic, blasius.")
+        ] = "uniform",
         # Gap 2: Multiple STL objects
-        stl_configs_json: Annotated[str, Field(description="JSON array of per-object STL configs: '[{\"file\":\"a.stl\",\"type_flag\":\"TYPE_S|TYPE_X\"}]'. File paths relative to uploads dir.")] = "",
+        stl_configs_json: Annotated[
+            str,
+            Field(
+                description='JSON array of per-object STL configs: \'[{"file":"a.stl","type_flag":"TYPE_S|TYPE_X"}]\'. File paths relative to uploads dir.'
+            ),
+        ] = "",
         # Gap 3: Symmetry planes
-        symmetry_axis: Annotated[str, Field(description="Symmetry plane axis (y or z). Empty = no symmetry. Sets TYPE_Z boundary condition.")] = "",
+        symmetry_axis: Annotated[
+            str, Field(description="Symmetry plane axis (y or z). Empty = no symmetry. Sets TYPE_Z boundary condition.")
+        ] = "",
         # Gap 4: Non-Newtonian viscosity
-        non_newtonian: Annotated[bool, Field(description="Enable power-law (Ostwald) non-Newtonian viscosity model.")] = False,
-        nn_nu0: Annotated[float, Field(description="Reference viscosity (lbm units) for non-Newtonian model.", ge=0.001)] = 0.1,
-        nn_n_index: Annotated[float, Field(description="Power-law index n. n<1 = shear-thinning, n>1 = shear-thickening.", ge=0.01)] = 1.0,
+        non_newtonian: Annotated[
+            bool, Field(description="Enable power-law (Ostwald) non-Newtonian viscosity model.")
+        ] = False,
+        nn_nu0: Annotated[
+            float, Field(description="Reference viscosity (lbm units) for non-Newtonian model.", ge=0.001)
+        ] = 0.1,
+        nn_n_index: Annotated[
+            float, Field(description="Power-law index n. n<1 = shear-thinning, n>1 = shear-thickening.", ge=0.01)
+        ] = 1.0,
         nn_consistency: Annotated[float, Field(description="Consistency index K for power-law model.", ge=0.0)] = 1.0,
         # Gap 5: Free surface
         free_surface: Annotated[bool, Field(description="Enable free-surface (liquid-gas) LBM model.")] = False,
-        fill_fraction: Annotated[float, Field(description="Initial liquid fill fraction of domain height (0-1).", ge=0.01, le=0.99)] = 0.5,
+        fill_fraction: Annotated[
+            float, Field(description="Initial liquid fill fraction of domain height (0-1).", ge=0.01, le=0.99)
+        ] = 0.5,
         # Gap 6: Thermal LBM
-        thermal: Annotated[bool, Field(description="Enable thermal LBM with Boussinesq buoyancy (requires #define THERMAL).")] = False,
-        beta: Annotated[float, Field(description="Thermal expansion coefficient (1/K) for Boussinesq approximation.", ge=0.0)] = 0.0,
-        T_hot: Annotated[float, Field(description="Hot wall temperature (lbm units) for thermal stratification init.")] = 1.0,
-        T_cold: Annotated[float, Field(description="Cold wall temperature (lbm units) for thermal stratification init.")] = 0.0,
+        thermal: Annotated[
+            bool, Field(description="Enable thermal LBM with Boussinesq buoyancy (requires #define THERMAL).")
+        ] = False,
+        beta: Annotated[
+            float, Field(description="Thermal expansion coefficient (1/K) for Boussinesq approximation.", ge=0.0)
+        ] = 0.0,
+        T_hot: Annotated[
+            float, Field(description="Hot wall temperature (lbm units) for thermal stratification init.")
+        ] = 1.0,
+        T_cold: Annotated[
+            float, Field(description="Cold wall temperature (lbm units) for thermal stratification init.")
+        ] = 0.0,
         # Gap 7: Pressure outlet
-        outlet_type: Annotated[str, Field(description="Outlet BC type: fixed_rho (rho=1.0) or neumann (zero-gradient).")] = "fixed_rho",
+        outlet_type: Annotated[
+            str, Field(description="Outlet BC type: fixed_rho (rho=1.0) or neumann (zero-gradient).")
+        ] = "fixed_rho",
         # Gap 8: 2D mode
         mode_2d: Annotated[bool, Field(description="Enable 2D simulation mode. Forces Nz=1.")] = False,
     ) -> dict:
@@ -936,7 +993,11 @@ def register_fluidx3d_tools(
 
         # Viscosity in LBM units
         nu_si = viscosity_m2s
-        lbm_nu = max(nu_si * lbm_velocity / (si_velocity * lbm_length) if si_velocity > 0 else 1.0 / 6.0, 0.001, min(0.2, 1.0 / 6.0))
+        lbm_nu = max(
+            nu_si * lbm_velocity / (si_velocity * lbm_length) if si_velocity > 0 else 1.0 / 6.0,
+            0.001,
+            min(0.2, 1.0 / 6.0),
+        )
 
         # Inlet-driven cases use zero volume force unless explicitly set later
         fx = 0.0
@@ -951,13 +1012,23 @@ def register_fluidx3d_tools(
         cpp_content = _generate_setup_cpp(
             case_name=case_name,
             domain_type=domain_type,
-            Nx=resolution_x, Ny=resolution_y, Nz=resolution_z,
+            Nx=resolution_x,
+            Ny=resolution_y,
+            Nz=resolution_z,
             nu=round(lbm_nu, 6),
-            lbm_length=lbm_length, lbm_velocity=lbm_velocity,
-            si_length=si_length, si_velocity=si_velocity, si_density=density_kgm3,
-            fx=fx, fy=fy, fz=fz,
-            u_inlet_x=ux, u_inlet_y=uy, u_inlet_z=uz,
-            time_steps=time_steps, write_interval=write_interval,
+            lbm_length=lbm_length,
+            lbm_velocity=lbm_velocity,
+            si_length=si_length,
+            si_velocity=si_velocity,
+            si_density=density_kgm3,
+            fx=fx,
+            fy=fy,
+            fz=fz,
+            u_inlet_x=ux,
+            u_inlet_y=uy,
+            u_inlet_z=uz,
+            time_steps=time_steps,
+            write_interval=write_interval,
             stl_files=stl_files if stl_files else None,
             stl_configs=stl_configs if stl_configs else None,
             profile_shape=profile_shape,
@@ -982,7 +1053,10 @@ def register_fluidx3d_tools(
         # Generate defines.hpp by patching stock FluidX3D template (do not replace wholesale)
         f3d_path = _find_fluidx3d()
         if not f3d_path:
-            return {"success": False, "error": "FluidX3D not found. Clone: git clone https://github.com/ProjectPhysX/FluidX3D.git"}
+            return {
+                "success": False,
+                "error": "FluidX3D not found. Clone: git clone https://github.com/ProjectPhysX/FluidX3D.git",
+            }
 
         defines_content, enabled_defines = _generate_defines_hpp(
             f3d_path,
@@ -1028,9 +1102,13 @@ def register_fluidx3d_tools(
         runner_cfg = {
             "case_name": case_name,
             "domain_type": domain_type,
-            "Nx": resolution_x, "Ny": resolution_y, "Nz": resolution_z,
+            "Nx": resolution_x,
+            "Ny": resolution_y,
+            "Nz": resolution_z,
             "nu": round(lbm_nu, 6),
-            "fx": fx, "fy": fy, "fz": fz,
+            "fx": fx,
+            "fy": fy,
+            "fz": fz,
             "inlet_velocity": [ux, uy, uz],
             "time_steps": time_steps,
             "write_interval": write_interval,
@@ -1102,11 +1180,17 @@ def register_fluidx3d_tools(
         """
         f3d_path = _find_fluidx3d()
         if not f3d_path:
-            return {"success": False, "error": "FluidX3D not found. Clone: git clone https://github.com/ProjectPhysX/FluidX3D.git"}
+            return {
+                "success": False,
+                "error": "FluidX3D not found. Clone: git clone https://github.com/ProjectPhysX/FluidX3D.git",
+            }
 
         compiler = _find_compiler()
         if not compiler:
-            return {"success": False, "error": "No C++ compiler found. Install g++ (MinGW/WSL/Linux) or Visual Studio with MSVC."}
+            return {
+                "success": False,
+                "error": "No C++ compiler found. Install g++ (MinGW/WSL/Linux) or Visual Studio with MSVC.",
+            }
 
         case_dir = os.path.join(F3D_CASE_DIR, case_name)
         if not os.path.isdir(case_dir):
@@ -1115,7 +1199,10 @@ def register_fluidx3d_tools(
         setup_src = os.path.join(case_dir, "setup.cpp")
         defines_src = os.path.join(case_dir, "defines.hpp")
         if not os.path.isfile(setup_src):
-            return {"success": False, "error": f"setup.cpp not found in case '{case_name}'. Run cfd_fluidx3d_setup first."}
+            return {
+                "success": False,
+                "error": f"setup.cpp not found in case '{case_name}'. Run cfd_fluidx3d_setup first.",
+            }
 
         # Copy setup into FluidX3D source tree
         f3d_src = os.path.join(f3d_path, "src")
@@ -1137,6 +1224,7 @@ def register_fluidx3d_tools(
             return {"success": False, "error": f"No C++ source files found in {f3d_src}"}
 
         import time
+
         t0 = time.time()
         compile_timeout = int(os.environ.get("FREECAD_F3D_COMPILE_TIMEOUT_S", "300"))
         opencl_inc, opencl_lib = _opencl_paths(f3d_path)
@@ -1151,10 +1239,7 @@ def register_fluidx3d_tools(
             if not os.path.isfile(vcxproj):
                 return {"success": False, "error": f"FluidX3D.vcxproj not found at {vcxproj}"}
             built_exe = os.path.join(f3d_path, "bin", "FluidX3D.exe")
-            cmd = (
-                f'call "{vcvars}" >nul && msbuild "{vcxproj}" /nologo '
-                f"/p:Configuration=Release /p:Platform=x64 /m"
-            )
+            cmd = f'call "{vcvars}" >nul && msbuild "{vcxproj}" /nologo /p:Configuration=Release /p:Platform=x64 /m'
             try:
                 proc = await asyncio.create_subprocess_shell(
                     cmd,
@@ -1232,7 +1317,10 @@ def register_fluidx3d_tools(
     @mcp.tool()
     async def cfd_fluidx3d_run(
         case_name: Annotated[str, Field(description="Case directory name.")],
-        gpu_device: Annotated[str, Field(description="OpenCL GPU device index (0 = auto) or device name substring for multi-GPU selection.")] = "0",
+        gpu_device: Annotated[
+            str,
+            Field(description="OpenCL GPU device index (0 = auto) or device name substring for multi-GPU selection."),
+        ] = "0",
         timeout_s: Annotated[int, Field(description="Maximum runtime in seconds.", ge=10)] = 3600,
     ) -> dict:
         """Run a compiled FluidX3D simulation on the GPU.
@@ -1303,6 +1391,7 @@ def register_fluidx3d_tools(
                     break
 
         import time
+
         t0 = time.time()
         log_path = os.path.join(case_dir, "run.log")
         proc: asyncio.subprocess.Process | None = None
@@ -1411,22 +1500,26 @@ def register_fluidx3d_tools(
         # Parse STEP lines: "STEP <N> F <Fx> <Fy> <Fz>"
         forces = []
         for match in re.finditer(r"STEP (\d+) F ([\d.e+\-]+) ([\d.e+\-]+) ([\d.e+\-]+)", content):
-            forces.append({
-                "step": int(match.group(1)),
-                "Fx": float(match.group(2)),
-                "Fy": float(match.group(3)),
-                "Fz": float(match.group(4)),
-            })
+            forces.append(
+                {
+                    "step": int(match.group(1)),
+                    "Fx": float(match.group(2)),
+                    "Fy": float(match.group(3)),
+                    "Fz": float(match.group(4)),
+                }
+            )
 
         # Parse OBJ_FORCE lines: "OBJ_FORCE <idx> Fx:<Fx> Fy:<Fy> Fz:<Fz>"
         object_forces = []
         for match in re.finditer(r"OBJ_FORCE (\d+) Fx:([\d.e+\-]+) Fy:([\d.e+\-]+) Fz:([\d.e+\-]+)", content):
-            object_forces.append({
-                "object_index": int(match.group(1)),
-                "Fx": float(match.group(2)),
-                "Fy": float(match.group(3)),
-                "Fz": float(match.group(4)),
-            })
+            object_forces.append(
+                {
+                    "object_index": int(match.group(1)),
+                    "Fx": float(match.group(2)),
+                    "Fy": float(match.group(3)),
+                    "Fz": float(match.group(4)),
+                }
+            )
 
         # Parse DONE line
         done_match = re.search(
@@ -1608,12 +1701,18 @@ def register_fluidx3d_tools(
                         vtk_files.append(os.path.join(export_dir, fn))
 
         if not vtk_files:
-            return {"success": False, "error": f"No VTK files found for case '{case_name}'. Run cfd_fluidx3d_run first."}
+            return {
+                "success": False,
+                "error": f"No VTK files found for case '{case_name}'. Run cfd_fluidx3d_run first.",
+            }
 
         # Use velocity VTK (FluidX3D writes u-*.vtk with SCALARS data float 3)
         vtk_path = _pick_velocity_vtk(vtk_files)
         if not vtk_path:
-            return {"success": False, "error": f"No VTK files found for case '{case_name}'. Run cfd_fluidx3d_run first."}
+            return {
+                "success": False,
+                "error": f"No VTK files found for case '{case_name}'. Run cfd_fluidx3d_run first.",
+            }
         vtk_name = os.path.basename(vtk_path)
 
         # Parse VTK structured grid velocity field
@@ -1648,9 +1747,10 @@ def register_fluidx3d_tools(
             data_start = _vtk_velocity_data_offset(content, vel_start)
 
             import struct
+
             total_cells = Nx * Ny * Nz
             try:
-                raw = content[data_start:data_start + total_cells * 3 * 4]
+                raw = content[data_start : data_start + total_cells * 3 * 4]
                 if len(raw) < total_cells * 3 * 4:
                     text = content[data_start:].decode("latin-1", errors="replace")
                     values = [float(x) for x in text.split()[: total_cells * 3]]
@@ -1660,10 +1760,13 @@ def register_fluidx3d_tools(
             except Exception:
                 # Best-effort ASCII fallback
                 text = content[data_start:].decode("latin-1", errors="replace")
-                values = [float(x) for x in text.split()[:total_cells * 3]]
+                values = [float(x) for x in text.split()[: total_cells * 3]]
 
             if len(values) < total_cells * 3:
-                return {"success": False, "error": f"Incomplete velocity data: got {len(values)} values, need {total_cells * 3}"}
+                return {
+                    "success": False,
+                    "error": f"Incomplete velocity data: got {len(values)} values, need {total_cells * 3}",
+                }
 
             # Build velocity grid
             vx = values[0::3]
@@ -1775,7 +1878,9 @@ def register_fluidx3d_tools(
                             elif line.startswith("l "):
                                 parts = line.strip().split()
                                 fout.write(f"l {int(parts[1]) + vertex_offset} {int(parts[2]) + vertex_offset}\n")
-                    vertex_offset += sum(1 for _ in open(obj)) - len([ln for ln in open(obj) if ln.startswith("l ")]) - 1
+                    vertex_offset += (
+                        sum(1 for _ in open(obj)) - len([ln for ln in open(obj) if ln.startswith("l ")]) - 1
+                    )
 
             csv_path = None
             if export_csv:
@@ -1793,8 +1898,12 @@ def register_fluidx3d_tools(
                     "n_streamlines": len(objs),
                     "vtk_source": vtk_name,
                     "bbox": {
-                        "xmin": bbox_min[0], "ymin": bbox_min[1], "zmin": bbox_min[2],
-                        "xmax": bbox_max[0], "ymax": bbox_max[1], "zmax": bbox_max[2],
+                        "xmin": bbox_min[0],
+                        "ymin": bbox_min[1],
+                        "zmin": bbox_min[2],
+                        "xmax": bbox_max[0],
+                        "ymax": bbox_max[1],
+                        "zmax": bbox_max[2],
                     },
                 },
             }

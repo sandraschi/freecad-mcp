@@ -107,7 +107,11 @@ async def run_live_chain(
     if run_gpu:
         compile_result = await call_freecad_tool(freecad_url, "cfd_fluidx3d_compile", {"case_name": case_name})
         steps.append(
-            {"name": "freecad_fluidx3d_compile", "success": bool(compile_result.get("success")), "detail": compile_result},
+            {
+                "name": "freecad_fluidx3d_compile",
+                "success": bool(compile_result.get("success")),
+                "detail": compile_result,
+            },
         )
         if compile_result.get("success"):
             run_result = await call_freecad_tool(

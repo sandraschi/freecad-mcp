@@ -1,0 +1,6 @@
+{
+  "name": "freecad-mcp",
+  "version": "0.5.0",
+  "description": "FreeCAD MCP server — CAD, BIM, CFD, FEM, 3D printing, and marketplace operations",
+  "hooks": "../hooks/hooks.json"
+}

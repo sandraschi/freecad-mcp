@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "text",
+            "text": "## Session Context (FreeCAD MCP)\n\nYou have access to 46+ FreeCAD CAD/CAM/CAE tools via MCP.\n\n**Before starting work:**\n1. Check FreeCAD availability: freecad_status()\n2. Check slicer status: slicer_status()\n\n**Capabilities:**\n- Core CAD: STEP/STL conversion, model info, shape creation\n- BIM: walls, slabs, columns, windows, doors, roofs, IFC import/export\n- CFD: OpenFOAM case building, solver, parametric studies, PINN sampling\n- FEM: CalculiX structural analysis, materials, constraints, meshing\n- FluidX3D: GPU CFD setup, compile, run, results\n- Slicing: PrusaSlicer G-code generation\n- Marketplace: Printables/Thingiverse/GrabCAD search and download\n- REST API at 127.0.0.1:10944\n- Webapp at 127.0.0.1:10945"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -597,7 +597,9 @@ except Exception as e:
     @mcp.tool()
     async def mesh_to_solid(
         file_name: Annotated[str, Field(description="STL filename in uploads/ or outputs/.")] = "",
-        output_name: Annotated[str, Field(default="", description="Output FCStd filename. Default: <input>_solid.fcstd.")] = "",
+        output_name: Annotated[
+            str, Field(default="", description="Output FCStd filename. Default: <input>_solid.fcstd.")
+        ] = "",
     ) -> dict:
         """Convert an STL mesh to a FreeCAD solid via MeshPart.meshFromShape().
 
@@ -625,7 +627,10 @@ except Exception as e:
         output_path = os.path.join(output_dir, out_name)
 
         if state.get("bridge_mode") != "tcp":
-            return {"success": False, "error": "mesh_to_solid requires TCP bridge (FreeCAD GUI mode). Launch freecad_gui first."}
+            return {
+                "success": False,
+                "error": "mesh_to_solid requires TCP bridge (FreeCAD GUI mode). Launch freecad_gui first.",
+            }
 
         resp = await bridge_send(
             "mesh_to_solid",

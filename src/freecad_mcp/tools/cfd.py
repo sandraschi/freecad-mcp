@@ -381,7 +381,9 @@ def register_cfd_tools(
 
         for exe in exes:
             try:
-                r = subprocess.run([exe, "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True, timeout=10)  # noqa: S603
+                r = subprocess.run(  # noqa: S603
+                    [exe, "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True, timeout=10
+                )
                 if r.returncode == 0 and r.stdout.strip():
                     return True, exe
             except FileNotFoundError:
@@ -396,7 +398,12 @@ def register_cfd_tools(
         import subprocess
 
         try:
-            r = subprocess.run([docker_exe, "images", "--format", "{{.Repository}}:{{.Tag}}"], capture_output=True, text=True, timeout=10)  # noqa: S603
+            r = subprocess.run(  # noqa: S603
+                [docker_exe, "images", "--format", "{{.Repository}}:{{.Tag}}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
             return "openfoam/openfoam" in r.stdout
         except Exception:
             return False
@@ -438,7 +445,9 @@ def register_cfd_tools(
 
     @mcp.tool()
     async def cfd_create_domain(
-        domain_type: Annotated[str, Field(description="Domain shape: box, pipe, channel, nozzle, airfoil, custom.")] = "channel",
+        domain_type: Annotated[
+            str, Field(description="Domain shape: box, pipe, channel, nozzle, airfoil, custom.")
+        ] = "channel",
         length_m: Annotated[float, Field(description="Domain length in metres.", ge=0.01)] = 1.0,
         width_m: Annotated[float, Field(description="Domain width in metres.", ge=0.001)] = 0.1,
         height_m: Annotated[float, Field(description="Domain height in metres.", ge=0.001)] = 0.05,
@@ -516,7 +525,7 @@ try:
     obj = doc.addObject("Part::Feature", "FluidDomain")
     obj.Shape = s
     doc.recompute()
-    Mesh.export([obj], r"{step_output.replace('.step', '.stl')}")
+    Mesh.export([obj], r"{step_output.replace(".step", ".stl")}")
     Part.export([obj], r"{step_output}")
     bbox = obj.Shape.BoundBox
     info = {{
@@ -547,16 +556,18 @@ except Exception as e:
 
         # Write blockMeshDict
         dims = [length_m, width_m, height_m]
-        vertices = "\n".join([
-            "    (0 0 0)",
-            f"    ({dims[0]:.6f} 0 0)",
-            f"    ({dims[0]:.6f} {dims[1]:.6f} 0)",
-            f"    (0 {dims[1]:.6f} 0)",
-            f"    (0 0 {dims[2]:.6f})",
-            f"    ({dims[0]:.6f} 0 {dims[2]:.6f})",
-            f"    ({dims[0]:.6f} {dims[1]:.6f} {dims[2]:.6f})",
-            f"    (0 {dims[1]:.6f} {dims[2]:.6f})",
-        ])
+        vertices = "\n".join(
+            [
+                "    (0 0 0)",
+                f"    ({dims[0]:.6f} 0 0)",
+                f"    ({dims[0]:.6f} {dims[1]:.6f} 0)",
+                f"    (0 {dims[1]:.6f} 0)",
+                f"    (0 0 {dims[2]:.6f})",
+                f"    ({dims[0]:.6f} 0 {dims[2]:.6f})",
+                f"    ({dims[0]:.6f} {dims[1]:.6f} {dims[2]:.6f})",
+                f"    (0 {dims[1]:.6f} {dims[2]:.6f})",
+            ]
+        )
 
         boundaries = """    inlet
     {
@@ -589,7 +600,9 @@ except Exception as e:
         blockmesh = _BLOCK_MESH_DICT.format(
             scale=1.0,
             vertices=vertices,
-            nx=nx, ny=ny, nz=nz,
+            nx=nx,
+            ny=ny,
+            nz=nz,
             boundaries=boundaries,
         )
         _write_foam_file(os.path.join(case_dir, "constant", "polyMesh", "blockMeshDict"), blockmesh)
@@ -616,13 +629,23 @@ except Exception as e:
     @mcp.tool()
     async def cfd_configure_physics(
         case_name: Annotated[str, Field(description="Case directory name (from cfd_create_domain).")],
-        solver: Annotated[str, Field(description="OpenFOAM solver: simpleFoam (steady), pisoFoam, pimpleFoam.")] = "simpleFoam",
+        solver: Annotated[
+            str, Field(description="OpenFOAM solver: simpleFoam (steady), pisoFoam, pimpleFoam.")
+        ] = "simpleFoam",
         flow_type: Annotated[str, Field(description="Flow model: laminar, kEpsilon, kOmegaSST.")] = "laminar",
-        fluid_nu: Annotated[float, Field(description="Kinematic viscosity in m^2/s. Water=1e-6, Air=1.5e-5.", ge=1e-10)] = 1e-6,
-        fluid_density: Annotated[float, Field(description="Fluid density in kg/m^3. Water=1000, Air=1.225.", ge=1e-6)] = 1000.0,
+        fluid_nu: Annotated[
+            float, Field(description="Kinematic viscosity in m^2/s. Water=1e-6, Air=1.5e-5.", ge=1e-10)
+        ] = 1e-6,
+        fluid_density: Annotated[
+            float, Field(description="Fluid density in kg/m^3. Water=1000, Air=1.225.", ge=1e-6)
+        ] = 1000.0,
         inlet_velocity: Annotated[float, Field(description="Inlet velocity magnitude in m/s.", ge=0)] = 1.0,
-        end_time: Annotated[float, Field(description="Simulation end time in seconds (steady=iteration count).", ge=1)] = 1000.0,
-        delta_t: Annotated[float, Field(description="Time step in seconds (steady solvers ignore this).", ge=1e-10)] = 1.0,
+        end_time: Annotated[
+            float, Field(description="Simulation end time in seconds (steady=iteration count).", ge=1)
+        ] = 1000.0,
+        delta_t: Annotated[
+            float, Field(description="Time step in seconds (steady solvers ignore this).", ge=1e-10)
+        ] = 1.0,
         write_interval: Annotated[int, Field(description="Write results every N time steps.", ge=1)] = 100,
     ) -> dict:
         """Configure physics models and solver settings for a CFD case.
@@ -714,8 +737,12 @@ except Exception as e:
         case_name: Annotated[str, Field(description="Case directory name.")],
         patch_name: Annotated[str, Field(description="Patch name: inlet, outlet, walls.")],
         field_name: Annotated[str, Field(description="Field to set: U, p, k, omega, nut, alphat.")],
-        bc_type: Annotated[str, Field(description="Boundary condition type (fixedValue, zeroGradient, inletOutlet, etc.).")] = "fixedValue",
-        value: Annotated[str, Field(description="Value as JSON string, e.g. 'uniform (1 0 0)' or 'uniform 0'.")] = "uniform (0 0 0)",
+        bc_type: Annotated[
+            str, Field(description="Boundary condition type (fixedValue, zeroGradient, inletOutlet, etc.).")
+        ] = "fixedValue",
+        value: Annotated[
+            str, Field(description="Value as JSON string, e.g. 'uniform (1 0 0)' or 'uniform 0'.")
+        ] = "uniform (0 0 0)",
     ) -> dict:
         """Configure boundary conditions for a specific patch and field.
 
@@ -872,7 +899,9 @@ boundaryField
     @mcp.tool()
     async def cfd_run_solver(
         case_name: Annotated[str, Field(description="Case directory name.")],
-        steps: Annotated[str, Field(description="Comma-separated solver steps: blockMesh,checkMesh,simpleFoam (or pisoFoam).")] = "blockMesh,checkMesh,simpleFoam",
+        steps: Annotated[
+            str, Field(description="Comma-separated solver steps: blockMesh,checkMesh,simpleFoam (or pisoFoam).")
+        ] = "blockMesh,checkMesh,simpleFoam",
         parallel: Annotated[bool, Field(description="Use parallel decomposition (requires decomposeParDict).")] = False,
         n_cores: Annotated[int, Field(description="Number of CPU cores for parallel run.", ge=1, le=64)] = 4,
     ) -> dict:
@@ -930,10 +959,29 @@ boundaryField
         for step in step_list:
             if parallel and step in ("simpleFoam", "pisoFoam", "pimpleFoam"):
                 decompose_cmd = f"decomposePar && mpirun -np {n_cores} {step} -parallel && reconstructPar"
-                cmd_parts = [docker_exe, "run", "--rm", "-v", f"{win_path}:{docker_mount}", "--workdir", docker_mount, "openfoam/openfoam10-paraview56"]
+                cmd_parts = [
+                    docker_exe,
+                    "run",
+                    "--rm",
+                    "-v",
+                    f"{win_path}:{docker_mount}",
+                    "--workdir",
+                    docker_mount,
+                    "openfoam/openfoam10-paraview56",
+                ]
                 cmd_parts.extend(["bash", "-c", decompose_cmd])
             else:
-                cmd_parts = [docker_exe, "run", "--rm", "-v", f"{win_path}:{docker_mount}", "--workdir", docker_mount, "openfoam/openfoam10-paraview56", step]
+                cmd_parts = [
+                    docker_exe,
+                    "run",
+                    "--rm",
+                    "-v",
+                    f"{win_path}:{docker_mount}",
+                    "--workdir",
+                    docker_mount,
+                    "openfoam/openfoam10-paraview56",
+                    step,
+                ]
 
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -1068,9 +1116,13 @@ boundaryField
     @mcp.tool()
     async def cfd_parametric_study(
         case_name: Annotated[str, Field(description="Base case name (will be suffixed _0, _1, ...).")],
-        parameter: Annotated[str, Field(description="Parameter to vary: inlet_velocity, length, width, height, fluid_nu, angle.")],
+        parameter: Annotated[
+            str, Field(description="Parameter to vary: inlet_velocity, length, width, height, fluid_nu, angle.")
+        ],
         values: Annotated[str, Field(description="JSON array of parameter values, e.g. '[0.5, 1.0, 1.5, 2.0]'.")],
-        run: Annotated[bool, Field(description="Execute each case (requires Docker/OpenFOAM). If false, only generates cases.")] = False,
+        run: Annotated[
+            bool, Field(description="Execute each case (requires Docker/OpenFOAM). If false, only generates cases.")
+        ] = False,
     ) -> dict:
         """Run a parametric sweep varying one design parameter.
 
@@ -1149,11 +1201,28 @@ boundaryField
 
     @mcp.tool()
     async def cfd_nl2foam(
-        description: Annotated[str, Field(description="Natural language description of the CFD problem. Include flow regime, geometry, boundary conditions, and goals.")],
+        description: Annotated[
+            str,
+            Field(
+                description="Natural language description of the CFD problem. Include flow regime, geometry, boundary conditions, and goals."
+            ),
+        ],
         case_name: Annotated[str, Field(description="Target case directory name.")] = "nl2foam_case",
-        model: Annotated[str, Field(description="LLM model name. For Ollama: gemma3:1b, llama3. For OpenAI-compatible: gpt-4o, deepseek-chat, etc.")] = "gemma3:1b",
-        api_url: Annotated[str, Field(description="OpenAI-compatible API endpoint (e.g. https://api.openai.com). If empty, uses the configured Ollama instance.")] = "",
-        api_key: Annotated[str, Field(description="API key for the OpenAI-compatible endpoint. Only needed when api_url is set.")] = "",
+        model: Annotated[
+            str,
+            Field(
+                description="LLM model name. For Ollama: gemma3:1b, llama3. For OpenAI-compatible: gpt-4o, deepseek-chat, etc."
+            ),
+        ] = "gemma3:1b",
+        api_url: Annotated[
+            str,
+            Field(
+                description="OpenAI-compatible API endpoint (e.g. https://api.openai.com). If empty, uses the configured Ollama instance."
+            ),
+        ] = "",
+        api_key: Annotated[
+            str, Field(description="API key for the OpenAI-compatible endpoint. Only needed when api_url is set.")
+        ] = "",
     ) -> dict:
         """Convert a natural language fluid dynamics description into an OpenFOAM case configuration.
 
@@ -1219,7 +1288,10 @@ boundaryField
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Problem description: {description}\n\nReturn ONLY valid JSON with this structure:\n{schema_json}"},
+                    {
+                        "role": "user",
+                        "content": f"Problem description: {description}\n\nReturn ONLY valid JSON with this structure:\n{schema_json}",
+                    },
                 ],
             }
 
@@ -1279,7 +1351,7 @@ Return ONLY valid JSON (no markdown, no explanation) with this structure:
 
         inlet = cfg.get("inlet", {})
         vel = inlet.get("velocity", [1, 0, 0])
-        inlet_vel_mag = (vel[0]**2 + vel[1]**2 + vel[2]**2) ** 0.5
+        inlet_vel_mag = (vel[0] ** 2 + vel[1] ** 2 + vel[2] ** 2) ** 0.5
 
         # Generate case
         await cfd_create_domain(
@@ -1350,7 +1422,10 @@ Return ONLY valid JSON (no markdown, no explanation) with this structure:
         step_file = os.path.join(case_dir, "geometry.step")
         stl_file = step_file.replace(".step", ".stl")
         if not os.path.isfile(step_file) and not os.path.isfile(stl_file):
-            return {"success": False, "error": "No geometry file (STEP/STL) found in case directory. Run cfd_create_domain first."}
+            return {
+                "success": False,
+                "error": "No geometry file (STEP/STL) found in case directory. Run cfd_create_domain first.",
+            }
 
         geom_file = step_file if os.path.isfile(step_file) else stl_file
 
@@ -1447,12 +1522,16 @@ except Exception as e:
             np_file = os.path.join(case_dir, "pinn_points.npz")
             try:
                 import numpy as np
+
                 arr = np.array([[p["x"], p["y"], p["z"]] for p in points], dtype=np.float32)
                 regions = np.array([0 if p["region"] == "interior" else 1 for p in points], dtype=np.int8)
                 np.savez_compressed(np_file, coords=arr, regions=regions)
                 output_file = np_file
             except ImportError:
-                return {"success": False, "error": "numpy not available in the server environment. Use csv or json format."}
+                return {
+                    "success": False,
+                    "error": "numpy not available in the server environment. Use csv or json format.",
+                }
 
         return {
             "success": True,
