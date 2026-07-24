@@ -15,23 +15,26 @@ from pathlib import Path
 
 try:
     from PIL import Image, ImageDraw
+
     HAS_PIL = True
 except ImportError:
     HAS_PIL = False
 
 
 def _find_ffmpeg() -> str | None:
-    """Locate ffmpeg executable."""
+    """Locate ffmpeg executable on PATH or known install paths."""
     candidates = [
         "ffmpeg",
         r"C:\ProgramData\chocolatey\bin\ffmpeg.exe",
         r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
         str(Path.home() / "scoop" / "shims" / "ffmpeg.exe"),
-        r"C:\Users\sandr\scoop\shims\ffmpeg.exe",
+        str(Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe"),
         "/usr/bin/ffmpeg",
         "/usr/local/bin/ffmpeg",
     ]
     for c in candidates:
+        if not c:
+            continue
         try:
             r = subprocess.run([c, "-version"], capture_output=True, text=True, timeout=5)  # noqa: S603
             if r.returncode == 0:
@@ -39,6 +42,93 @@ def _find_ffmpeg() -> str | None:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
     return None
+
+
+_WARNED_FFMPEG = False
+
+
+def _ensure_ffmpeg(install: bool = True) -> tuple[str | None, str]:
+    """Find or auto-install ffmpeg.
+
+    Returns (path_or_none, message) where message is a user-facing string
+    with remediation instructions if installation fails.
+    """
+    global _WARNED_FFMPEG
+    existing = _find_ffmpeg()
+    if existing:
+        return existing, ""
+
+    if not install:
+        return None, "ffmpeg not found. Install with: winget install ffmpeg"
+
+    # Auto-install via winget (Windows)
+    if os.name == "nt":
+        try:
+            r = subprocess.run(  # noqa: S603,S607
+                ["winget", "install", "ffmpeg", "--accept-package-agreements", "--silent"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if r.returncode == 0:
+                found = _find_ffmpeg()
+                if found:
+                    return found, ""
+                # winget may need PATH refresh
+                os.environ["PATH"] = os.pathsep.join(
+                    filter(
+                        None,
+                        [
+                            os.environ.get("PATH", ""),
+                            str(Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links"),
+                        ],
+                    )
+                )
+                found = _find_ffmpeg()
+                if found:
+                    return found, ""
+                return (
+                    None,
+                    "ffmpeg: winget install completed but binary not on PATH. Restart your terminal or add WinGet\\Links to PATH manually.",
+                )
+            return None, (f"ffmpeg: winget install failed (exit {r.returncode}). Manual fix: winget install ffmpeg")
+        except FileNotFoundError:
+            if not _WARNED_FFMPEG:
+                _WARNED_FFMPEG = True
+            return None, (
+                "ffmpeg: winget not available. Install manually:\n"
+                "  Option A: winget install ffmpeg  (if winget is available)\n"
+                "  Option B: choco install ffmpeg    (Chocolatey)\n"
+                "  Option C: scoop install ffmpeg    (Scoop)\n"
+                "  Option D: Download from https://ffmpeg.org/download.html\n"
+                "    Extract to a folder and add to PATH."
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                None,
+                "ffmpeg: winget install timed out. Check your internet connection and try: winget install ffmpeg",
+            )
+
+    # macOS / Linux
+    for pm, cmd in [("brew", ["brew", "install", "ffmpeg"]), ("apt", ["sudo", "apt", "install", "-y", "ffmpeg"])]:
+        try:
+            r = subprocess.run(["which", pm], capture_output=True, text=True, timeout=5)  # noqa: S603,S607
+            if r.returncode == 0:
+                r2 = subprocess.run(cmd, capture_output=True, text=True, timeout=120)  # noqa: S603
+                if r2.returncode == 0 and _find_ffmpeg():
+                    return _find_ffmpeg(), ""
+                return None, f"{pm} install ffmpeg completed but binary not found. Try: {pm} install ffmpeg"
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+
+    return None, (
+        "ffmpeg not found and could not be auto-installed.\n"
+        "Install manually:\n"
+        "  Windows: winget install ffmpeg\n"
+        "  macOS:   brew install ffmpeg\n"
+        "  Linux:   sudo apt install ffmpeg\n"
+        "  Or download from https://ffmpeg.org/download.html"
+    )
 
 
 def parse_vtk_structured_points(path: str) -> dict:
@@ -92,20 +182,20 @@ def parse_vtk_structured_points(path: str) -> dict:
     if is_ascii:
         text = raw[data_start:].decode("latin-1", errors="replace")
         tokens = text.split()
-        for t in tokens[:total_cells * 3]:
+        for t in tokens[: total_cells * 3]:
             try:
                 values.append(float(t))
             except ValueError:
                 break
     else:
-        raw_data = raw[data_start:data_start + total_cells * 3 * 4]
+        raw_data = raw[data_start : data_start + total_cells * 3 * 4]
         if len(raw_data) >= total_cells * 3 * 4:
-            values = list(struct.unpack(f">{total_cells * 3}f", raw_data[:total_cells * 3 * 4]))
+            values = list(struct.unpack(f">{total_cells * 3}f", raw_data[: total_cells * 3 * 4]))
         else:
             # Fallback to ASCII read
             text = raw[data_start:].decode("latin-1", errors="replace")
             tokens = text.split()
-            for t in tokens[:total_cells * 3]:
+            for t in tokens[: total_cells * 3]:
                 try:
                     values.append(float(t))
                 except ValueError:
@@ -233,11 +323,27 @@ def render_video(
         dict with success, output_path, frame_count, duration_s
     """
     if not HAS_PIL:
-        return {"success": False, "error": "Pillow required for rendering"}
+        # Auto-install Pillow
+        try:
+            r = subprocess.run(["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60)  # noqa: S603,S607
+            if r.returncode == 0:
+                globals()["HAS_PIL"] = True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        if not HAS_PIL:
+            return {
+                "success": False,
+                "error": (
+                    "Pillow (PIL) not installed. Auto-install failed.\n"
+                    "Run: uv pip install Pillow\n"
+                    "Or: pip install Pillow\n"
+                    "This is a Python imaging library needed to render VTK frames to PNG."
+                ),
+            }
 
-    ffmpeg = _find_ffmpeg()
+    ffmpeg, msg = _ensure_ffmpeg(install=True)
     if not ffmpeg:
-        return {"success": False, "error": "ffmpeg not found"}
+        return {"success": False, "error": msg}
 
     frames_dir = os.path.join(case_dir, "_frames")
     os.makedirs(frames_dir, exist_ok=True)
@@ -262,6 +368,7 @@ def render_video(
             frame_paths.append(frame_path)
         except Exception as e:
             import logging
+
             logging.getLogger("vtk_renderer").warning("Skip VTK %s: %s", vtk_path, e)
 
     if not frame_paths:
@@ -270,12 +377,20 @@ def render_video(
     # Stitch with ffmpeg
     input_pattern = os.path.join(frames_dir, "frame_%04d.png")
     cmd = [
-        ffmpeg, "-y", "-framerate", str(fps),
-        "-i", input_pattern,
-        "-c:v", "libvpx-vp9" if output_path.endswith(".webm") else "libx264",
-        "-crf", str(quality),
-        "-b:v", "0",
-        "-pix_fmt", "yuv420p",
+        ffmpeg,
+        "-y",
+        "-framerate",
+        str(fps),
+        "-i",
+        input_pattern,
+        "-c:v",
+        "libvpx-vp9" if output_path.endswith(".webm") else "libx264",
+        "-crf",
+        str(quality),
+        "-b:v",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
         output_path,
     ]
 
