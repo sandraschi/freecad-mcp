@@ -140,25 +140,55 @@ player that auto-loads the rendered video.
 
 ---
 
-## 4. ParaView (Professional Post-Processing)
+## 4. ParaView — "CFD to the Max"
 
-[ParaView](https://www.paraview.org/) is the standard desktop tool for scientific
-visualization. Open VTK files directly:
+[ParaView](https://www.paraview.org/) is an open-source scientific visualization
+workstation (500 MB). Think "Photoshop for CFD data." **You don't need it** —
+our `cfd_fluidx3d_render` already produces video and PNG from VTK files, and
+`cfd_fluidx3d_export_for_render` produces OBJ streamlines for game engines.
 
-1. **File → Open** → select `.vtk` files (Ctrl+A for time series)
-2. **Apply** in Properties
-3. Use filters: Slice, Stream Tracer, Contour, Glyph, Volume Render
+But for power users who want full control, ParaView adds:
 
-ParaView supports the full VTK pipeline: slices, streamlines, iso-surfaces,
-volume rendering, animations, data export. See section 2 of the previous version
-of this guide for detailed ParaView workflows.
+| You want to... | Built-in `cfd_fluidx3d_render` | ParaView |
+|----------------|--------------------------------|----------|
+| See a heatmap video | ✅ One-click `cfd_fluidx3d_render` | Manual setup |
+| Slice at any angle | ❌ Only XY mid-plane | ✅ Any plane, any position, animated sweep |
+| Streamlines from arbitrary seed points | ❌ Fixed inlet seeds | ✅ Seeds from line, plane, point — any location |
+| Vortex / Q-criterion iso-surfaces | ❌ Not available | ✅ Contour filter on calculated Q field |
+| Volume rendering (3D semi-transparent) | ❌ 2D slice only | ✅ GPU volume rendering, rotate in real-time |
+| Probe values at exact coordinates | ❌ Not available | ✅ Plot Over Line, Plot Over Time |
+| Compare multiple simulations side-by-side | ❌ One case at a time | ✅ Open multiple VTK files, link views |
+| Export publication-quality renders | ❌ 800x600 PNG max | ✅ Up to 8K, transparent background, annotation |
+| Script automation (pvpython) | ❌ Not available | ✅ Full Python scripting for batch rendering |
 
-### Vorticity & Q-Criterion
+### Auto-install (optional)
 
-To replicate FluidX3D's Q-criterion view in ParaView:
-1. Apply **Gradient** filter to velocity
-2. **Calculator**: `Q = -0.5 * (dU_dx^2 + dV_dy^2 + dW_dz^2 + 2*dU_dy*dV_dx + 2*dU_dz*dW_dx + 2*dV_dz*dW_dy)`
-3. Apply **Contour** on Q at small positive isovalue
+```powershell
+# One command — 500 MB download
+winget install Kitware.ParaView
+```
+
+After install, VTK files are double-clickable from the case directory:
+
+### Vorticity & Q-Criterion (example ParaView workflow)
+
+To replicate FluidX3D's Q-criterion view:
+1. **File → Open** → select `.vtk` files (Ctrl+A for time series) → **Apply**
+2. Filter → **Gradient** on velocity field
+3. Filter → **Calculator**: `Q = -0.5 * (dU_dx^2 + dV_dy^2 + dW_dz^2 + 2*dU_dy*dV_dx + 2*dU_dz*dW_dx + 2*dV_dz*dW_dy)`
+4. Filter → **Contour** on Q at isovalue 0.01 (positive = vortex)
+5. Color by velocity magnitude
+6. **File → Save Animation** for video export
+
+### Loading FluidX3D VTK files
+
+```text
+1. Open ParaView
+2. File → Open → navigate to %TEMP%\fluidx3d\bin\export\ or case directory
+3. Select all .vtk files → Open
+4. Click Apply in the Properties panel
+5. ParaView auto-detects the structured grid and velocity fields
+```
 
 ---
 
@@ -191,7 +221,7 @@ Requires building vtk.js into the webapp bundle — not currently integrated.
 | **LBM** | Lattice Boltzmann Method | The math FluidX3D uses to simulate fluids. Instead of solving the Navier-Stokes equations directly, LBM simulates particle distributions bouncing between grid cells. Parallelizes beautifully on GPUs. |
 | **MLUPS** | Million Lattice Updates Per Second | How fast the simulation runs. Higher = faster. RTX 4090 does ~200-500 MLUPS depending on grid size. |
 | **OpenCL** | Open Computing Language | The GPU programming framework FluidX3D uses. Works on NVIDIA, AMD, Intel, Apple Silicon — any GPU from any vendor. |
-| **ParaView** | Professional visualization tool | Like Photoshop, but for scientific simulation data. Opens VTK files and lets you create slices, streamlines, volume renders, animations. |
+| **ParaView** | Professional scientific visualization | Like Photoshop for CFD data. 500 MB open-source desktop app. Optional — our render pipeline produces video/PNG/OBJ without it. Install: `winget install Kitware.ParaView` |
 
 ---
 
@@ -205,7 +235,7 @@ Requires building vtk.js into the webapp bundle — not currently integrated.
 | Import flow into a game engine | `cfd_fluidx3d_export_for_render` | OBJ streamlines | Unity, Godot, Blender, Resonite |
 | Import into VR (Resonite) | `cfd_fluidx3d_export_for_render` | OBJ streamlines | Resonite MeshRenderer |
 | Train a neural network | `cfd_fluidx3d_export_for_render` with `export_csv=True` | CSV point cloud | Python, PyTorch, TensorFlow |
-| Professional post-processing | Manual (download VTK) | VTK files | ParaView |
+| Professional post-processing (vortices, volume rendering, publication) | Manual: download VTK or `winget install Kitware.ParaView` | VTK files | ParaView |
 | Live monitoring during sim | Enables `INTERACTIVE_GRAPHICS` | GPU window | FluidX3D built-in renderer |
 
 All output files are served via the REST API:

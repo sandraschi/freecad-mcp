@@ -60,7 +60,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | | |
 |--:|--|
 | **Example use cases** | "What's inside this STEP file?" — "Convert this assembly to 3D-printable STL" — "Design a room with two windows and a door" — "Simulate water flow through this pipe at 2 m/s" — "Find me a gear on Printables and slice it for my MK4" — "Train a neural network to predict airflow instead of running the full simulation every time" — "Browse my persistent CAD depot, create a test bracket, rename and tag it" |
-| **What it connects to** | FreeCAD 1.1.1+ (the CAD engine), OpenFOAM 10 via Docker (fluid simulation), FluidX3D via OpenCL (GPU-accelerated simulation), PrusaSlicer 2.8+ (3D printing), Ollama (local LLM), Printables / Thingiverse / GrabCAD (model search) |
+| **What it connects to** | FreeCAD 1.1.1+ (the CAD engine), OpenFOAM 10 via Docker (fluid simulation), FluidX3D via OpenCL (GPU-accelerated simulation), PrusaSlicer 2.8+ (3D printing), Ollama (local LLM), Printables / Thingiverse / GrabCAD (model search). **ParaView** (optional, for professional CFD viz): `winget install Kitware.ParaView` |
 | **Ports** | **10944** = MCP server (AI agents), **10945** = web dashboard (humans), **10946** = FreeCAD bridge (internal) |
 | **Start** | `just bootstrap` then `start.ps1` |
 

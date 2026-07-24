@@ -110,6 +110,10 @@ fleet-e2e-chain-gpu:
 test-integration:
     uv run pytest -m integration
 
+# Install ParaView for professional CFD visualization (optional, ~500 MB)
+install-paraview:
+    winget install Kitware.ParaView
+
 # Run all verification gates (lint + typecheck + tests)
 gates-green:
     uv run ruff check src/ --quiet

@@ -618,9 +618,13 @@ function Visualization() {
         ))}
       </div>
 
-      <h3 className="text-white font-bold mt-6">Professional Post-Processing (ParaView)</h3>
-      <p>For publication-quality rendering: download VTK files from <code className="text-indigo-400">GET /api/v1/case-files/{'{case_name}'}/{'{filename}'}</code> and open in <a href="https://www.paraview.org" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">ParaView</a>. Supports slices, contours, streamlines, volume rendering, and animation export.</p>
-      <p className="text-xs text-slate-500 mt-2">See <code className="text-indigo-400">docs/flow-visualization.md</code> for the full reference.</p>
+      <h3 className="text-white font-bold mt-6">ParaView — "CFD to the Max" (Optional)</h3>
+      <p><a href="https://www.paraview.org" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">ParaView</a> is a free 500 MB desktop app for scientific visualization. <strong className="text-slate-200">You don't need it</strong> — our built-in render produces video/PNG/OBJ. But if you want vorticity iso-surfaces, volume rendering, arbitrary slices, or publication-quality output, ParaView is the tool.</p>
+      <div className="flex items-center gap-2 p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20 mt-2">
+        <span className="text-indigo-400 font-mono text-xs">winget install Kitware.ParaView</span>
+        <span className="text-xs text-slate-500">— one command, auto-installs ParaView with all dependencies</span>
+      </div>
+      <p className="text-xs text-slate-500 mt-2">See <code className="text-indigo-400">docs/flow-visualization.md</code> for the full reference and workflow comparison table.</p>
     </>
   );
 }
