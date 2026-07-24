@@ -213,6 +213,33 @@ export default function Fluidx3dPage() {
                 <li>• Free for non-commercial use, 5k+ GitHub stars, active maintenance</li>
               </ul>
             </div>
+
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <p className="text-sm font-medium text-amber-300 mb-2">OpenFOAM vs FluidX3D — When to Use Which?</p>
+              <p className="text-xs text-slate-400 mb-2">Both are available in this server. OpenFOAM runs on CPU inside Docker (GPU is idle). FluidX3D runs on GPU via OpenCL.</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 bg-black/20 rounded-lg">
+                  <p className="text-amber-400 font-bold mb-1">Pick OpenFOAM when:</p>
+                  <ul className="text-slate-500 space-y-0.5">
+                    <li>• Complex geometry (not a simple channel/pipe)</li>
+                    <li>• Need kEpsilon, kOmegaSST, LES turbulence models</li>
+                    <li>• Multiphase (VOF) or heat transfer</li>
+                    <li>• Industry-standard validation required</li>
+                    <li>• You already have Docker set up</li>
+                  </ul>
+                </div>
+                <div className="p-2 bg-black/20 rounded-lg">
+                  <p className="text-emerald-400 font-bold mb-1">Pick FluidX3D when:</p>
+                  <ul className="text-slate-500 space-y-0.5">
+                    <li>• Geometry fits a Cartesian grid</li>
+                    <li>• Fast iteration / design exploration</li>
+                    <li>• You have a GPU (RTX 4090, AMD, Apple Silicon)</li>
+                    <li>• Millisecond-per-timestep throughput</li>
+                    <li>• Want automatic video/streamline output</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

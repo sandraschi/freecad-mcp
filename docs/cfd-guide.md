@@ -1,8 +1,29 @@
 # FreeCAD MCP — CFD Pipeline Guide
 
-**Computational Fluid Dynamics with FreeCAD + OpenFOAM + AI.**
+**Computational Fluid Dynamics with FreeCAD + OpenFOAM (CPU) + FluidX3D (GPU).**
 
-This guide covers the full Geometry-Mesh-Simulation-Analysis (GMSA) pipeline: parametric CAD in FreeCAD, hexahedral mesh generation via blockMesh, OpenFOAM solver execution through Docker, results parsing, headless parametric sweeps for design optimization, LLM-driven NL2FOAM configuration, and point cloud sampling for Physics-Informed Neural Networks (PINNs).
+This guide covers two CFD solvers that serve different jobs:
+
+| | OpenFOAM | FluidX3D |
+|---|---|---|
+| **Hardware** | CPU (Docker) — GPU is idle | GPU (OpenCL) — any vendor |
+| **Mesh** | Complex (structured + unstructured) | Simple (Cartesian, voxelized STL) |
+| **Turbulence** | kEpsilon, kOmegaSST, LES, DES, Spalart-Allmaras | Smagorinsky-Lilly subgrid |
+| **Multiphase** | VOF, Euler-Euler, reacting | Free surface LBM |
+| **Speed** | Minutes to hours per solve | Milliseconds per timestep (MLUPS) |
+| **Validation** | 30+ years, industry standard | Research-grade, active development |
+| **Geometry** | Any CAD | Simple channels/pipes or voxelized STL |
+| **Auto-installs?** | No (needs Docker + 2GB image) | Yes (clones to %TEMP%) |
+| **Output** | OpenFOAM results (forces, residuals) | Video (WebM), OBJ streamlines, PNG heatmap |
+
+**OpenFOAM = complex physics, complex mesh, slow, CPU.**  
+**FluidX3D = fast iteration, simple geometry, GPU, automatic video.**
+
+Use OpenFOAM when you need fidelity or have complex geometry. Use FluidX3D when you have a GPU and the problem fits a Cartesian grid.
+
+---
+
+The OpenFOAM pipeline covers: parametric CAD in FreeCAD, hexahedral mesh generation via blockMesh, solver execution through Docker, results parsing, headless parametric sweeps for design optimization, LLM-driven NL2FOAM configuration, and point cloud sampling for Physics-Informed Neural Networks (PINNs).
 
 ---
 

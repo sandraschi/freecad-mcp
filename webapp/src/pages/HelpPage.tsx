@@ -376,9 +376,24 @@ function Printing() {
 function CfdHelp() {
   return (
     <>
-      <p><strong className="text-slate-200">Computational Fluid Dynamics</strong> pipeline — FreeCAD geometry → OpenFOAM solver → AI-driven analysis. Requires Docker with <code className="text-indigo-400">openfoam/openfoam10-paraview56</code> image for solver execution. Case generation works without Docker.</p>
+      <p><strong className="text-slate-200">Computational Fluid Dynamics</strong> — two solvers, different jobs:</p>
 
-      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">Installation</h3>
+      <div className="grid grid-cols-2 gap-3 mt-2">
+        <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+          <p className="text-amber-400 font-bold text-xs uppercase">OpenFOAM (CPU)</p>
+          <p className="text-xs text-slate-400 mt-1">Complex geometry, full turbulence models, multiphase, heat transfer, 30-year industry standard. Runs in Docker — your GPU sits idle. Use when you need fidelity or have complex meshes.</p>
+        </div>
+        <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+          <p className="text-emerald-400 font-bold text-xs uppercase">FluidX3D (GPU)</p>
+          <p className="text-xs text-slate-400 mt-1">Cartesian grids only, millisecond timesteps, any GPU (NVIDIA, AMD, Intel, Apple Silicon). Auto-installs, produces video/OBJ/PNG output. Use when you have a GPU and the geometry fits a uniform grid.</p>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-2 p-3 bg-indigo-500/10 rounded-xl mt-2">
+        <span className="text-indigo-400 text-xs">Tip: OpenFOAM runs on CPU (Docker ignores your GPU). FluidX3D uses your GPU directly via OpenCL. If you have an RTX 4090 and simple geometry, FluidX3D will be 100-1000x faster per timestep.</span>
+      </div>
+
+      <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">OpenFOAM Installation</h3>
       <div className="bg-black/30 rounded-xl p-4 font-mono text-xs space-y-1">
         <div className="text-slate-600"># 1. Install Docker Desktop for Windows</div>
         <div className="text-slate-600"># 2. Pull the OpenFOAM image (one-time, ~2 GB)</div>
@@ -468,7 +483,7 @@ function CfdHelp() {
 function OpenfoamHelp() {
   return (
     <>
-      <p><strong className="text-slate-200">OpenFOAM</strong> is the industry-standard CPU CFD toolkit (finite-volume, MPI-parallel). For GPU-accelerated CFD, the free solver of choice is <a href="https://github.com/ProjectPhysX/FluidX3D" target="_blank" className="text-indigo-400 hover:underline">FluidX3D</a> (5k stars, OpenCL — runs on NVIDIA, AMD, Intel Arc, and Apple Silicon). The MCP server runs OpenFOAM via Docker; FluidX3D integration is planned.</p>
+      <p><strong className="text-slate-200">OpenFOAM</strong> is the industry-standard CPU CFD toolkit (finite-volume, MPI-parallel). It runs inside Docker — <strong className="text-slate-300">your GPU is not used during OpenFOAM solves</strong>. For GPU-native CFD, use <a href="https://github.com/ProjectPhysX/FluidX3D" target="_blank" className="text-indigo-400 hover:underline">FluidX3D</a> (OpenCL, any GPU).</p>
 
       <h3 className="text-slate-200 font-bold text-xs uppercase tracking-wider mt-4">GPU: Real Options (2026)</h3>
       <div className="space-y-2">
