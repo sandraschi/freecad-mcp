@@ -91,7 +91,13 @@ _bridge_proc: subprocess.Popen | None = None
 _bridge_reader: asyncio.StreamReader | None = None
 _bridge_writer: asyncio.StreamWriter | None = None
 
-_llm_settings = {"ollama_url": "http://192.168.1.11:11434", "model": "gemma3:1b", "api_url": "", "api_key": ""}
+_llm_settings = {
+    "provider": "ollama",
+    "ollama_url": "http://127.0.0.1:11434",
+    "model": "gemma3:1b",
+    "api_url": "",
+    "api_key": "",
+}
 _marketplace_settings = {
     "thingiverse_api_key": os.environ.get("THINGIVERSE_API_KEY", ""),
     "grabcad_api_key": os.environ.get("GRABCAD_API_KEY", ""),
@@ -884,7 +890,9 @@ async def _sampling_tool(
 
 @mcp.tool(version="0.5.0")
 async def freecad_design_loop(
-    goal: Annotated[str, Field(description="Engineering design goal, e.g. 'design a lightweight bracket for 500N load'")],
+    goal: Annotated[
+        str, Field(description="Engineering design goal, e.g. 'design a lightweight bracket for 500N load'")
+    ],
     max_iterations: Annotated[int, Field(default=5, description="Max design iterations.", ge=1, le=20)] = 5,
     ctx: Context = None,
 ) -> dict:
@@ -2089,6 +2097,90 @@ async def fluidx3d_websocket(websocket: WebSocket, case_name: str):
             pass
 
 
+# ── LLM Provider Discovery ───────────────────────────────────────────────────
+
+
+DETECTED_PROVIDERS: dict = {}
+_PROBE_LOCK = asyncio.Lock()
+
+
+async def _probe_provider(name: str, base_url: str, endpoint: str, timeout: float = 3.0) -> dict | None:
+    """Probe a provider endpoint and return result."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as c:
+            r = await c.get(f"{base_url}{endpoint}")
+            if r.status_code == 200:
+                return {"name": name, "base": base_url, "port": int(base_url.split(":")[-1])}
+    except Exception:
+        pass
+    return None
+
+
+async def _discover_providers(refresh: bool = False) -> dict:
+    """Probe all known LLM providers in parallel."""
+    if DETECTED_PROVIDERS and not refresh:
+        return DETECTED_PROVIDERS
+
+    async with _PROBE_LOCK:
+        probes = {
+            "ollama": ("http://127.0.0.1:11434", "/api/tags"),
+            "lm_studio": ("http://127.0.0.1:1234", "/v1/models"),
+            "vllm": ("http://127.0.0.1:8000", "/v1/models"),
+        }
+        results = await asyncio.gather(
+            *[_probe_provider(name, base, ep) for name, (base, ep) in probes.items()],
+            return_exceptions=True,
+        )
+        detected = {k: v for k, v in zip(probes.keys(), results) if v and not isinstance(v, Exception)}
+        DETECTED_PROVIDERS.clear()
+        DETECTED_PROVIDERS.update(detected)
+    return DETECTED_PROVIDERS
+
+
+@app.get("/api/llm/discover")
+async def llm_discover(refresh: bool = False):
+    """Discover local LLM providers (Ollama, LM Studio, vLLM).
+
+    Returns detected providers and available models for each.
+    """
+    providers = await _discover_providers(refresh=refresh)
+    result = {"providers": [], "status": {}}
+    for name, info in providers.items():
+        base = info["base"]
+        models = []
+        try:
+            if name == "ollama":
+                async with httpx.AsyncClient(timeout=2.0) as c:
+                    r = await c.get(f"{base}/api/tags")
+                    if r.status_code == 200:
+                        models = [m["name"] for m in r.json().get("models", [])]
+            else:
+                async with httpx.AsyncClient(timeout=2.0) as c:
+                    r = await c.get(f"{base}/v1/models")
+                    if r.status_code == 200:
+                        models = [m["id"] if isinstance(m, dict) else m for m in r.json().get("data", [])]
+        except Exception:
+            pass
+        result["providers"].append({"name": name, "base": base, "models": models, "status": "detected"})
+        result["status"][name] = "detected"
+
+    # Mark undetected providers
+    for name in ["ollama", "lm_studio", "vllm"]:
+        if name not in providers:
+            result["status"][name] = "not_found"
+            result["providers"].append({"name": name, "base": "", "models": [], "status": "not_found"})
+
+    # Determine selected provider
+    stored_provider = _llm_settings.get("provider", "ollama")
+    stored_model = _llm_settings.get("model", "gemma3:1b")
+    result["selected_provider"] = (
+        stored_provider if stored_provider in providers else (next(iter(providers)) if providers else "ollama")
+    )
+    result["selected_model"] = stored_model
+
+    return result
+
+
 # ── Chat / LLM ───────────────────────────────────────────────────────────────
 
 
@@ -2100,6 +2192,7 @@ class ChatRequest(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
+    provider: str | None = None
     ollama_url: str | None = None
     model: str | None = None
     api_url: str | None = None
@@ -2117,6 +2210,8 @@ async def get_settings():
 @app.put("/api/v1/settings")
 async def update_settings(body: SettingsUpdate):
     """Update LLM or marketplace settings."""
+    if body.provider is not None:
+        _llm_settings["provider"] = body.provider
     if body.ollama_url:
         _llm_settings["ollama_url"] = body.ollama_url
     if body.model:
