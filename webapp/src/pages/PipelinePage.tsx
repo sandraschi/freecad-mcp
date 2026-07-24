@@ -5,7 +5,7 @@ import {
   Server, Upload, Waves, Zap
 } from "lucide-react";
 
-const API = "/api/v1";
+import { API } from "../lib/api";
 
 interface ToolResult {
   success: boolean;
@@ -434,22 +434,22 @@ export default function PipelinePage() {
                         {geometrySource === "new" ? (
                           <>
                             {field("Domain Type", select(domainType, setDomainType, ["channel", "pipe", "box", "nozzle"]))}
-                            {field("Length (m)", input(lengthM, setLengthM, { min: 0.001, step: 0.1 }))}
-                            {field("Width (m)", input(widthM, setWidthM, { min: 0.001, step: 0.01 }))}
-                            {field("Height (m)", input(heightM, setHeightM, { min: 0.001, step: 0.01 }))}
-                            {field("Mesh Cells", input(meshCells, setMeshCells, { step: 1000 }))}
-                            {domainType === "pipe" && field("Inlet Radius (m)", input(inletRadius, setInletRadius, { step: 0.001 }))}
+                            {field("Length (m)", input(lengthM, (v) => setLengthM(Number(v)), { min: 0.001, step: 0.1 }))}
+                            {field("Width (m)", input(widthM, (v) => setWidthM(Number(v)), { min: 0.001, step: 0.01 }))}
+                            {field("Height (m)", input(heightM, (v) => setHeightM(Number(v)), { min: 0.001, step: 0.01 }))}
+                            {field("Mesh Cells", input(meshCells, (v) => setMeshCells(Number(v)), { step: 1000 }))}
+                            {domainType === "pipe" && field("Inlet Radius (m)", input(inletRadius, (v) => setInletRadius(Number(v)), { step: 0.001 }))}
                             {domainType === "nozzle" && (
                               <>
-                                {field("Inlet Radius (m)", input(inletRadius, setInletRadius, { step: 0.001 }))}
-                                {field("Outlet Radius (m)", input(outletRadius, setOutletRadius, { step: 0.001 }))}
+                                {field("Inlet Radius (m)", input(inletRadius, (v) => setInletRadius(Number(v)), { step: 0.001 }))}
+                                {field("Outlet Radius (m)", input(outletRadius, (v) => setOutletRadius(Number(v)), { step: 0.001 }))}
                               </>
                             )}
                           </>
                         ) : (
                           <>
                             {field("STL File Path", input(stlFile, setStlFile))}
-                            {field("Mesh Cells", input(meshCells, setMeshCells, { step: 1000 }))}
+                            {field("Mesh Cells", input(meshCells, (v) => setMeshCells(Number(v)), { step: 1000 }))}
                           </>
                         )}
                       </div>
@@ -534,23 +534,23 @@ export default function PipelinePage() {
                         {solver === "openfoam" ? (
                           <>
                             {field("Flow Model", select(flowType, setFlowType, ["laminar", "kEpsilon", "kOmegaSST"]))}
-                            {field("Kinematic Viscosity (m²/s)", input(fluidNu, setFluidNu, { step: "1e-7" }))}
-                            {field("Density (kg/m³)", input(fluidDensity, setFluidDensity, { step: 1 }))}
-                            {field("Inlet Velocity (m/s)", input(inletVelocity, setInletVelocity, { step: 0.1 }))}
-                            {field("End Time / Iterations", input(endTime, setEndTime, { step: 100 }))}
-                            {field("Time Step (s)", input(deltaT, setDeltaT, { step: 0.1 }))}
-                            {field("Write Interval", input(writeInterval, setWriteInterval, { step: 50 }))}
+                            {field("Kinematic Viscosity (m²/s)", input(fluidNu, (v) => setFluidNu(Number(v)), { step: "1e-7" }))}
+                            {field("Density (kg/m³)", input(fluidDensity, (v) => setFluidDensity(Number(v)), { step: 1 }))}
+                            {field("Inlet Velocity (m/s)", input(inletVelocity, (v) => setInletVelocity(Number(v)), { step: 0.1 }))}
+                            {field("End Time / Iterations", input(endTime, (v) => setEndTime(Number(v)), { step: 100 }))}
+                            {field("Time Step (s)", input(deltaT, (v) => setDeltaT(Number(v)), { step: 0.1 }))}
+                            {field("Write Interval", input(writeInterval, (v) => setWriteInterval(Number(v)), { step: 50 }))}
                           </>
                         ) : (
                           <>
-                            {field("Velocity (m/s)", input(inletVelocity, setInletVelocity, { step: 0.001 }))}
-                            {field("Viscosity (m²/s)", input(fluidNu, setFluidNu))}
-                            {field("Density (kg/m³)", input(fluidDensity, setFluidDensity))}
-                            {field("Resolution X", input(resX, setResX, { min: 16, step: 64 }))}
-                            {field("Resolution Y", input(resY, setResY, { min: 16, step: 32 }))}
-                            {field("Resolution Z", input(resZ, setResZ, { min: 16, step: 32 }))}
-                            {field("Time Steps", input(timeSteps, setTimeSteps, { step: 10000 }))}
-                            {field("Write Interval", input(writeInterval, setWriteInterval, { step: 100 }))}
+                            {field("Velocity (m/s)", input(inletVelocity, (v) => setInletVelocity(Number(v)), { step: 0.001 }))}
+                            {field("Viscosity (m²/s)", input(fluidNu, (v) => setFluidNu(Number(v))))}
+                            {field("Density (kg/m³)", input(fluidDensity, (v) => setFluidDensity(Number(v))))}
+                            {field("Resolution X", input(resX, (v) => setResX(Number(v)), { min: 16, step: 64 }))}
+                            {field("Resolution Y", input(resY, (v) => setResY(Number(v)), { min: 16, step: 32 }))}
+                            {field("Resolution Z", input(resZ, (v) => setResZ(Number(v)), { min: 16, step: 32 }))}
+                            {field("Time Steps", input(timeSteps, (v) => setTimeSteps(Number(v)), { step: 10000 }))}
+                            {field("Write Interval", input(writeInterval, (v) => setWriteInterval(Number(v)), { step: 100 }))}
                             <div className="col-span-2 flex items-center gap-2 text-xs text-slate-500">
                               <Cpu size={12} />
                               Total cells: {(resX * resY * resZ).toLocaleString()} | ~{((resX * resY * resZ * 55) / 1e9).toFixed(2)} GB VRAM
@@ -637,7 +637,7 @@ export default function PipelinePage() {
                             />
                             <label className="text-xs text-slate-400">Parallel run</label>
                           </div>
-                          {parallelRun && field("Cores", input(nCores, setNCores, { min: 1, max: 64, step: 1 }))}
+                          {parallelRun && field("Cores", input(nCores, (v) => setNCores(Number(v)), { min: 1, max: 64, step: 1 }))}
                           <div className="col-span-2 flex items-center gap-2 text-xs text-slate-500">
                             <FileText size={12} />
                             Steps: blockMesh → checkMesh → simpleFoam
@@ -646,8 +646,8 @@ export default function PipelinePage() {
                       ) : (
                         <div className="grid grid-cols-2 gap-3">
                           {field("Case Name", input(caseName, setCaseName))}
-                          {field("GPU Device Index", input(gpuDevice, setGpuDevice, { min: 0 }))}
-                          {field("Timeout (s)", input(timeoutS, setTimeoutS, { min: 10, step: 60 }))}
+                          {field("GPU Device Index", input(gpuDevice, (v) => setGpuDevice(Number(v)), { min: 0 }))}
+                          {field("Timeout (s)", input(timeoutS, (v) => setTimeoutS(Number(v)), { min: 10, step: 60 }))}
                           <div className="col-span-2 flex items-center gap-2 text-xs text-slate-500">
                             <FileText size={12} />
                             Steps: cfd_fluidx3d_compile → cfd_fluidx3d_run
@@ -659,20 +659,20 @@ export default function PipelinePage() {
 
                       {result?.data && (
                         <div className="p-4 bg-black/20 rounded-xl border border-white/10 space-y-1">
-                          {result.data.runtime_s && (
+                          {!!result.data.runtime_s && (
                             <p className="text-sm text-emerald-300">Runtime: {String(result.data.runtime_s)}s</p>
                           )}
-                          {result.data.steps_completed && (
+                          {!!result.data.steps_completed && (
                             <p className="text-xs text-slate-400">
                               Completed: {(result.data.steps_completed as string[])?.join(", ")}
                             </p>
                           )}
-                          {result.data.log && (
+                          {!!result.data.log && (
                             <pre className="text-xs text-slate-500 mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap font-mono">
                               {String(result.data.log).slice(-3000)}
                             </pre>
                           )}
-                          {result.data.output &&
+                          {!!result.data.output &&
                             typeof result.data.output === "string" &&
                             result.data.output.includes("DONE") && (
                               <p className="text-xs text-emerald-400">Simulation completed successfully</p>
@@ -693,7 +693,7 @@ export default function PipelinePage() {
 
                       {result?.data && (
                         <div className="space-y-3">
-                          {result.data.mlups && (
+                          {!!result.data.mlups && (
                             <div className="grid grid-cols-3 gap-2">
                               <div className="p-3 bg-white/5 rounded-xl border border-white/10 text-center">
                                 <p className="text-xs text-slate-500">Throughput</p>
@@ -715,7 +715,7 @@ export default function PipelinePage() {
                             </div>
                           )}
 
-                          {result.data.final_residuals && (
+                          {!!result.data.final_residuals && (
                             <div className="p-4 bg-white/5 rounded-xl border border-white/10">
                               <p className="text-sm font-medium text-slate-300 mb-2">Final Residuals</p>
                               <div className="grid grid-cols-3 gap-2">
@@ -739,7 +739,7 @@ export default function PipelinePage() {
                             </div>
                           )}
 
-                          {result.data.final_forces && (
+                          {!!result.data.final_forces && (
                             <div className="p-4 bg-white/5 rounded-xl border border-white/10">
                               <p className="text-sm font-medium text-slate-300 mb-2">Final Forces (N)</p>
                               <div className="grid grid-cols-3 gap-2 text-center">

@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.2",
   "name": "freecad-mcp",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "FreeCAD MCP server — 46+ CAD/BIM/CFD/FEM/slicing/marketplace tools via MCP and REST API",
   "author": {
     "name": "sandraschi"
@@ -64,6 +64,11 @@
     {"name": "cfd_fluidx3d_results", "description": "Parse FluidX3D forces, MLUPS, completion status"},
     {"name": "cfd_fluidx3d_explain", "description": "Explain flow physics from simulation config"},
     {"name": "cfd_fluidx3d_export_for_render", "description": "Export streamlines for VR visualization"},
+    {"name": "cfd_fluidx3d_render", "description": "Render VTK velocity field as WebM heatmap video"},
+    {"name": "cfd_fluidx3d_parametric_sweep", "description": "Run parameter sweep across values for FluidX3D GPU CFD"},
+    {"name": "cfd_fluidx3d_train_surrogate", "description": "Train MLP neural surrogate on sweep results"},
+    {"name": "cfd_surrogate_predict", "description": "Predict forces using trained surrogate model"},
+    {"name": "freecad_design_loop", "description": "Autonomous CAD design loop via LLM sampling"},
     {"name": "fem_status", "description": "Check FEM workbench and CalculiX solver availability"},
     {"name": "fem_create_analysis", "description": "Create FEM analysis container from CAD file"},
     {"name": "fem_set_material", "description": "Assign material preset to FEM analysis parts"},

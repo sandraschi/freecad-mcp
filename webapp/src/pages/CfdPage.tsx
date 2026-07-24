@@ -37,7 +37,7 @@ import {
 	YAxis,
 } from "recharts";
 
-const API = "/api/v1";
+import { API } from "../lib/api";
 
 interface CfdStatus {
 	success: boolean;
@@ -426,34 +426,34 @@ export default function CfdPage() {
 							)}
 							{field(
 								"Length (m)",
-								input(lengthM, setLengthM, { min: 0.001, step: 0.1 }),
+								input(lengthM, (v) => setLengthM(Number(v)), { min: 0.001, step: 0.1 }),
 							)}
 							{field(
 								"Width (m)",
-								input(widthM, setWidthM, { min: 0.001, step: 0.01 }),
+								input(widthM, (v) => setWidthM(Number(v)), { min: 0.001, step: 0.01 }),
 							)}
 							{field(
 								"Height (m)",
-								input(heightM, setHeightM, { min: 0.001, step: 0.01 }),
+								input(heightM, (v) => setHeightM(Number(v)), { min: 0.001, step: 0.01 }),
 							)}
 							{field(
 								"Mesh Cells",
-								input(meshCells, setMeshCells, { step: 1000 }),
+								input(meshCells, (v) => setMeshCells(Number(v)), { step: 1000 }),
 							)}
 							{domainType === "pipe" &&
 								field(
 									"Inlet Radius (m)",
-									input(inletRadius, setInletRadius, { step: 0.001 }),
+									input(inletRadius, (v) => setInletRadius(Number(v)), { step: 0.001 }),
 								)}
 							{domainType === "nozzle" && (
 								<>
-									{field(
-										"Inlet Radius (m)",
-										input(inletRadius, setInletRadius, { step: 0.001 }),
-									)}
+							{field(
+									"Inlet Radius (m)",
+									input(inletRadius, (v) => setInletRadius(Number(v)), { step: 0.001 }),
+								)}
 									{field(
 										"Outlet Radius (m)",
-										input(outletRadius, setOutletRadius, { step: 0.001 }),
+										input(outletRadius, (v) => setOutletRadius(Number(v)), { step: 0.001 }),
 									)}
 								</>
 							)}
@@ -505,24 +505,24 @@ export default function CfdPage() {
 							)}
 							{field(
 								"Kinematic Viscosity (m²/s)",
-								input(fluidNu, setFluidNu, { step: "1e-7" }),
+								input(fluidNu, (v) => setFluidNu(Number(v)), { step: "1e-7" }),
 							)}
 							{field(
 								"Density (kg/m³)",
-								input(fluidDensity, setFluidDensity, { step: 1 }),
+								input(fluidDensity, (v) => setFluidDensity(Number(v)), { step: 1 }),
 							)}
 							{field(
 								"Inlet Velocity (m/s)",
-								input(inletVelocity, setInletVelocity, { step: 0.1 }),
+								input(inletVelocity, (v) => setInletVelocity(Number(v)), { step: 0.1 }),
 							)}
 							{field(
 								"End Time / Iterations",
-								input(endTime, setEndTime, { step: 100 }),
+								input(endTime, (v) => setEndTime(Number(v)), { step: 100 }),
 							)}
-							{field("Time Step (s)", input(deltaT, setDeltaT, { step: 0.1 }))}
+							{field("Time Step (s)", input(deltaT, (v) => setDeltaT(Number(v)), { step: 0.1 }))}
 							{field(
 								"Write Interval",
-								input(writeInterval, setWriteInterval, { step: 50 }),
+								input(writeInterval, (v) => setWriteInterval(Number(v)), { step: 50 }),
 							)}
 						</div>
 						{btn("Configure Physics", () =>
@@ -679,7 +679,7 @@ export default function CfdPage() {
 							{parallelRun &&
 								field(
 									"Cores",
-									input(nCores, setNCores, { min: 1, max: 64, step: 1 }),
+									input(nCores, (v) => setNCores(Number(v)), { min: 1, max: 64, step: 1 }),
 								)}
 						</div>
 						{btn("Run Solver", () =>
@@ -697,7 +697,7 @@ export default function CfdPage() {
 									{(result.data.steps_completed as string[])?.join(", ") ||
 										"none"}
 								</p>
-								{result.data.log && (
+								{!!result.data.log && (
 									<pre className="text-xs text-slate-400 mt-2 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
 										{String(result.data.log).slice(-5000)}
 									</pre>
@@ -739,8 +739,8 @@ export default function CfdPage() {
 										Final Residuals
 									</p>
 									<div className="grid grid-cols-3 gap-2">
-										{result.data.final_residuals &&
-											Object.entries(
+									{!!result.data.final_residuals &&
+										Object.entries(
 												result.data.final_residuals as Record<string, number>,
 											).map(([k, v]) => (
 												<div key={k} className="text-center">
@@ -862,7 +862,7 @@ export default function CfdPage() {
 								model: nlModel,
 							}),
 						)}
-						{result?.data?.reasoning && (
+						{!!result?.data?.reasoning && (
 							<div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
 								<p className="text-xs text-indigo-300 mb-1">AI Reasoning</p>
 								<p className="text-sm text-slate-300">
@@ -887,11 +887,11 @@ export default function CfdPage() {
 							{field("Case Name", input(caseName, setCaseName))}
 							{field(
 								"Boundary Points",
-								input(pinnBoundary, setPinnBoundary, { step: 1000 }),
+								input(pinnBoundary, (v) => setPinnBoundary(Number(v)), { step: 1000 }),
 							)}
 							{field(
 								"Interior Points",
-								input(pinnInterior, setPinnInterior, { step: 1000 }),
+								input(pinnInterior, (v) => setPinnInterior(Number(v)), { step: 1000 }),
 							)}
 							{field(
 								"Format",
@@ -906,7 +906,7 @@ export default function CfdPage() {
 								output_format: pinnFormat,
 							}),
 						)}
-						{result?.data?.output_file && (
+						{!!result?.data?.output_file && (
 							<div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
 								<Download size={18} className="text-green-400" />
 								<div>
@@ -1189,7 +1189,7 @@ export default function CfdPage() {
 									)}
 									AI Explain
 								</button>
-								{result?.data?.explanation && (
+								{!!result?.data?.explanation && (
 									<div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
 										<p className="text-xs text-indigo-300 mb-1">
 											AI Explanation

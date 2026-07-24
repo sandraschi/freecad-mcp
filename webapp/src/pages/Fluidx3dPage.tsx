@@ -3,7 +3,7 @@ import { Activity, AlertTriangle, BarChart3, Binary, Box, Cpu, FileCode2, Film, 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import StlViewer from "../components/StlViewer";
 
-const API = "/api/v1";
+import { API } from "../lib/api";
 
 interface F3DStatus {
   success: boolean;

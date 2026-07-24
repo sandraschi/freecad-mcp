@@ -1,5 +1,6 @@
-/** Empty in dev (Vite proxy); direct backend URL in Tauri production build. */
-export const API_BASE = import.meta.env.DEV ? "" : "http://127.0.0.1:10944";
+/** API base URL — configurable via VITE_API_BASE env var. */
+export const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? "" : "http://127.0.0.1:10944");
+export const API = `${API_BASE}/api/v1`;
 
 export function apiPath(path: string): string {
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;

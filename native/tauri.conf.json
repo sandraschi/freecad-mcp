@@ -1,6 +1,6 @@
 {
   "productName": "FreeCAD MCP",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "identifier": "ai.fleet.freecad-mcp",
   "build": {
     "frontendDist": "../webapp/dist",

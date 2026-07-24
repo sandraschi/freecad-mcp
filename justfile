@@ -3,7 +3,7 @@ import 'scripts/just/fleet.just'
 
 export NAME := "FreeCAD MCP"
 export DESC := "CAD operations via MCP tools and REST API"
-export VER  := "0.5.0"
+export VER  := "0.5.1"
 export PORT := "10944"
 export HOST := "0.0.0.0"
 
@@ -128,10 +128,6 @@ certify: gates-green
 e2e:
     pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
 
-# Build an MCPB portable bundle for Claude Desktop
-mcpb-pack:
-    npx @anthropic-ai/mcpb pack mcpb dist/freecad-mcp-v{{VER}}.mcpb
-
 # Register this MCP server with a client (stdio)
 install-mcp:
     uv run python -m freecad_mcp.server --mode stdio
@@ -152,9 +148,7 @@ tauri-sidecar:
     pwsh -NoLogo -File '{{justfile_directory()}}\native\build-sidecar.ps1'
 
 tauri-build:
-    Set-Location '{{justfile_directory()}}\native'
-    $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
-    .\build.ps1
+    $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"; & '{{justfile_directory()}}\native\build.ps1'
 
 tauri-dev:
     pwsh -NoLogo -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
@@ -171,6 +165,4 @@ build-native-debug:
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
     npx @tauri-apps/cli build --debug
 
-# Run CUA smoke test against installed NSIS app
-cua-nsis-test:
-    C:\Windows\py.exe scripts/cua-smoke.py
+

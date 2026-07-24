@@ -26,7 +26,9 @@ foreach ($dir in $frontendDirs) {
             throw "TypeScript compilation failed — fix all errors before building NSIS installer"
         }
 
+        $env:VITE_API_BASE = "http://127.0.0.1:10944"
         npm run build
+        $env:VITE_API_BASE = $null
         if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
         Pop-Location
         break
@@ -52,7 +54,12 @@ if (Test-Path $specFile) {
             Write-Host "  Patched fastmcp metadata fallback" -ForegroundColor Yellow
         }
     }
-    uv run pyinstaller "$specFile" --clean --noconfirm
+    $pyiExe = "$Root\.venv\Scripts\pyinstaller.exe"
+    if (-not (Test-Path $pyiExe)) {
+        Write-Host "  Installing pyinstaller in project venv..." -ForegroundColor Yellow
+        uv add --dev pyinstaller
+    }
+    & $pyiExe "$specFile" --clean --noconfirm
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
     Pop-Location
 } else {
