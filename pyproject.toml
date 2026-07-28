@@ -1,7 +1,7 @@
 [project]
 name = "freecad-mcp"
 version = "0.5.1"
-description = "FreeCAD MCP server — CAD operations via MCP tools and REST API"
+description = "FreeCAD MCP server â€” CAD operations via MCP tools and REST API"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -17,7 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.9",
+    "ruff>=0.16.0,<0.17",
 ]
 
 [build-system]
