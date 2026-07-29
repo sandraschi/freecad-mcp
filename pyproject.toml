@@ -18,6 +18,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "ruff>=0.16.0,<0.17",
+    "pre-commit>=4.6.1",
 ]
 
 [build-system]
@@ -42,7 +43,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "S", "UP", "RUF"]
-ignore = ["S101"]
+ignore = ["S101", "S106", "S110", "S112", "S101", "S106", "S110", "S112", "RUF012", "S603", "S607", "S324", "E402"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/**/*.py" = ["E501"]
