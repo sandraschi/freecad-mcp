@@ -18,3 +18,7 @@ native/target/
 native/gen/
 reports/
 *.mcpb
+
+# Runtime logs
+*.log
+
