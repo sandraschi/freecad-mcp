@@ -36,7 +36,7 @@ def _find_ffmpeg() -> str | None:
         if not c:
             continue
         try:
-            r = subprocess.run([c, "-version"], capture_output=True, text=True, timeout=5)  # noqa: S603
+            r = subprocess.run([c, "-version"], capture_output=True, text=True, timeout=5)
             if r.returncode == 0:
                 return c
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -64,7 +64,7 @@ def _ensure_ffmpeg(install: bool = True) -> tuple[str | None, str]:
     # Auto-install via winget (Windows)
     if os.name == "nt":
         try:
-            r = subprocess.run(  # noqa: S603,S607
+            r = subprocess.run(
                 ["winget", "install", "ffmpeg", "--accept-package-agreements", "--silent"],
                 capture_output=True,
                 text=True,
@@ -112,9 +112,9 @@ def _ensure_ffmpeg(install: bool = True) -> tuple[str | None, str]:
     # macOS / Linux
     for pm, cmd in [("brew", ["brew", "install", "ffmpeg"]), ("apt", ["sudo", "apt", "install", "-y", "ffmpeg"])]:
         try:
-            r = subprocess.run(["which", pm], capture_output=True, text=True, timeout=5)  # noqa: S603,S607
+            r = subprocess.run(["which", pm], capture_output=True, text=True, timeout=5)
             if r.returncode == 0:
-                r2 = subprocess.run(cmd, capture_output=True, text=True, timeout=120)  # noqa: S603
+                r2 = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
                 if r2.returncode == 0 and _find_ffmpeg():
                     return _find_ffmpeg(), ""
                 return None, f"{pm} install ffmpeg completed but binary not found. Try: {pm} install ffmpeg"
@@ -325,7 +325,7 @@ def render_video(
     if not HAS_PIL:
         # Auto-install Pillow
         try:
-            r = subprocess.run(["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60)  # noqa: S603,S607
+            r = subprocess.run(["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60)
             if r.returncode == 0:
                 globals()["HAS_PIL"] = True
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -395,7 +395,7 @@ def render_video(
     ]
 
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # noqa: S603
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if r.returncode != 0:
             return {"success": False, "error": f"ffmpeg failed: {r.stderr[:500]}"}
     except FileNotFoundError:

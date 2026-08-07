@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Box, CheckCircle2, Cpu, Database, FileText, Gauge, Loader2, Waves, XCircle, Zap } from "lucide-react";
+import { API_BASE } from "../lib/api";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>(null);
@@ -7,10 +8,10 @@ export default function Dashboard() {
   const [files, setFiles] = useState<{ uploads: number; outputs: number; depot: number }>({ uploads: 0, outputs: 0, depot: 0 });
 
   useEffect(() => {
-    fetch("/api/v1/status").then(r => r.json()).then(setStatus).catch(() => setStatus({ freecad_ok: false }));
-    fetch("/api/v1/health").then(r => r.json()).then(setHealth).catch(() => {});
-    fetch("/api/v1/files").then(r => r.json()).then(j => setFiles(p => ({ ...p, uploads: (j.uploads || []).length, outputs: (j.outputs || []).length }))).catch(() => {});
-    fetch("/api/v1/depot").then(r => r.json()).then(j => setFiles(p => ({ ...p, depot: (j.files || []).length }))).catch(() => {});
+    fetch(API_BASE + "/api/v1/status").then(r => r.json()).then(setStatus).catch(() => setStatus({ freecad_ok: false }));
+    fetch(API_BASE + "/api/v1/health").then(r => r.json()).then(setHealth).catch(() => {});
+    fetch(API_BASE + "/api/v1/files").then(r => r.json()).then(j => setFiles(p => ({ ...p, uploads: (j.uploads || []).length, outputs: (j.outputs || []).length }))).catch(() => {});
+    fetch(API_BASE + "/api/v1/depot").then(r => r.json()).then(j => setFiles(p => ({ ...p, depot: (j.files || []).length }))).catch(() => {});
   }, []);
 
   return (
@@ -74,6 +75,7 @@ export default function Dashboard() {
           <a href="/depot" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-indigo-400 text-center">CAD Depot</a>
           <a href="/convert" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-indigo-400 text-center">Convert STEP → STL</a>
           <a href="/cfd-demos" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-cyan-400 text-center">CFD Demos</a>
+          <a href="/toy-car" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-amber-400 text-center">Toy Car</a>
           <a href="/cfd" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-emerald-400 text-center">OpenFOAM CFD</a>
           <a href="/fluidx3d" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-amber-400 text-center">FluidX3D GPU</a>
           <a href="/pipeline" className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-purple-400 text-center">Pipeline Wizard</a>

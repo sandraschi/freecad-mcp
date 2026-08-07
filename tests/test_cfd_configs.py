@@ -39,6 +39,7 @@ from freecad_mcp.tools.fluidx3d import (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _make_vertices(n: int = 8) -> str:
     """Generate n hexahedron vertices for blockMeshDict formatting."""
     coords = [
@@ -87,36 +88,35 @@ def _make_boundaries() -> str:
 
 # ── Test 1: blockMeshDict ─────────────────────────────────────────────────────
 
+
 class TestBlockMeshDict:
     """Validate _BLOCK_MESH_DICT generates a correct blockMeshDict."""
 
     def test_contains_foamfile_header(self):
-        bmd = _BLOCK_MESH_DICT.format(
-            scale=1.0, vertices="", nx=10, ny=10, nz=10, boundaries=""
-        )
+        bmd = _BLOCK_MESH_DICT.format(scale=1.0, vertices="", nx=10, ny=10, nz=10, boundaries="")
         assert "FoamFile" in bmd
         assert "blockMeshDict" in bmd
         assert "version     2.0" in bmd
 
     def test_contains_required_sections(self):
-        bmd = _BLOCK_MESH_DICT.format(
-            scale=1.0, vertices="", nx=10, ny=10, nz=10, boundaries=""
-        )
+        bmd = _BLOCK_MESH_DICT.format(scale=1.0, vertices="", nx=10, ny=10, nz=10, boundaries="")
         for section in ("convertToMeters", "vertices", "blocks", "boundary", "edges", "mergePatchPairs"):
             assert section in bmd, f"Missing section: {section}"
 
     def test_vertex_count_eight(self):
         vertices = _make_vertices(8)
-        bmd = _BLOCK_MESH_DICT.format(
-            scale=1.0, vertices=vertices, nx=10, ny=10, nz=10, boundaries=""
-        )
+        bmd = _BLOCK_MESH_DICT.format(scale=1.0, vertices=vertices, nx=10, ny=10, nz=10, boundaries="")
         vertex_lines = [l for l in bmd.splitlines() if l.strip().startswith("(") and l.strip().endswith(")")]
         assert len(vertex_lines) == 8
 
     def test_boundary_patch_count(self):
         boundaries = _make_boundaries()
         bmd = _BLOCK_MESH_DICT.format(
-            scale=1.0, vertices=_make_vertices(8), nx=10, ny=10, nz=10,
+            scale=1.0,
+            vertices=_make_vertices(8),
+            nx=10,
+            ny=10,
+            nz=10,
             boundaries=boundaries,
         )
         patches = re.findall(r"type (patch|wall);", bmd)
@@ -126,7 +126,11 @@ class TestBlockMeshDict:
 
     def test_format_no_placeholders_left(self):
         bmd = _BLOCK_MESH_DICT.format(
-            scale=1.0, vertices=_make_vertices(8), nx=10, ny=10, nz=10,
+            scale=1.0,
+            vertices=_make_vertices(8),
+            nx=10,
+            ny=10,
+            nz=10,
             boundaries=_make_boundaries(),
         )
         assert "{" not in bmd or "FoamFile" in bmd  # only curlies in FoamFile header
@@ -134,13 +138,18 @@ class TestBlockMeshDict:
 
 # ── Test 2: Physics config files ──────────────────────────────────────────────
 
+
 class TestPhysicsConfigs:
     """Validate all five physics template files have correct FoamFile headers."""
 
     def test_control_dict_header(self):
         ctrl = _CONTROL_DICT.format(
-            solver="simpleFoam", end_time=1000, delta_t=1.0,
-            write_interval=100, force_patches='"walls"', density=1000.0,
+            solver="simpleFoam",
+            end_time=1000,
+            delta_t=1.0,
+            write_interval=100,
+            force_patches='"walls"',
+            density=1000.0,
         )
         assert "FoamFile" in ctrl
         assert "controlDict" in ctrl
@@ -152,8 +161,12 @@ class TestPhysicsConfigs:
 
     def test_control_dict_solver_interpolation(self):
         ctrl = _CONTROL_DICT.format(
-            solver="pisoFoam", end_time=500, delta_t=0.001,
-            write_interval=50, force_patches='"inlet"', density=1.225,
+            solver="pisoFoam",
+            end_time=500,
+            delta_t=0.001,
+            write_interval=50,
+            force_patches='"inlet"',
+            density=1.225,
         )
         assert "application     pisoFoam" in ctrl
         assert "endTime         500" in ctrl
@@ -178,7 +191,9 @@ class TestPhysicsConfigs:
     def test_fv_solution_header(self):
         sol, res, rel = _fv_solution_turb(LAMINAR)
         solution = _FV_SOLUTION.format(
-            turb_solvers=sol, turb_residuals=res, turb_relax=rel,
+            turb_solvers=sol,
+            turb_residuals=res,
+            turb_relax=rel,
         )
         assert "FoamFile" in solution
         assert "fvSolution" in solution
@@ -225,17 +240,21 @@ class TestPhysicsConfigs:
 
 # ── Test 3: Boundary field files ──────────────────────────────────────────────
 
+
 class TestBoundaryFields:
     """Validate field file generation pattern used by cfd_set_boundary."""
 
-    @pytest.mark.parametrize("field,cls_,dims", [
-        ("U", "volVectorField", "[0 1 -1 0 0 0 0]"),
-        ("p", "volScalarField", "[0 2 -2 0 0 0 0]"),
-        ("k", "volScalarField", "[0 2 -2 0 0 0 0]"),
-        ("omega", "volScalarField", "[0 0 -1 0 0 0 0]"),
-        ("nut", "volScalarField", "[0 2 -1 0 0 0 0]"),
-        ("alphat", "volScalarField", "[1 -1 -1 0 0 0 0]"),
-    ])
+    @pytest.mark.parametrize(
+        "field,cls_,dims",
+        [
+            ("U", "volVectorField", "[0 1 -1 0 0 0 0]"),
+            ("p", "volScalarField", "[0 2 -2 0 0 0 0]"),
+            ("k", "volScalarField", "[0 2 -2 0 0 0 0]"),
+            ("omega", "volScalarField", "[0 0 -1 0 0 0 0]"),
+            ("nut", "volScalarField", "[0 2 -1 0 0 0 0]"),
+            ("alphat", "volScalarField", "[1 -1 -1 0 0 0 0]"),
+        ],
+    )
     def test_field_dimensions_correct(self, field, cls_, dims):
         field_map = {
             "U": ("volVectorField", "[0 1 -1 0 0 0 0]"),
@@ -301,6 +320,7 @@ boundaryField
 
 
 # ── Test 4: cfd_build_case required files ─────────────────────────────────────
+
 
 class TestBuildCase:
     """Validate the required-files logic used by cfd_build_case."""
@@ -385,13 +405,13 @@ class TestBuildCase:
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text("dummy")
 
-        missing = [rel for rel in self.REQUIRED_BASE
-                   if not (case_dir / rel).is_file()]
+        missing = [rel for rel in self.REQUIRED_BASE if not (case_dir / rel).is_file()]
         assert len(missing) == 0
         assert len(missing) == 0  # ready
 
 
 # ── Test 5: FluidX3D setup C++ ────────────────────────────────────────────────
+
 
 class TestFluidX3DSetup:
     """Validate _generate_setup_cpp produces correct C++ code."""
@@ -399,13 +419,23 @@ class TestFluidX3DSetup:
     SAMPLE_PARAMS = dict(
         case_name="test_channel",
         domain_type="channel",
-        Nx=256, Ny=64, Nz=64,
+        Nx=256,
+        Ny=64,
+        Nz=64,
         nu=0.01,
-        lbm_length=1.0, lbm_velocity=0.05,
-        si_length=2.0, si_velocity=1.0, si_density=1000.0,
-        fx=0.0, fy=0.0, fz=0.0,
-        u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0,
-        time_steps=5000, write_interval=100,
+        lbm_length=1.0,
+        lbm_velocity=0.05,
+        si_length=2.0,
+        si_velocity=1.0,
+        si_density=1000.0,
+        fx=0.0,
+        fy=0.0,
+        fz=0.0,
+        u_inlet_x=0.05,
+        u_inlet_y=0.0,
+        u_inlet_z=0.0,
+        time_steps=5000,
+        write_interval=100,
     )
 
     def test_contains_required_includes_and_main(self):
@@ -507,13 +537,25 @@ class TestFluidX3DSetupWithSTL:
 
     def test_stl_case_includes_import_code(self):
         cpp = _generate_setup_cpp(
-            case_name="stl_test", domain_type="stl",
-            Nx=128, Ny=128, Nz=128, nu=0.01,
-            lbm_length=1.0, lbm_velocity=0.05,
-            si_length=1.0, si_velocity=1.0, si_density=1000.0,
-            fx=1e-9, fy=0.0, fz=0.0,
-            u_inlet_x=0.0, u_inlet_y=0.0, u_inlet_z=0.0,
-            time_steps=1000, write_interval=100,
+            case_name="stl_test",
+            domain_type="stl",
+            Nx=128,
+            Ny=128,
+            Nz=128,
+            nu=0.01,
+            lbm_length=1.0,
+            lbm_velocity=0.05,
+            si_length=1.0,
+            si_velocity=1.0,
+            si_density=1000.0,
+            fx=1e-9,
+            fy=0.0,
+            fz=0.0,
+            u_inlet_x=0.0,
+            u_inlet_y=0.0,
+            u_inlet_z=0.0,
+            time_steps=1000,
+            write_interval=100,
             stl_files=["part.stl"],
         )
         assert "read_stl" in cpp
@@ -523,6 +565,7 @@ class TestFluidX3DSetupWithSTL:
 
 
 # ── Test 5b: FluidX3D inlet profiles ──────────────────────────────────────────
+
 
 class TestFluidX3DProfiles:
     """Validate _generate_profile_code for parabolic and Blasius profiles."""
@@ -554,6 +597,7 @@ class TestFluidX3DProfiles:
 
 # ── Test 5c: FluidX3D non-Newtonian ───────────────────────────────────────────
 
+
 class TestFluidX3DNonNewtonian:
     """Validate _generate_non_newtonian_code."""
 
@@ -576,6 +620,7 @@ class TestFluidX3DNonNewtonian:
 
 # ── Test 5d: FluidX3D free surface ────────────────────────────────────────────
 
+
 class TestFluidX3DFreeSurface:
     """Validate _generate_free_surface_code."""
 
@@ -595,6 +640,7 @@ class TestFluidX3DFreeSurface:
 
 
 # ── Test 5e: FluidX3D thermal ─────────────────────────────────────────────────
+
 
 class TestFluidX3DThermal:
     """Validate thermal init and defs generation."""
@@ -619,17 +665,22 @@ class TestFluidX3DThermal:
 
 # ── Test 5f: FluidX3D symmetry + pressure outlet ──────────────────────────────
 
+
 class TestFluidX3DSymmetryPressure:
     """Validate symmetry and pressure outlet boundary conditions."""
 
     def test_symmetry_y_template(self):
         assert "channel_y" in BC_TEMPLATES_SYMMETRY
-        code = BC_TEMPLATES_SYMMETRY["channel_y"].format(u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0, outlet_rho='lbm.rho[n] = 1.0f;')
+        code = BC_TEMPLATES_SYMMETRY["channel_y"].format(
+            u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0, outlet_rho="lbm.rho[n] = 1.0f;"
+        )
         assert "TYPE_Z" in code
 
     def test_symmetry_z_template(self):
         assert "channel_z" in BC_TEMPLATES_SYMMETRY
-        code = BC_TEMPLATES_SYMMETRY["channel_z"].format(u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0, outlet_rho='lbm.rho[n] = 1.0f;')
+        code = BC_TEMPLATES_SYMMETRY["channel_z"].format(
+            u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0, outlet_rho="lbm.rho[n] = 1.0f;"
+        )
         assert "TYPE_Z" in code
 
     def test_channel_with_symmetry_y(self):
@@ -643,6 +694,7 @@ class TestFluidX3DSymmetryPressure:
 
 # ── Test 5g: FluidX3D object forces ───────────────────────────────────────────
 
+
 class TestFluidX3DObjectForces:
     """Validate _generate_object_forces_loop."""
 
@@ -655,27 +707,42 @@ class TestFluidX3DObjectForces:
         assert "OBJ_FORCE" in code or "object_force" in code
 
     def test_three_objects(self):
-        code = _generate_object_forces_loop([
-            {"file": "a.stl", "type_flag": "TYPE_O"},
-            {"file": "b.stl", "type_flag": "TYPE_S"},
-            {"file": "c.stl", "type_flag": "TYPE_O"},
-        ])
+        code = _generate_object_forces_loop(
+            [
+                {"file": "a.stl", "type_flag": "TYPE_O"},
+                {"file": "b.stl", "type_flag": "TYPE_S"},
+                {"file": "c.stl", "type_flag": "TYPE_O"},
+            ]
+        )
         assert code.count("OBJ_FORCE" if "OBJ_FORCE" in code else "object_force") == 3
 
 
 # ── Test 5h: FluidX3D full setup with new params ──────────────────────────────
 
+
 class TestFluidX3DFullSetup:
     """Validate _generate_setup_cpp with all new features enabled."""
 
     BASE_PARAMS = dict(
-        case_name="full_test", domain_type="channel",
-        Nx=128, Ny=64, Nz=64, nu=0.01,
-        lbm_length=1.0, lbm_velocity=0.05,
-        si_length=2.0, si_velocity=1.0, si_density=1000.0,
-        fx=1e-9, fy=0.0, fz=0.0,
-        u_inlet_x=0.05, u_inlet_y=0.0, u_inlet_z=0.0,
-        time_steps=1000, write_interval=100,
+        case_name="full_test",
+        domain_type="channel",
+        Nx=128,
+        Ny=64,
+        Nz=64,
+        nu=0.01,
+        lbm_length=1.0,
+        lbm_velocity=0.05,
+        si_length=2.0,
+        si_velocity=1.0,
+        si_density=1000.0,
+        fx=1e-9,
+        fy=0.0,
+        fz=0.0,
+        u_inlet_x=0.05,
+        u_inlet_y=0.0,
+        u_inlet_z=0.0,
+        time_steps=1000,
+        write_interval=100,
     )
 
     def test_all_features_disabled_produces_valid_cpp(self):
@@ -687,21 +754,27 @@ class TestFluidX3DFullSetup:
     def test_thermal_enabled_in_cpp(self):
         cpp = _generate_setup_cpp(
             **self.BASE_PARAMS,
-            thermal=True, beta=3e-4, T_hot=350, T_cold=300,
+            thermal=True,
+            beta=3e-4,
+            T_hot=350,
+            T_cold=300,
         )
         assert "beta" in cpp.lower()
 
     def test_free_surface_enabled_in_cpp(self):
         cpp = _generate_setup_cpp(
             **self.BASE_PARAMS,
-            free_surface=True, fill_fraction=0.7,
+            free_surface=True,
+            fill_fraction=0.7,
         )
         assert "TYPE_L" in cpp
 
     def test_non_newtonian_enabled_in_cpp(self):
         cpp = _generate_setup_cpp(
             **self.BASE_PARAMS,
-            non_newtonian=True, n_index=0.8, consistency=0.1,
+            non_newtonian=True,
+            n_index=0.8,
+            consistency=0.1,
         )
         assert "set_nu_non_newtonian" in cpp
 
@@ -734,9 +807,15 @@ class TestFluidX3DFullSetup:
         """Stress test: all features enabled simultaneously."""
         cpp = _generate_setup_cpp(
             **self.BASE_PARAMS,
-            thermal=True, beta=3e-4, T_hot=350, T_cold=300,
-            free_surface=True, fill_fraction=0.8,
-            non_newtonian=True, n_index=0.8, consistency=0.1,
+            thermal=True,
+            beta=3e-4,
+            T_hot=350,
+            T_cold=300,
+            free_surface=True,
+            fill_fraction=0.8,
+            non_newtonian=True,
+            n_index=0.8,
+            consistency=0.1,
             profile_shape="parabolic",
             symmetry_axis="y",
             stl_configs=[{"file": "body.stl", "type_flag": "TYPE_S|TYPE_X"}],
@@ -750,13 +829,15 @@ class TestFluidX3DFullSetup:
 
 # ── Test 5i: FluidX3D export_for_render ───────────────────────────────────────
 
+
 class TestFluidX3DExportForRender:
     """Validate VTK→OBJ export pipeline with minimal test data."""
 
     def _write_minimal_vtk(self, tmp_path, Nx=10, Ny=6, Nz=6) -> str:
         """Write a minimal ASCII VTK structured grid with velocity."""
         path = tmp_path / "test.vtk"
-        path.write_text(f"""# vtk DataFile Version 2.0
+        path.write_text(
+            f"""# vtk DataFile Version 2.0
 FluidX3D test
 ASCII
 DATASET STRUCTURED_GRID
@@ -764,20 +845,26 @@ DIMENSIONS {Nx} {Ny} {Nz}
 ORIGIN 0 0 0
 SPACING 1.0 1.0 1.0
 POINTS {Nx * Ny * Nz} float
-""" + "\n".join(f"{x} {y} {z}" for x in range(Nx) for y in range(Ny) for z in range(Nz)) + """
+"""
+            + "\n".join(f"{x} {y} {z}" for x in range(Nx) for y in range(Ny) for z in range(Nz))
+            + """
 VECTORS velocity float
-""" + " ".join("1.0 0.0 0.0" for _ in range(Nx * Ny * Nz)))
+"""
+            + " ".join("1.0 0.0 0.0" for _ in range(Nx * Ny * Nz))
+        )
         return str(path)
 
     def test_export_is_importable_function(self):
         """Verify the export function exists and is callable."""
         import importlib
+
         mod = importlib.import_module("freecad_mcp.tools.fluidx3d")
         assert hasattr(mod, "_generate_setup_cpp")
 
     def test_vtk_parse_dimensions(self):
         """VTK file has correct dimensions."""
         import re
+
         header = "DIMENSIONS 10 8 6\nORIGIN 0 0 0\nSPACING 1 1 1\nPOINTS 480 float"
         dim = re.search(r"DIMENSIONS\s+(\d+)\s+(\d+)\s+(\d+)", header)
         assert dim is not None
@@ -814,6 +901,7 @@ VECTORS velocity float
 
 # ── Test 6: NL2FOAM schema ────────────────────────────────────────────────────
 
+
 class TestNL2FOAMSchema:
     """Validate the NL2FOAM prompt contains all required JSON schema sections."""
 
@@ -833,6 +921,7 @@ class TestNL2FOAMSchema:
     def _get_schema_json(self) -> str:
         """Extract schema_json from cfd_nl2foam source code."""
         import freecad_mcp.tools.cfd as cfd_mod
+
         source = inspect.getsource(cfd_mod)
         # Find the schema_json assignment block
         match = re.search(
@@ -893,6 +982,7 @@ class TestNL2FOAMSchema:
 
 
 # ── Edge cases ─────────────────────────────────────────────────────────────────
+
 
 class TestConstants:
     """Validate module-level constants are well-formed."""

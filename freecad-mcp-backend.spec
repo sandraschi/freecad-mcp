@@ -9,8 +9,11 @@ a = Analysis(
     ["run_server.py"],
     pathex=["src"],
     binaries=[],
+    
     datas=datas,
     hiddenimports=[
+
+    "_datetime",
         "uvicorn.logging",
         "uvicorn.loops",
         "uvicorn.loops.asyncio",
@@ -23,14 +26,20 @@ a = Analysis(
         "prefab_ui.app",
         "prefab_ui.components",
         "freecad_mcp.tools",
-    ],
+    "_strptime",
+],
     hookspath=[],
+    
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
-    noarchive=False,
+    excludes=['tkinter', 'setuptools', 'pip', 'wheel', 'test', 'tests', 'unittest'],
+    noarchive=True,
     optimize=0,
 )
+SKIP = ['torch', 'playwright', 'bitsandbytes', 'llvmlite', 'pyarrow', 'pymupdf', 'grpc',
+        'numba', 'Cython', 'google', 'azure', 'boto3', 'botocore', 'matplotlib', 'PIL',
+        'pandas', 'scipy', 'sklearn', 'onnxruntime']
+a.binaries = [b for b in a.binaries if not any(s in b[0].lower() for s in SKIP)]
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -43,7 +52,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,
@@ -53,3 +62,8 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+
+
+
+

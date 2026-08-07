@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Box, FileText, Loader2, RefreshCw } from "lucide-react";
 import StlViewer from "../components/StlViewer";
+import { API_BASE } from "../lib/api";
 
 export default function ModelsPage() {
   const [uploads, setUploads] = useState<{ name: string; size_kb: number }[]>([]);
@@ -13,7 +14,7 @@ export default function ModelsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/v1/files"); const j = await r.json();
+      const r = await fetch(API_BASE + "/api/v1/files"); const j = await r.json();
       setUploads(j.uploads || []); setOutputs(j.outputs || []); setGcodes(j.gcodes || []);
     } catch {} finally { setLoading(false); }
   };
@@ -21,7 +22,7 @@ export default function ModelsPage() {
   const getInfo = async (name: string) => {
     setSelected(name); setInfo(null);
     try {
-      const r = await fetch("/api/v1/control/tool", {
+      const r = await fetch(API_BASE + "/api/v1/control/tool", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tool: "model_info", arguments: { file_name: name } }),
       });

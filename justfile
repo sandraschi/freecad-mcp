@@ -1,4 +1,4 @@
-set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
+set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 import 'scripts/just/fleet.just'
 
 export NAME := "FreeCAD MCP"
@@ -7,13 +7,13 @@ export VER  := "0.5.1"
 export PORT := "10944"
 export HOST := "0.0.0.0"
 
-# ── Project Configuration ─────────────────────────────────────────────────────
+# --- Project Configuration ---
 
 # Open the interactive recipe dashboard in the browser
 default:
     @just --list
 
-# ── Lifecycle ─────────────────────────────────────────────────────────────────
+# --- Lifecycle ---
 
 # Synchronise all dependencies and dev extras
 bootstrap:
@@ -32,7 +32,7 @@ clean:
 setup: clean bootstrap
     Write-Host "FreeCAD MCP ready." -ForegroundColor Green
 
-# ── Operation ─────────────────────────────────────────────────────────────────
+# --- Operation ---
 
 # Start the FreeCAD MCP server (Unified Gateway, dual mode)
 serve mode="dual" port=PORT:
@@ -47,13 +47,13 @@ web:
     Set-Location '{{justfile_directory()}}\webapp'
     cmd /c npm run dev
 
-# ── Development ───────────────────────────────────────────────────────────────
+# --- Development ---
 
 # Start server with auto-reload
 dev port=PORT:
     uv run uvicorn freecad_mcp.server:app --reload --port {{port}} --host {{HOST}}
 
-# ── Quality ───────────────────────────────────────────────────────────────────
+# --- Quality ---
 
 # Execute linting (ruff + biome + tsc)
 lint:
@@ -72,7 +72,7 @@ fix:
 # Fast quality check (lint + tests)
 check: lint test
 
-# ── Testing ───────────────────────────────────────────────────────────────────
+# --- Testing ---
 
 # Run the complete test suite
 test:
@@ -88,11 +88,11 @@ fleet-e2e-integration:
 
 # Bootstrap FluidX3D clone + verify compiler/GPU
 bootstrap-fluidx3d:
-    pwsh -NoLogo -File '{{justfile_directory()}}\scripts\bootstrap_fluidx3d.ps1'
+    powershell.exe -NoProfile -File '{{justfile_directory()}}\scripts\bootstrap_fluidx3d.ps1'
 
 # Live HTTP chain with auto-start backends
 fleet-e2e-chain-run:
-    pwsh -NoLogo -File '{{justfile_directory()}}\scripts\run_live_chain.ps1'
+    powershell.exe -NoProfile -File '{{justfile_directory()}}\scripts\run_live_chain.ps1'
 
 # Fleet E2E smoke (HTTP probe when qcad + freecad running)
 fleet-e2e:
@@ -126,7 +126,7 @@ gates-green:
 certify: gates-green
 
 e2e:
-    pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
+    powershell.exe -NoProfile -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
 
 # Register this MCP server with a client (stdio)
 install-mcp:
@@ -136,22 +136,22 @@ install-mcp:
 llms-txt:
     uv run python -m freecad_mcp.utils.llms_txt
 
-# ── Diagnostics ───────────────────────────────────────────────────────────────
+# --- Diagnostics ---
 
 # Check FreeCAD status
 health:
     curl http://localhost:10944/api/v1/status
 
-# ── Native (Tauri) ────────────────────────────────────────────────────────────
+# --- Native  Tauri ---
 
 tauri-sidecar:
-    pwsh -NoLogo -File '{{justfile_directory()}}\native\build-sidecar.ps1'
+    powershell.exe -NoProfile -File '{{justfile_directory()}}\native\build-sidecar.ps1'
 
 tauri-build:
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"; & '{{justfile_directory()}}\native\build.ps1'
 
 tauri-dev:
-    pwsh -NoLogo -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
+    powershell.exe -NoProfile -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
     Set-Location '{{justfile_directory()}}\native'
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
     npm install
@@ -160,9 +160,11 @@ tauri-dev:
 build-native: tauri-build
 
 build-native-debug:
-    pwsh -NoLogo -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
+    powershell.exe -NoProfile -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
     Set-Location '{{justfile_directory()}}\native'
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
     npx @tauri-apps/cli build --debug
 
 
+
+# Bootstrap: install dev deps + pre-commit hook

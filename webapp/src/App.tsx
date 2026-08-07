@@ -12,6 +12,7 @@ import AppsPage from "./pages/AppsPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import BimDemoPage from "./pages/BimDemoPage";
 import CfdDemosPage from "./pages/CfdDemosPage";
+import ToyCarDemoPage from "./pages/ToyCarDemoPage";
 import CfdPage from "./pages/CfdPage";
 import Fluidx3dPage from "./pages/Fluidx3dPage";
 import PipelinePage from "./pages/PipelinePage";
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/bim-demo" element={<BimDemoPage />} />
         <Route path="/cfd-demos" element={<CfdDemosPage />} />
+        <Route path="/toy-car" element={<ToyCarDemoPage />} />
         <Route path="/cfd" element={<CfdPage />} />
         <Route path="/fluidx3d" element={<Fluidx3dPage />} />
         <Route path="/pipeline" element={<PipelinePage />} />

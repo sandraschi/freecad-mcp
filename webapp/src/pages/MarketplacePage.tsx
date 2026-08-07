@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, Download, ExternalLink, Loader2, ShoppingBag, Image, Star, LayoutGrid, List, ChevronLeft, ChevronRight, Upload, CheckCircle, FileText } from "lucide-react";
+import { API_BASE } from "../lib/api";
 
 interface ModelResult {
   id: string; title: string; summary: string; author: string;
@@ -45,7 +46,7 @@ export default function MarketplacePage() {
     try {
       const params = new URLSearchParams({ source, query: q || category, limit: String(PAGE_SIZE), page: String(pageNum) });
       if (category) params.set("category", category);
-      const r = await fetch(`/api/v1/marketplace/search?${params}`);
+      const r = await fetch(API_BASE + `/api/v1/marketplace/search?${params}`);
       const j = await r.json();
       if (j.success) { setResults(j.results); setTotal(j.total); setPage(pageNum); }
       else { setError(j.error || "Search failed"); }
@@ -64,7 +65,7 @@ export default function MarketplacePage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const r = await fetch("/api/v1/upload", { method: "POST", body: formData });
+      const r = await fetch(API_BASE + "/api/v1/upload", { method: "POST", body: formData });
       const j = await r.json();
       if (j.success) {
         setRecentUploads((prev) => [{ name: j.filename, title: file.name.replace(/\.[^.]+$/, "") }, ...prev].slice(0, 5));
@@ -95,7 +96,7 @@ export default function MarketplacePage() {
         : item.download_url.toLowerCase().includes(".step") ? ".STEP"
         : item.download_url.toLowerCase().includes(".stp") ? ".stp" : ".stl";
       const filename = `${item.title.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60)}${ext}`;
-      const r = await fetch("/api/v1/marketplace/download", {
+      const r = await fetch(API_BASE + "/api/v1/marketplace/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: item.source, model_id: item.id, file_url: item.download_url, filename }),

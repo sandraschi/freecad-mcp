@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle, Cpu } from "lucide-react";
+import { API_BASE } from "../lib/api";
 
 export default function StatusPage() {
   const [status, setStatus] = useState<any>(null);
   useEffect(() => {
-    fetch("/api/v1/status").then(r => r.json()).then(setStatus).catch(() => setStatus({ freecad_ok: false }));
+    fetch(API_BASE + "/api/v1/status").then(r => r.json()).then(setStatus).catch(() => setStatus({ freecad_ok: false }));
   }, []);
   return (
     <div className="max-w-2xl space-y-6">

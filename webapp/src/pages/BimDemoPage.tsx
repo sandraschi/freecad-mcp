@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeftRight, Building2, Columns, DoorOpen, Home, LandPlot, Loader2, Wand2 } from "lucide-react";
+import { API_BASE } from "../lib/api";
 
 interface FieldDef {
   key: string;
@@ -174,7 +175,7 @@ export default function BimDemoPage() {
     }
 
     try {
-      const r = await fetch("/api/v1/control/tool", {
+      const r = await fetch(API_BASE + "/api/v1/control/tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tool: active.tool, arguments: args }),

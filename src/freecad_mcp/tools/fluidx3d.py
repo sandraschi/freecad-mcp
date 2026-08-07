@@ -77,9 +77,11 @@ def _ensure_fluidx3d(auto_clone: bool = True) -> str | None:
     repo_url = "https://github.com/ProjectPhysX/FluidX3D.git"
     try:
         logger.info("FluidX3D not found — cloning from %s to %s ...", repo_url, clone_dir)
-        r = subprocess.run(  # noqa: S603
-            ["git", "clone", "--depth", "1", repo_url, clone_dir],  # noqa: S607
-            capture_output=True, text=True, timeout=120,
+        r = subprocess.run(
+            ["git", "clone", "--depth", "1", repo_url, clone_dir],
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         if r.returncode != 0:
             logger.warning("Clone failed: %s", r.stderr[:500])
@@ -98,7 +100,7 @@ def _find_vs_vcvars64() -> str | None:
     if not os.path.isfile(vswhere):
         return None
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [
                 vswhere,
                 "-latest",
@@ -133,7 +135,7 @@ def _read_stock_defines(f3d_path: str) -> str:
     if not git_exe:
         git_exe = "git"
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [git_exe, "-C", f3d_path, "show", "HEAD:src/defines.hpp"],
             capture_output=True,
             text=True,
@@ -157,9 +159,18 @@ def _apply_param_to_config(cfg: dict, param: str, value: float) -> dict:
         "viscosity_m2s": ("si_viscosity", lambda v: float(v)),
         "density_kgm3": ("si_density", lambda v: float(v)),
         "time_steps": ("time_steps", lambda v: int(v)),
-        "resolution_x": ("resolution", lambda v: [int(v), cfg.get("resolution", [512, 128, 128])[1], cfg.get("resolution", [512, 128, 128])[2]]),
-        "resolution_y": ("resolution", lambda v: [cfg.get("resolution", [512, 128, 128])[0], int(v), cfg.get("resolution", [512, 128, 128])[2]]),
-        "resolution_z": ("resolution", lambda v: [cfg.get("resolution", [512, 128, 128])[0], cfg.get("resolution", [512, 128, 128])[1], int(v)]),
+        "resolution_x": (
+            "resolution",
+            lambda v: [int(v), cfg.get("resolution", [512, 128, 128])[1], cfg.get("resolution", [512, 128, 128])[2]],
+        ),
+        "resolution_y": (
+            "resolution",
+            lambda v: [cfg.get("resolution", [512, 128, 128])[0], int(v), cfg.get("resolution", [512, 128, 128])[2]],
+        ),
+        "resolution_z": (
+            "resolution",
+            lambda v: [cfg.get("resolution", [512, 128, 128])[0], cfg.get("resolution", [512, 128, 128])[1], int(v)],
+        ),
     }
     if param in param_map:
         key, transform = param_map[param]
@@ -249,13 +260,13 @@ def _find_compiler() -> str | None:
     exes = ["g++", "g++-14", "g++-13", "g++-12", "clang++"]
     for exe in exes:
         try:
-            result = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)  # noqa: S603
+            result = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 return exe
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
     try:
-        result = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602, S607
+        result = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602
         if "Microsoft" in result.stdout or "Microsoft" in result.stderr:
             return "msvc"
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -322,7 +333,7 @@ def _query_gpu_devices() -> list[dict]:
 
     try:
         r = subprocess.run(
-            ["clinfo", "--raw"],  # noqa: S607
+            ["clinfo", "--raw"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -347,7 +358,7 @@ def _query_gpu_devices() -> list[dict]:
 
     try:
         r = subprocess.run(
-            ["clinfo", "-l"],  # noqa: S607
+            ["clinfo", "-l"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -371,7 +382,7 @@ def _query_gpu_devices() -> list[dict]:
         nvidia_smi = shutil.which("nvidia-smi")
         if not nvidia_smi:
             return devices
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [nvidia_smi, "--query-gpu=name", "--format=csv,noheader"],
             capture_output=True,
             text=True,
@@ -2011,7 +2022,8 @@ def register_fluidx3d_tools(
             # Auto-install Pillow
             try:
                 import subprocess as _sp
-                _sp.run(["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60)  # noqa: S607
+
+                _sp.run(["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60)
                 # Re-check is best-effort since this is a hot reload
             except Exception:
                 logger.debug("Pillow auto-install failed")
@@ -2058,6 +2070,7 @@ def register_fluidx3d_tools(
                 data = parse_vtk_structured_points(vtk_files[-1])
                 png_path = os.path.join(case_dir, f"{case_name}_result.png")
                 from freecad_mcp.utils.vtk_renderer import render_slice_png
+
                 render_slice_png(data, data["dims"][2] // 2, png_path)
                 result = {"success": True, "video_path": None, "png_path": png_path, "frame_count": 1}
             except Exception as e2:
@@ -2083,7 +2096,9 @@ def register_fluidx3d_tools(
         base_case: Annotated[str, Field(description="Base case name to copy variants from.")],
         parameter: Annotated[
             str,
-            Field(description="Parameter to sweep: velocity_ms, viscosity_m2s, density_kgm3, time_steps, resolution_x, resolution_y, resolution_z."),
+            Field(
+                description="Parameter to sweep: velocity_ms, viscosity_m2s, density_kgm3, time_steps, resolution_x, resolution_y, resolution_z."
+            ),
         ] = "velocity_ms",
         values: Annotated[
             str, Field(description="JSON array of parameter values, e.g. '[0.005, 0.01, 0.02]'.")
@@ -2164,7 +2179,8 @@ def register_fluidx3d_tools(
                             with open(log_path, "wb") as lf:
                                 proc = await asyncio.create_subprocess_exec(
                                     prebuilt,
-                                    stdout=lf, stderr=asyncio.subprocess.STDOUT,
+                                    stdout=lf,
+                                    stderr=asyncio.subprocess.STDOUT,
                                     stdin=asyncio.subprocess.DEVNULL,
                                     env={**os.environ, "F3D_CONFIG": config_path},
                                 )
@@ -2195,7 +2211,9 @@ def register_fluidx3d_tools(
     @mcp.tool()
     async def cfd_fluidx3d_train_surrogate(
         base_case: Annotated[str, Field(description="Base case name used in parametric_sweep.")],
-        parameter: Annotated[str, Field(description="Parameter that was swept (velocity_ms, viscosity_m2s, etc).")] = "velocity_ms",
+        parameter: Annotated[
+            str, Field(description="Parameter that was swept (velocity_ms, viscosity_m2s, etc).")
+        ] = "velocity_ms",
         model_name: Annotated[str, Field(description="Name to save the trained model.")] = "default",
         epochs: Annotated[int, Field(description="Training epochs.", ge=10)] = 200,
         hidden_dim: Annotated[int, Field(description="Hidden layer size.", ge=8)] = 64,

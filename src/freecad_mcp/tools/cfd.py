@@ -381,7 +381,7 @@ def register_cfd_tools(
 
         for exe in exes:
             try:
-                r = subprocess.run(  # noqa: S603
+                r = subprocess.run(
                     [exe, "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True, timeout=10
                 )
                 if r.returncode == 0 and r.stdout.strip():
@@ -398,7 +398,7 @@ def register_cfd_tools(
         import subprocess
 
         try:
-            r = subprocess.run(  # noqa: S603
+            r = subprocess.run(
                 [docker_exe, "images", "--format", "{{.Repository}}:{{.Tag}}"],
                 capture_output=True,
                 text=True,
