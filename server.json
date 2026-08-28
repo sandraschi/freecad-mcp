@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.sandraschi/freecad-mcp",
+  "description": "FreeCAD MCP server - CAD operations via MCP tools and REST API",
+  "version": "0.6.0",
+  "repository": {
+    "url": "https://github.com/sandraschi/freecad-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/sandraschi/freecad-mcp/releases/download/v0.6.0/freecad-mcp-v0.6.0.mcpb",
+      "fileSha256": "17559f44dcbfc976eb9c9d9f9f222954b5b479a872f2a3c4dc23301c8ac6e501",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
