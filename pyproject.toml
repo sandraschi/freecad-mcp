@@ -1,7 +1,7 @@
 [project]
 name = "freecad-mcp"
-version = "0.5.1"
-description = "FreeCAD MCP server â€” CAD operations via MCP tools and REST API"
+version = "0.6.0"
+description = "FreeCAD 3D CAD automation: headless documents and export, plus CFD via FluidX3D/OpenFOAM"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
