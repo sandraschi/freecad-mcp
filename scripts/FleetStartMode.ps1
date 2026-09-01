@@ -53,7 +53,8 @@ function Enter-FleetHeadlessConsole {
     if ($env:FLEET_PROBE_RUN -eq '1') { return }
     if (-not $Headless) { return }
 
-    if ($Host.UI.RawUI.WindowTitle -match 'Hidden') { return }
+    if ($env:FLEET_HEADLESS_REENTERED -eq '1') { return }
+    $env:FLEET_HEADLESS_REENTERED = '1'
 
     $scriptPath = $StartScriptPath
     if (-not $scriptPath) {

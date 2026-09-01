@@ -42,13 +42,13 @@ line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "S", "UP", "RUF"]
+select = ["E", "F", "W", "I", "S", "UP", "RUF", "T20"]
 ignore = ["S101", "S106", "S110", "S112", "S101", "S106", "S110", "S112", "RUF012", "S603", "S607", "S324", "E402"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/**/*.py" = ["E501"]
-"tests/**/*.py" = ["E501", "S101"]
-"src/freecad_mcp/fc_bridge.py" = ["S110"]
+"tests/**/*.py" = ["E501", "S101", "T20"]
+"src/freecad_mcp/fc_bridge.py" = ["S110", "T20"]
 "src/freecad_mcp/server.py" = ["S603", "S110", "S607"]
 
 [dependency-groups]
