@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 const BE = http://127.0.0.1:10944;
 const FE = http://127.0.0.1:10945;
 test.describe('Fleet Audit', () => {
