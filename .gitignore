@@ -18,6 +18,13 @@ native/target/
 native/gen/
 reports/
 *.mcpb
+build/
+cua-reports/
+data/
+*.obj
+*.bak.*
+*.local
+fleet-start.config.ps1.local
 
 # Runtime logs
 *.log
