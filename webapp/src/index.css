@@ -1,16 +1,27 @@
-@tailwind base; @tailwind components; @tailwind utilities;
-html, body, #root { width: 100%; height: 100%; margin: 0; font-family: system-ui, sans-serif; background: #0a0a0c; color: #e2e8f0; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+html,
+body,
+#root {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	font-family: system-ui, sans-serif;
+	background: #0a0a0c;
+	color: #e2e8f0;
+}
 
 /* EXPERIMENTAL light mode (invert hack) - NOT fleet standard, reversible.
    Toggling .dark off <html> inverts the whole UI. Remove this block to
    revert to permanently-dark. */
 html:not(.dark) {
-  filter: invert(1) hue-rotate(180deg);
-  background: #f4f4f5;
+	filter: invert(1) hue-rotate(180deg);
+	background: #f4f4f5;
 }
 html:not(.dark) img,
 html:not(.dark) video,
 html:not(.dark) canvas,
 html:not(.dark) iframe {
-  filter: invert(1) hue-rotate(180deg);
+	filter: invert(1) hue-rotate(180deg);
 }
