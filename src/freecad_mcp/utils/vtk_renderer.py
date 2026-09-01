@@ -316,7 +316,7 @@ def render_video(
         vtk_files: Sorted list of VTK file paths (time series)
         output_path: Output video path (should end in .webm or .mp4)
         fps: Frames per second
-        slice_axis: 'x', 'y', or 'z' — which axis to slice
+        slice_axis: 'x', 'y', or 'z' - which axis to slice
         quality: CRF quality (lower = better, 23 = good)
 
     Returns:

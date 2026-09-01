@@ -2,7 +2,7 @@
 Lightweight neural surrogate for FluidX3D force prediction.
 
 Trains a small MLP on parametric sweep results to predict forces
-from input parameters. Optional — requires PyTorch.
+from input parameters. Optional - requires PyTorch.
 """
 
 import json

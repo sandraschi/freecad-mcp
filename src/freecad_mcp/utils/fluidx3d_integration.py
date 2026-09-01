@@ -1,4 +1,4 @@
-"""FluidX3D GPU integration smoke — requires local clone, compiler, and OpenCL GPU."""
+"""FluidX3D GPU integration smoke - requires local clone, compiler, and OpenCL GPU."""
 
 from __future__ import annotations
 
