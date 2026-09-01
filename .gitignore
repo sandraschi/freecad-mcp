@@ -12,6 +12,7 @@ htmlcov/
 _dashboard/
 .env
 *.bak
+*.bak*
 native/resources/*.exe
 native/binaries/*.exe
 native/target/
@@ -25,6 +26,11 @@ data/
 *.bak.*
 *.local
 fleet-start.config.ps1.local
+restart.bat
+stop.bat
+stop.ps1
+rustup-init.exe
+justfile.bak*
 
 # Runtime logs
 *.log
