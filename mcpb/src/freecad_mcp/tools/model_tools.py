@@ -1,4 +1,4 @@
-"""FreeCAD modeling portmanteau — primitives, booleans, toy car preset."""
+"""FreeCAD modeling portmanteau - primitives, booleans, toy car preset."""
 
 from __future__ import annotations
 
@@ -10,7 +10,17 @@ from pydantic import Field
 
 from freecad_mcp.model_ops import (
     script_boolean,
+    script_clash_check,
+    script_create_assembly,
+    script_create_fastener,
+    script_create_gear,
     script_create_primitive,
+    script_create_sketch,
+    script_create_techdraw,
+    script_generative_optimize,
+    script_heuristic_fillet,
+    script_inspect_assembly,
+    script_inspect_geometry,
     script_toy_car,
 )
 from freecad_mcp.tools.bridge_tools import resolve_execution_mode
@@ -22,7 +32,8 @@ from freecad_mcp.toy_car_pipeline import (
 
 logger = logging.getLogger("freecad-mcp.model")
 
-_README_ONLY = {"readonly": True}
+_READ_ONLY = {"readonly": True}
+_MUTATING = {"mutating": True}
 
 
 def register_model_tools(
@@ -41,13 +52,13 @@ def register_model_tools(
         out, err, code = await run_freecad(script, timeout=timeout)
         return build_result("freecad_model", out, err, code)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_MUTATING)
     async def freecad_model(
         operation: Annotated[
             str,
             Field(
                 description=(
-                    "Operation: create_primitive, fuse, cut, common, mirror, extrude, "
+                    "Operation: create_primitive, gear, fastener, inspect, clash_check, fuse, cut, common, mirror, extrude, "
                     "fillet, transform, export, toy_car"
                 ),
             ),
@@ -97,18 +108,42 @@ def register_model_tools(
             Field(description="Marketplace search when car_source is auto or marketplace."),
         ] = "toy car sports car stl",
         car_style: Annotated[str, Field(description="Car style hint (sports).")] = "sports",
+        gear_type: Annotated[str, Field(description="Gear type: spur or helical.")] = "spur",
+        num_teeth: Annotated[int, Field(description="Gear tooth count.", ge=4)] = 20,
+        module: Annotated[float, Field(description="Gear module mm.", ge=0.5)] = 2.0,
+        pressure_angle_deg: Annotated[float, Field(description="Gear pressure angle deg.")] = 20.0,
+        face_width_mm: Annotated[float, Field(description="Gear face width mm.", ge=1.0)] = 10.0,
+        bore_diameter_mm: Annotated[float, Field(description="Gear center bore diameter mm.", ge=0.0)] = 8.0,
+        fastener_type: Annotated[str, Field(description="Fastener type: bolt, nut, washer.")] = "bolt",
+        size: Annotated[str, Field(description="Fastener size: M3, M4, M5, M6, M8, M10, M12.")] = "M6",
+        length_mm: Annotated[float, Field(description="Fastener length mm.", ge=1.0)] = 20.0,
+        file_name: Annotated[str, Field(description="Input file name for inspect, clash_check, techdraw, etc.")] = "",
+        file_name_2: Annotated[str, Field(description="Second file name for clash_check.")] = "",
+        components: Annotated[
+            list[dict] | None,
+            Field(default=None, description="Component placement list for assembly operation."),
+        ] = None,
+        sketch_type: Annotated[
+            str, Field(description="Sketch profile type: rectangle_with_hole, slot, flange.")
+        ] = "rectangle_with_hole",
+        width_mm: Annotated[float, Field(description="Sketch width mm.", ge=1.0)] = 60.0,
+        height_mm: Annotated[float, Field(description="Sketch height mm.", ge=1.0)] = 40.0,
+        hole_diameter_mm: Annotated[float, Field(description="Sketch hole diameter mm.", ge=0.0)] = 12.0,
+        extrude_height_mm: Annotated[float, Field(description="Sketch extrude height mm.", ge=0.1)] = 15.0,
+        target_reduction_pct: Annotated[
+            float, Field(description="Generative weight reduction target %.", ge=5.0, le=75.0)
+        ] = 35.0,
+        wall_thickness_mm: Annotated[float, Field(description="Generative wall thickness mm.", ge=0.5)] = 3.0,
+        edge_filter: Annotated[
+            str, Field(description="Fillet edge filter: all_vertical, min_length.")
+        ] = "all_vertical",
+        scale: Annotated[float, Field(description="TechDraw blueprint view scale.", ge=0.01)] = 1.0,
     ) -> dict[str, Any]:
         """Parametric FreeCAD modeling for agentic CAD workflows.
 
         Supports Hands-In (live GUI bridge) and Hands-Off (FreeCADCmd subprocess).
-        The toy_car preset builds an elaborate sports car via Blender sculpt, marketplace
-        STL download, or FreeCAD parametric solids (chassis, cabin, arches, torus wheels).
-
-        ## Examples
-        await freecad_model(operation="create_primitive", primitive_type="box", params={"width": 40, "height": 20, "depth": 60})
-        await freecad_model(operation="toy_car", car_source="blender", output_name="sports_car.stl")
-        await freecad_model(operation="toy_car", car_source="marketplace", marketplace_query="mini sports car")
-        await freecad_model(operation="fuse", object_names=["Body", "Wheel0"], execution_mode="hands_in")
+        Operations: create_primitive, gear, fastener, inspect, clash_check, techdraw, sketch,
+        assembly, generative, heuristic_fillet, inspect_assembly, fuse, cut, common, mirror, extrude, fillet, transform, export, toy_car.
         """
         op = operation.strip().lower()
         mode = resolve_execution_mode(state, execution_mode or None)
@@ -164,6 +199,145 @@ def register_model_tools(
             result["effective_mode"] = mode
             result["operation"] = op
             return result
+
+        if op == "gear":
+            script = script_create_gear(
+                gear_type=gear_type,
+                num_teeth=num_teeth,
+                module=module,
+                pressure_angle_deg=pressure_angle_deg,
+                face_width_mm=face_width_mm,
+                bore_diameter_mm=bore_diameter_mm,
+                label=label or "Gear",
+                document_label=document_label or "GearDoc",
+                export_stl=export_path if output_name else None,
+            )
+            res = await _run_script(script)
+            if res.get("success") and output_name:
+                res["output"] = stl_name
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "fastener":
+            script = script_create_fastener(
+                fastener_type=fastener_type,
+                size=size,
+                length_mm=length_mm,
+                label=label or "Fastener",
+                document_label=document_label or "FastenerDoc",
+                export_stl=export_path if output_name else None,
+            )
+            res = await _run_script(script)
+            if res.get("success") and output_name:
+                res["output"] = stl_name
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "inspect":
+            target = file_name or output_name
+            script = script_inspect_geometry(file_name=target, document_label=document_label or "InspectDoc")
+            res = await _run_script(script)
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "clash_check":
+            script = script_clash_check(
+                file_name_1=file_name,
+                file_name_2=file_name_2,
+                document_label=document_label or "ClashDoc",
+            )
+            res = await _run_script(script)
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "techdraw":
+            svg_out = os.path.join(output_dir, output_name or "blueprint.svg")
+            pdf_out = os.path.join(output_dir, output_name.rsplit(".", 1)[0] + ".pdf") if output_name else ""
+            script = script_create_techdraw(
+                file_name=file_name,
+                output_svg=svg_out,
+                output_pdf=pdf_out,
+                scale=scale,
+                document_label=document_label or "TechDrawDoc",
+            )
+            res = await _run_script(script)
+            res["output"] = os.path.basename(svg_out)
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "sketch":
+            script = script_create_sketch(
+                sketch_type=sketch_type,
+                width_mm=width_mm,
+                height_mm=height_mm,
+                hole_diameter_mm=hole_diameter_mm,
+                extrude_height_mm=extrude_height_mm,
+                plane=plane or "XY",
+                document_label=document_label or "SketchDoc",
+                export_stl=export_path if output_name else None,
+            )
+            res = await _run_script(script)
+            if res.get("success") and output_name:
+                res["output"] = stl_name
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "assembly":
+            step_out = os.path.join(output_dir, output_name or "assembly.step")
+            script = script_create_assembly(
+                components=components or [],
+                output_step=step_out,
+                output_stl=export_path if output_name else "",
+                document_label=document_label or "AssemblyDoc",
+            )
+            res = await _run_script(script)
+            res["output"] = os.path.basename(step_out)
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "generative":
+            script = script_generative_optimize(
+                file_name=file_name,
+                target_reduction_pct=target_reduction_pct,
+                wall_thickness_mm=wall_thickness_mm,
+                output_stl=export_path if output_name else "",
+                document_label=document_label or "OptimizedDoc",
+            )
+            res = await _run_script(script)
+            if res.get("success") and output_name:
+                res["output"] = stl_name
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "heuristic_fillet":
+            script = script_heuristic_fillet(
+                file_name=file_name,
+                radius_mm=radius_mm,
+                edge_filter=edge_filter,
+                output_stl=export_path if output_name else "",
+                document_label=document_label or "FilletDoc",
+            )
+            res = await _run_script(script)
+            if res.get("success") and output_name:
+                res["output"] = stl_name
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
+
+        if op == "inspect_assembly":
+            script = script_inspect_assembly(file_path=file_name, document_label=document_label or "InspectAssemblyDoc")
+            res = await _run_script(script)
+            res["effective_mode"] = mode
+            res["operation"] = op
+            return res
 
         if op in {"fuse", "cut", "common"}:
             if mode == "hands_in" and state.get("bridge_mode") == "tcp":

@@ -1,7 +1,7 @@
 """
-FluidX3D GPU CFD MCP tools — native GPU lattice-Boltzmann solver integration.
+FluidX3D GPU CFD MCP tools - native GPU lattice-Boltzmann solver integration.
 
-FluidX3D (ProjectPhysX/FluidX3D) runs on ALL GPUs via OpenCL — NVIDIA, AMD,
+FluidX3D (ProjectPhysX/FluidX3D) runs on ALL GPUs via OpenCL - NVIDIA, AMD,
 Intel Arc, Apple Silicon. 55 bytes/cell memory efficiency (6x better than
 traditional LBM). 5k+ stars, v3.7 (May 2026), active maintenance.
 
@@ -11,7 +11,7 @@ simulation, and parse structured output (forces, residuals, MLUPS throughput).
 Requires: FluidX3D cloned locally. Default path auto-detected from common
 locations; configurable via FLUIDX3D_PATH env var.
 
-Registered via register_fluidx3d_tools(mcp, **deps) — called from server.py.
+Registered via register_fluidx3d_tools(mcp, **deps) - called from server.py.
 """
 
 import asyncio
@@ -36,6 +36,8 @@ _FLUIDX3D_DEFAULT_PATHS = [
     os.path.expanduser("~/FluidX3D"),
     os.path.expanduser("~/fluidx3d"),
     "/opt/FluidX3D",
+    os.path.join(os.environ.get("TEMP", ""), "fluidx3d"),
+    os.path.join(os.environ.get("FLUIDX3D_CACHE_DIR", ""), "fluidx3d") if os.environ.get("FLUIDX3D_CACHE_DIR") else "",
 ]
 
 
@@ -50,6 +52,47 @@ def _find_fluidx3d() -> str | None:
     return None
 
 
+def _ensure_fluidx3d(auto_clone: bool = True) -> str | None:
+    """Find FluidX3D installation; auto-clone to %TEMP% if missing.
+
+    Returns path to FluidX3D clone, or None if unavailable.
+    When auto_clone=True, clones the repo and prints the clone URL.
+    """
+    existing = _find_fluidx3d()
+    if existing:
+        return existing
+
+    if not auto_clone:
+        return None
+
+    # Auto-clone to temporary location (survives server restarts)
+    clone_dir = os.path.join(
+        os.environ.get("FLUIDX3D_CACHE_DIR") or os.environ.get("TEMP", ""),
+        "fluidx3d",
+    )
+    if os.path.isdir(clone_dir) and os.path.isdir(os.path.join(clone_dir, "src")):
+        return clone_dir
+
+    # Not found anywhere - clone
+    repo_url = "https://github.com/ProjectPhysX/FluidX3D.git"
+    try:
+        logger.info("FluidX3D not found - cloning from %s to %s ...", repo_url, clone_dir)
+        r = subprocess.run(
+            ["git", "clone", "--depth", "1", repo_url, clone_dir],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if r.returncode != 0:
+            logger.warning("Clone failed: %s", r.stderr[:500])
+            return None
+        logger.info("FluidX3D cloned to %s", clone_dir)
+        return clone_dir if os.path.isdir(os.path.join(clone_dir, "src")) else None
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.warning("Could not clone FluidX3D: %s", e)
+        return None
+
+
 def _find_vs_vcvars64() -> str | None:
     """Locate vcvars64.bat via vswhere (MSVC not always on PATH)."""
     pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
@@ -57,7 +100,7 @@ def _find_vs_vcvars64() -> str | None:
     if not os.path.isfile(vswhere):
         return None
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [
                 vswhere,
                 "-latest",
@@ -92,7 +135,7 @@ def _read_stock_defines(f3d_path: str) -> str:
     if not git_exe:
         git_exe = "git"
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [git_exe, "-C", f3d_path, "show", "HEAD:src/defines.hpp"],
             capture_output=True,
             text=True,
@@ -107,6 +150,34 @@ def _read_stock_defines(f3d_path: str) -> str:
     stock_path = os.path.join(f3d_path, "src", "defines.hpp")
     with open(stock_path, encoding="utf-8") as f:
         return f.read()
+
+
+def _apply_param_to_config(cfg: dict, param: str, value: float) -> dict:
+    """Modify a FluidX3D config dict for parametric sweeps."""
+    param_map = {
+        "velocity_ms": ("si_velocity", lambda v: float(v)),
+        "viscosity_m2s": ("si_viscosity", lambda v: float(v)),
+        "density_kgm3": ("si_density", lambda v: float(v)),
+        "time_steps": ("time_steps", lambda v: int(v)),
+        "resolution_x": (
+            "resolution",
+            lambda v: [int(v), cfg.get("resolution", [512, 128, 128])[1], cfg.get("resolution", [512, 128, 128])[2]],
+        ),
+        "resolution_y": (
+            "resolution",
+            lambda v: [cfg.get("resolution", [512, 128, 128])[0], int(v), cfg.get("resolution", [512, 128, 128])[2]],
+        ),
+        "resolution_z": (
+            "resolution",
+            lambda v: [cfg.get("resolution", [512, 128, 128])[0], cfg.get("resolution", [512, 128, 128])[1], int(v)],
+        ),
+    }
+    if param in param_map:
+        key, transform = param_map[param]
+        cfg[key] = transform(value)
+    else:
+        cfg[param] = value
+    return cfg
 
 
 def _generate_defines_hpp(
@@ -189,13 +260,13 @@ def _find_compiler() -> str | None:
     exes = ["g++", "g++-14", "g++-13", "g++-12", "clang++"]
     for exe in exes:
         try:
-            result = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)  # noqa: S603
+            result = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 return exe
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
     try:
-        result = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602, S607
+        result = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602
         if "Microsoft" in result.stdout or "Microsoft" in result.stderr:
             return "msvc"
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -213,7 +284,7 @@ def _find_prebuilt(
 
     Checks, in priority order:
     1. FLUIDX3D_BINARY environment variable
-    2. The FluidX3D Runner binary (fluidx3d-runner) — reads config.json at runtime
+    2. The FluidX3D Runner binary (fluidx3d-runner) - reads config.json at runtime
     3. <f3d_case_dir>/bin/fluidx3d_run.exe (Windows) or fluidx3d_run
     4. <f3d_path>/bin/ for pre-existing compiled binaries
     """
@@ -262,7 +333,7 @@ def _query_gpu_devices() -> list[dict]:
 
     try:
         r = subprocess.run(
-            ["clinfo", "--raw"],  # noqa: S607
+            ["clinfo", "--raw"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -287,7 +358,7 @@ def _query_gpu_devices() -> list[dict]:
 
     try:
         r = subprocess.run(
-            ["clinfo", "-l"],  # noqa: S607
+            ["clinfo", "-l"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -311,7 +382,7 @@ def _query_gpu_devices() -> list[dict]:
         nvidia_smi = shutil.which("nvidia-smi")
         if not nvidia_smi:
             return devices
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [nvidia_smi, "--query-gpu=name", "--format=csv,noheader"],
             capture_output=True,
             text=True,
@@ -336,7 +407,7 @@ def _query_gpu_devices() -> list[dict]:
 _TEMPLATE = """#include "setup.hpp"
 #include "info.hpp"
 
-// FluidX3D setup — auto-generated by freecad-mcp cfd_fluidx3d_setup
+// FluidX3D setup - auto-generated by freecad-mcp cfd_fluidx3d_setup
 // Case: {case_name} | Domain: {domain_type} | GPU CFD via OpenCL
 
 void main_setup() {{
@@ -434,7 +505,7 @@ BC_TEMPLATES = {
     "channel": _BC_CHANNEL,
     "pipe": _BC_PIPE,
     "box": _BC_BOX,
-    "nozzle": _BC_PIPE,  # Same as pipe for now — STL import for complex
+    "nozzle": _BC_PIPE,  # Same as pipe for now - STL import for complex
     "custom": "",
 }
 
@@ -487,7 +558,7 @@ def _generate_profile_code(
 ) -> str:
     """Generate C++ code for inlet velocity profile (parabolic, blasius, uniform).
 
-    Returns empty string for 'uniform' — the BC template handles uniform velocity.
+    Returns empty string for 'uniform' - the BC template handles uniform velocity.
     """
     if profile_shape == "uniform":
         return ""
@@ -621,7 +692,7 @@ def _generate_stl_imports(
 ) -> str:
     """Generate STL import C++ code with per-object type flag assignment."""
     if not stl_files:
-        return "    // No STL geometry — using pure primitive boundaries"
+        return "    // No STL geometry - using pure primitive boundaries"
 
     configs = stl_configs or [{"type_flag": "TYPE_S|TYPE_X"} for _ in stl_files]
 
@@ -751,7 +822,7 @@ def register_fluidx3d_tools(
         ## Examples
         await cfd_fluidx3d_status()
         """
-        f3d_path = _find_fluidx3d()
+        f3d_path = _ensure_fluidx3d(auto_clone=True)
         compiler = _find_compiler()
         gpu_devices = _query_gpu_devices()
         ready = f3d_path is not None and compiler is not None
@@ -923,7 +994,7 @@ def register_fluidx3d_tools(
         case_dir = os.path.join(F3D_CASE_DIR, case_name)
         os.makedirs(case_dir, exist_ok=True)
 
-        # Handle STL file — multi-source discovery cascade
+        # Handle STL file - multi-source discovery cascade
         stl_files = []
         stl_src = None
 
@@ -1666,7 +1737,7 @@ def register_fluidx3d_tools(
         """Export FluidX3D simulation results for 3D rendering.
 
         Reads the VTK velocity field output and generates:
-        1. OBJ file with streamlines (polylines) — importable into
+        1. OBJ file with streamlines (polylines) - importable into
            Unity3D, Resonite, Blender, and any 3D tool
         2. Optional CSV with velocity point cloud for custom shader workflows
 
@@ -1853,7 +1924,7 @@ def register_fluidx3d_tools(
                 if len(streamline_pts) >= 2:
                     obj_path = os.path.join(case_dir, f"streamline_{sl}.obj")
                     with open(obj_path, "w") as f:
-                        f.write(f"# FluidX3D streamline {sl} — case {case_name}\n")
+                        f.write(f"# FluidX3D streamline {sl} - case {case_name}\n")
                         f.write(f"# {len(streamline_pts)} points\n")
                         for pt in streamline_pts:
                             f.write(f"v {pt[0]:.6f} {pt[1]:.6f} {pt[2]:.6f}\n")
@@ -1862,12 +1933,12 @@ def register_fluidx3d_tools(
                     objs.append(obj_path)
 
             if not objs:
-                return {"success": False, "error": "No streamlines generated — check domain size or velocity field."}
+                return {"success": False, "error": "No streamlines generated - check domain size or velocity field."}
 
             # Write merged OBJ
             merged_path = os.path.join(case_dir, f"{case_name}_streamlines.obj")
             with open(merged_path, "w") as fout:
-                fout.write(f"# FluidX3D streamlines — case {case_name}\n")
+                fout.write(f"# FluidX3D streamlines - case {case_name}\n")
                 fout.write(f"# {n_streamlines} streamlines, VTK: {vtk_name}\n")
                 vertex_offset = 0
                 for obj in objs:
@@ -1911,9 +1982,296 @@ def register_fluidx3d_tools(
             logger.exception("Export for render failed")
             return {"success": False, "error": f"Export failed: {e}"}
 
+    # ── cfd_fluidx3d_render ─────────────────────────────────────────────
+
+    @mcp.tool(annotations=_README_ONLY)
+    async def cfd_fluidx3d_render(
+        case_name: Annotated[str, Field(description="Case directory name.")],
+        fps: Annotated[int, Field(default=10, description="Video frames per second.")] = 10,
+        quality: Annotated[
+            int, Field(default=23, description="Video CRF quality 0-51 (lower=better).", ge=0, le=51)
+        ] = 23,
+    ) -> dict:
+        """Render FluidX3D simulation results as a WebM video.
+
+        Reads VTK velocity field files from the case directory, renders
+        each time step as a velocity-magnitude heatmap (XY slice at mid-Z),
+        and stitches them into a WebM video via ffmpeg.
+
+        Requires: Pillow (PIL) for PNG rendering, ffmpeg for video encoding.
+        If ffmpeg is not available, falls back to PNG frames only.
+
+        ## Return Format
+        {"success": bool, "video_path": str|null, "frame_count": int, "duration_s": float}
+
+        ## Examples
+        await cfd_fluidx3d_render(case_name="pipe_gpu")
+        """
+        from freecad_mcp.utils.vtk_renderer import HAS_PIL, _ensure_ffmpeg, parse_vtk_structured_points, render_video
+
+        # Ensure ffmpeg is available (auto-installs via winget on Windows)
+        ffmpeg, ffmsg = _ensure_ffmpeg(install=True)
+        if not ffmpeg:
+            return {
+                "success": False,
+                "error": f"Cannot render video - {ffmsg}",
+                "remediation": ffmsg,
+            }
+
+        if not HAS_PIL:
+            # Auto-install Pillow
+            try:
+                import subprocess as _sp
+
+                _sp.run(["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60)
+                # Re-check is best-effort since this is a hot reload
+            except Exception:
+                logger.debug("Pillow auto-install failed")
+            if not HAS_PIL:
+                return {
+                    "success": False,
+                    "error": "Pillow not installed. Auto-install failed.\nRun: uv pip install Pillow\nOr: pip install Pillow",
+                    "remediation": "Install Pillow: uv pip install Pillow",
+                }
+
+        case_dir = os.path.join(F3D_CASE_DIR, case_name)
+        if not os.path.isdir(case_dir):
+            return {"success": False, "error": f"Case '{case_name}' not found."}
+
+        # Collect VTK files sorted by step number
+        vtk_files = sorted(
+            [
+                os.path.join(case_dir, f)
+                for f in os.listdir(case_dir)
+                if f.endswith(".vtk") and (f.startswith("u_") or f.startswith("velocity_"))
+            ]
+        )
+        f3d_path = _find_fluidx3d()
+        if f3d_path:
+            export_dir = os.path.join(f3d_path, "bin", "export")
+            if os.path.isdir(export_dir):
+                for fn in sorted(os.listdir(export_dir)):
+                    if fn.endswith(".vtk") and (fn.startswith("u_") or fn.startswith("velocity_")):
+                        vtk_files.append(os.path.join(export_dir, fn))
+
+        if not vtk_files:
+            return {
+                "success": False,
+                "error": f"No VTK velocity files found for '{case_name}'. Run cfd_fluidx3d_run first.",
+            }
+
+        video_path = os.path.join(case_dir, f"{case_name}_simulation.webm")
+
+        result = render_video(case_dir, vtk_files, video_path, fps=fps, quality=quality)
+
+        if not result.get("success"):
+            # Fallback: render single frame
+            try:
+                data = parse_vtk_structured_points(vtk_files[-1])
+                png_path = os.path.join(case_dir, f"{case_name}_result.png")
+                from freecad_mcp.utils.vtk_renderer import render_slice_png
+
+                render_slice_png(data, data["dims"][2] // 2, png_path)
+                result = {"success": True, "video_path": None, "png_path": png_path, "frame_count": 1}
+            except Exception as e2:
+                return {"success": False, "error": f"Render failed: {result.get('error')}. PNG fallback: {e2}"}
+
+        return {
+            "success": True,
+            "case_name": case_name,
+            "data": {
+                "video_path": result.get("output_path") or result.get("video_path"),
+                "png_path": result.get("png_path"),
+                "frame_count": result.get("frame_count", 0),
+                "duration_s": result.get("duration_s", 0),
+                "vtk_files": len(vtk_files),
+                "fps": fps,
+            },
+        }
+
+    # ── cfd_fluidx3d_parametric_sweep ────────────────────────────────────
+
+    @mcp.tool()
+    async def cfd_fluidx3d_parametric_sweep(
+        base_case: Annotated[str, Field(description="Base case name to copy variants from.")],
+        parameter: Annotated[
+            str,
+            Field(
+                description="Parameter to sweep: velocity_ms, viscosity_m2s, density_kgm3, time_steps, resolution_x, resolution_y, resolution_z."
+            ),
+        ] = "velocity_ms",
+        values: Annotated[
+            str, Field(description="JSON array of parameter values, e.g. '[0.005, 0.01, 0.02]'.")
+        ] = "[0.005, 0.01, 0.02]",
+        run: Annotated[bool, Field(description="Execute each variant after creation.")] = False,
+    ) -> dict:
+        """Run a parameter sweep across multiple values for a FluidX3D case.
+
+        Duplicates the base case config, modifies the specified parameter
+        across N values, and optionally runs each variant on GPU.
+
+        Uses the config.json (runner path) -- no recompilation needed per case.
+        Each variant runs sequentially on the same GPU device.
+
+        ## Return Format
+        {"success": bool, "base_case": str, "parameter": str, "variants": [{"name": str, "value": any}], "run_results": [...]}
+
+        ## Examples
+        await cfd_fluidx3d_parametric_sweep(base_case="channel_base", parameter="velocity_ms", values="[0.005, 0.01, 0.02, 0.05]", run=True)
+        await cfd_fluidx3d_parametric_sweep(base_case="pipe_base", parameter="viscosity_m2s", values="[1e-6, 2e-6, 5e-6]")
+        """
+        case_dir = os.path.join(F3D_CASE_DIR, base_case)
+        if not os.path.isdir(case_dir):
+            return {"success": False, "error": f"Base case '{base_case}' not found."}
+
+        # Parse values
+        try:
+            vals = json.loads(values)
+            if not isinstance(vals, list) or not vals:
+                return {"success": False, "error": "values must be a non-empty JSON array"}
+        except json.JSONDecodeError as e:
+            return {"success": False, "error": f"Invalid JSON values: {e}"}
+
+        param_key = parameter
+        variants = []
+        results = []
+
+        for i, val in enumerate(vals):
+            variant_name = f"{base_case}_{i}"
+            variant_dir = os.path.join(F3D_CASE_DIR, variant_name)
+            os.makedirs(variant_dir, exist_ok=True)
+
+            # Copy config files from base case
+            for cfg_file in [".f3d_config.json", "config.json", "defines.hpp"]:
+                src = os.path.join(case_dir, cfg_file)
+                if os.path.isfile(src):
+                    shutil.copy2(src, os.path.join(variant_dir, cfg_file))
+
+            # Copy setup.cpp if it exists (for compile path)
+            setup_src = os.path.join(case_dir, "setup.cpp")
+            if os.path.isfile(setup_src):
+                shutil.copy2(setup_src, os.path.join(variant_dir, "setup.cpp"))
+
+            # Modify the config
+            for cfg_file in [".f3d_config.json", "config.json"]:
+                cfg_path = os.path.join(variant_dir, cfg_file)
+                if os.path.isfile(cfg_path):
+                    with open(cfg_path) as f:
+                        cfg = json.load(f)
+                    # Navigate the config to find the parameter
+                    # FluidX3D config has: si_velocity, si_viscosity, si_density, time_steps, resolution
+                    cfg_modified = _apply_param_to_config(cfg, param_key, val)
+                    with open(cfg_path, "w") as f:
+                        json.dump(cfg_modified, f, indent=2)
+
+            variants.append({"name": variant_name, "value": val, "dir": variant_dir})
+
+        if run:
+            for v in variants:
+                try:
+                    prebuilt = _find_prebuilt(F3D_CASE_DIR, _find_fluidx3d())
+
+                    if prebuilt:
+                        # Use runner path
+                        config_path = os.path.join(v["dir"], "config.json")
+                        if os.path.isfile(config_path):
+                            log_path = os.path.join(v["dir"], "run.log")
+                            with open(log_path, "wb") as lf:
+                                proc = await asyncio.create_subprocess_exec(
+                                    prebuilt,
+                                    stdout=lf,
+                                    stderr=asyncio.subprocess.STDOUT,
+                                    stdin=asyncio.subprocess.DEVNULL,
+                                    env={**os.environ, "F3D_CONFIG": config_path},
+                                )
+                            try:
+                                await asyncio.wait_for(proc.wait(), timeout=3600)
+                            except TimeoutError:
+                                if proc.returncode is None:
+                                    proc.kill()
+                                results.append({"variant": v["name"], "exit": -1, "error": "timeout"})
+                                continue
+                            results.append({"variant": v["name"], "exit": proc.returncode})
+                    else:
+                        results.append({"variant": v["name"], "error": "no prebuilt binary", "skipped": True})
+                except Exception as e:
+                    results.append({"variant": v["name"], "error": str(e)})
+
+        return {
+            "success": True,
+            "base_case": base_case,
+            "parameter": param_key,
+            "variants": variants,
+            "run_results": results if run else None,
+            "completed": len(results) if run else None,
+        }
+
+    # ── cfd_fluidx3d_train_surrogate ──────────────────────────────────────
+
+    @mcp.tool()
+    async def cfd_fluidx3d_train_surrogate(
+        base_case: Annotated[str, Field(description="Base case name used in parametric_sweep.")],
+        parameter: Annotated[
+            str, Field(description="Parameter that was swept (velocity_ms, viscosity_m2s, etc).")
+        ] = "velocity_ms",
+        model_name: Annotated[str, Field(description="Name to save the trained model.")] = "default",
+        epochs: Annotated[int, Field(description="Training epochs.", ge=10)] = 200,
+        hidden_dim: Annotated[int, Field(description="Hidden layer size.", ge=8)] = 64,
+    ) -> dict:
+        """Train a neural surrogate model on parametric sweep results.
+
+        Reads sweep variants (base_case_0, base_case_1, ...), trains a
+        small MLP to predict forces (Fx, Fy, Fz) from the sweep parameter,
+        and saves the model to ~/.cache/freecad-mcp/surrogates/.
+
+        Requires PyTorch (pip install torch).
+
+        ## Return Format
+        {"success": bool, "loss_history": list, "final_loss": float, "model_path": str, "samples": int}
+
+        ## Examples
+        await cfd_fluidx3d_train_surrogate(base_case="channel_sweep", model_name="channel_flow")
+        """
+        from freecad_mcp.utils.nn_surrogate import _parse_sweep_results, train_surrogate
+
+        samples = _parse_sweep_results(F3D_CASE_DIR, parameter)
+        # Filter samples matching the base case prefix
+        prefix = f"{base_case}_"
+        samples = [s for s in samples if s.get("source", "").startswith(prefix)]
+        if not samples:
+            return {
+                "success": False,
+                "error": f"No sweep results found for '{base_case}'. Run cfd_fluidx3d_parametric_sweep with run=True first.",
+            }
+
+        return train_surrogate(samples, model_name=model_name, hidden_dim=hidden_dim, epochs=epochs)
+
+    # ── cfd_surrogate_predict ─────────────────────────────────────────────
+
+    @mcp.tool(annotations=_README_ONLY)
+    async def cfd_surrogate_predict(
+        model_name: Annotated[str, Field(description="Model name from train_surrogate.")] = "default",
+        param_value: Annotated[float, Field(description="Parameter value to predict forces for.")] = 0.0,
+    ) -> dict:
+        """Predict forces using a trained surrogate model.
+
+        Loads a trained MLP and predicts Fx, Fy, Fz for a given parameter value.
+        1000x faster than running a full FluidX3D simulation.
+
+        ## Return Format
+        {"success": bool, "Fx": float, "Fy": float, "Fz": float, "param_value": float, "model": str}
+
+        ## Examples
+        await cfd_surrogate_predict(model_name="channel_flow", param_value=0.015)
+        """
+        from freecad_mcp.utils.nn_surrogate import predict
+
+        return predict(model_name, param_value)
+
     logger.info(
         "FluidX3D tools registered: cfd_fluidx3d_status, cfd_fluidx3d_prebuilt, cfd_fluidx3d_setup, cfd_fluidx3d_compile, "
-        "cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain, cfd_fluidx3d_export_for_render"
+        "cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain, cfd_fluidx3d_export_for_render, cfd_fluidx3d_render, "
+        "cfd_fluidx3d_parametric_sweep, cfd_fluidx3d_train_surrogate, cfd_surrogate_predict"
     )
 
     return {
@@ -1925,4 +2283,8 @@ def register_fluidx3d_tools(
         "cfd_fluidx3d_results": cfd_fluidx3d_results,
         "cfd_fluidx3d_explain": cfd_fluidx3d_explain,
         "cfd_fluidx3d_export_for_render": cfd_fluidx3d_export_for_render,
+        "cfd_fluidx3d_render": cfd_fluidx3d_render,
+        "cfd_fluidx3d_parametric_sweep": cfd_fluidx3d_parametric_sweep,
+        "cfd_fluidx3d_train_surrogate": cfd_fluidx3d_train_surrogate,
+        "cfd_surrogate_predict": cfd_surrogate_predict,
     }

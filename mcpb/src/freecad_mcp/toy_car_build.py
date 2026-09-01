@@ -1,4 +1,4 @@
-"""Toy car geometry helpers — Blender script loading and FreeCAD build snippets."""
+"""Toy car geometry helpers - Blender script loading and FreeCAD build snippets."""
 
 from __future__ import annotations
 
