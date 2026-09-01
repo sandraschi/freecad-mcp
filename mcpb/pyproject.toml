@@ -1,0 +1,58 @@
+[project]
+name = "freecad-mcp"
+version = "0.6.0"
+description = "FreeCAD 3D CAD automation: headless documents and export, plus CFD via FluidX3D/OpenFOAM"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=3.4.4,<4",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "fastapi>=0.104",
+    "uvicorn[standard]>=0.23",
+    "prefab-ui>=0.18.0",
+    "playwright>=1.50",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.16.0,<0.17",
+    "pre-commit>=4.6.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/freecad_mcp"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "integration: FluidX3D GPU tests requiring FLUIDX3D_PATH, compiler, and OpenCL (deselect with -m 'not integration')",
+]
+addopts = "-m 'not integration' --cov=src --cov-report=term-missing --cov-fail-under=15"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "S", "UP", "RUF", "T20"]
+ignore = ["S101", "S106", "S110", "S112", "S101", "S106", "S110", "S112", "RUF012", "S603", "S607", "S324", "E402"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/**/*.py" = ["E501"]
+"tests/**/*.py" = ["E501", "S101", "T20"]
+"src/freecad_mcp/fc_bridge.py" = ["S110", "T20"]
+"src/freecad_mcp/server.py" = ["S603", "S110", "S607"]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.21.0",
+    "pytest-cov>=7.1.0",
+]
