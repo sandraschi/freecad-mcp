@@ -70,7 +70,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | :--- | :--- |
 | **[Installation](docs/install.md)** | Prerequisites, FreeCAD setup, PrusaSlicer, `just bootstrap` |
 | **[Architecture](docs/architecture.md)** | TCP bridge, subprocess fallback, port layout, file pipeline |
-| **[MCP Tools](docs/mcp-tools.md)** | All 46 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
+| **[MCP Tools](docs/mcp-tools.md)** | All 85 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
 | **[Fleet CFD pipeline](docs/fleet-pipeline.md)** | qcad DXF → freecad OpenFOAM/FluidX3D → resonite/godot/robotics handoff |
 | **[Fluid simulation guide](docs/cfd-guide.md)** | Full walkthrough: creating domains, configuring physics, setting boundary conditions, running solvers, reading results, parametric sweeps, natural language config, and exporting data for neural network training |
 | **[Flow visualization & render guide](docs/flow-visualization.md)** | What FluidX3D produces (VTK, OBJ, WebM, PNG, CSV). How to turn it into video, game engine assets, or VR visuals. Glossary of terms (VTK, OBJ, streamlines, LBM, MLUPS, heatmaps). Integration with Unity3D, Godot, Blender, Resonite. |
@@ -105,8 +105,8 @@ start.ps1        # kills zombies, starts backend + frontend, opens browser
 - **Python**: [Ruff](https://astral.sh/ruff) linter + formatter (zero-config, sub-millisecond)
 - **Frontend**: [Biome](https://biomejs.dev/) linter + formatter
 - **Task runner**: [`just`](https://github.com/casey/just) — `just lint`, `just fix`, `just dev`, `just tauri-build`
-- **Native desktop**: Tauri 2.0 + PyInstaller sidecar — `just tauri-build` (ports 10944/10945)
-- **AI protocol**: FastMCP 3.2 with SSE transport
+  - **Native desktop**: Tauri 2.11 + PyInstaller sidecar — `just tauri-build` (ports 10944/10945, Gate F/G/H/J fixed, NSIS 28.8 MB)
+  - **AI protocol**: FastMCP 3.4 with SSE transport
 
 ## See also — other construction & design tools in the fleet
 

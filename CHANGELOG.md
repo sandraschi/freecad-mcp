@@ -2,6 +2,40 @@
 
 All notable changes to the FreeCAD MCP server and webapp.
 
+## [0.6.1] — 2026-09-01
+
+### Fixed
+- **Tauri Gates F/G/H/J (CRITICAL)**: `native/src/main.rs` sync `spawn_backend` in `setup()` + `kill+wait` on Exit (G), `backend.rs` `free_port` 240s poll + TCP health 30×2s (F), `build-sidecar.ps1` now stages `resources/`+`binaries/` (H), `run_server.py`+`server.py:main()` isatty shim + `stdio→http` force when `FREECAD_TAURI=1` (J), `native/package.json` 0.1.0→0.6.0 aligned, stale `src-tauri/` twin removed. NSIS 28.8 MB gate-clean.
+- **CI**: `node-version 20→22`, added `pyright` + `biome ci` gates, `ruff` T20 print ban enforced, `.gitattributes` LF, `FleetStartMode.ps1` vendored (BUG-028).
+
+### Added
+- **Webapp SOTA**: `zustand ^5.0.0` + `store/llm.ts` (provider/model/gpuDetected + localStorage), `docs/CONFIGURATION.md` + `docs/ONBOARDING.md` (cost/pits/sanity/declared doubles, big red cue + MOCK-until-onboarded), `vite.config.ts` `manualChunks` `react` 49KB + `vendor` 1017KB (was 1498KB monolith), `renovate.json` committed, `pytest-cov` 19% ≥15, `glama.json` 39→61→85 tools (freecad_design_loop, depot, bim/cfd/fem/fluidx3d render/sweep/surrogate), `mcpb` fresh-stage 85 tools 161KB.
+
+### Changed
+- Tool count 50+ → **85** (portmanteau + cfd/snappy/post/fsi + fem suite + fluidx3d render/sweep/surrogate + depot/bridge). README + glama + mcpb/manifest synced.
+
+## [0.6.0] — 2026-08-24
+
+### Added
+- **`freecad_model` Portmanteau Tool**: FastMCP 3.4+ portmanteau tool implementing 6 core CAD extension operations:
+  - 2D TechDraw engineering blueprint sheets (`techdraw`) with Front, Top, Right, and Isometric projections + SVG/PDF export.
+  - Parametric 2D constraint sketcher (`sketch`) with geometric constraints (Coincident, Horizontal, Vertical, Radius) extruded into 3D Part solids.
+  - Multi-part STEP assembly composition (`assembly`) with 3D translation/rotation offsets and composite STEP/STL export.
+  - Generative topology & weight reduction (`generative`) targeting 10% to 60% mass reduction via hollow shelling and pocket cutouts.
+  - Robust B-Rep heuristic edge filleting (`heuristic_fillet`) with orientation/length filtering.
+  - Recursive STEP assembly tree inspection (`inspect_assembly`) returning volumes, bounding boxes, centers of mass, and face/edge counts.
+- **CFD Pipeline Extensions**:
+  - `cfd_snappy_mesh`: Automated `system/snappyHexMeshDict` and `system/surfaceFeatureExtractDict` configuration for complex 3D CAD geometries.
+  - Thermal CFD solver support (`buoyantBoussinesqSimpleFoam`) with temperature boundary conditions (`0/T`) and thermal transport properties.
+  - `cfd_post_process`: Aerodynamic force coefficient ($C_d, C_l$), pressure drop ($\Delta P$), and head loss coefficient calculations.
+  - `cfd_map_loads_to_fem`: Fluid-Structure Interaction (FSI) surface pressure load mapping onto FreeCAD B-Rep geometry for CalculiX FEM structural stress analysis.
+- **Webapp Studio Extensions**:
+  - Parts & Fasteners Studio tabs for 2D Sketch, Blueprint, and Generative Weight Optimization.
+  - CFD Studio tabs for `snappyHexMesh`, Aerodynamics $C_d/C_l$, and CFD-FEM FSI.
+- **Tool Count & Agent Navigation**:
+  - Expanded tool suite to **50+ tools**.
+  - Updated `AGENTS.md` and `docs/mcp-tools.md` with complete fleet agent navigation and operational guide.
+
 ## [0.5.1] — 2026-07-24
 
 ### Security
