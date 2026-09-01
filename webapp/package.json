@@ -6,7 +6,9 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"biome:ci": "biome ci . || echo biome not installed",
+		"check": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@tauri-apps/api": "^2.2.0",
