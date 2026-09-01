@@ -1,5 +1,5 @@
 """
-FreeCAD MCP tool modules — portmanteau re-exports.
+FreeCAD MCP tool modules - portmanteau re-exports.
 
 Each submodule registers its tools via a register_* function that accepts
 the FastMCP instance and server dependencies (bridge, subprocess, paths).
