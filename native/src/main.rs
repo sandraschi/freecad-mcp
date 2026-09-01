@@ -22,17 +22,21 @@ fn main() {
         .invoke_handler(tauri::generate_handler![start_backend])
         .setup(|app| {
             let handle = app.handle().clone();
-            let state = handle.state::<BackendProcess>();
-            // Gate G: spawn synchronously in setup — backend.rs handles free_port + health poll
-            match spawn_backend(handle.clone(), &state) {
-                Ok(msg) => {
-                    let _ = handle.emit("backend-status", msg);
+            // Gate G: spawn off setup thread so UI shows instantly; backend.rs handles free_port + health poll + logs
+            // Setup returns Ok(()) immediately so Tauri doesn't time out on backend cold start (FreeCAD 10s + health 12s).
+            let handle2 = handle.clone();
+            std::thread::spawn(move || {
+                let state = handle2.state::<BackendProcess>();
+                match spawn_backend(handle2.clone(), &state) {
+                    Ok(msg) => {
+                        let _ = handle2.emit("backend-status", msg);
+                    }
+                    Err(e) => {
+                        eprintln!("Backend error: {}", e);
+                        let _ = handle2.emit("backend-status", format!("error: {}", e));
+                    }
                 }
-                Err(e) => {
-                    eprintln!("Backend error: {}", e);
-                    let _ = handle.emit("backend-status", format!("error: {}", e));
-                }
-            }
+            });
             #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();

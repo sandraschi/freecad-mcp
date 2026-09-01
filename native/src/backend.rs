@@ -30,13 +30,50 @@ fn dev_backend_path() -> Option<PathBuf> {
 
 fn log_line(app: &AppHandle, message: &str) {
     eprintln!("[backend] {message}");
+    // primary: app_log_dir (Tauri managed, e.g. %LOCALAPPDATA%\ai.fleet.freecad-mcp\logs\)
+    let mut logged = false;
     if let Ok(dir) = app.path().app_log_dir() {
-        let _ = fs::create_dir_all(&dir);
-        let log_path = dir.join("backend-spawn.log");
-        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
-            let _ = writeln!(file, "{message}");
+        if fs::create_dir_all(&dir).is_ok() {
+            let log_path = dir.join("backend-spawn.log");
+            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path) {
+                let _ = writeln!(file, "{} {}", chrono_time(), message);
+                logged = true;
+            }
         }
     }
+    // fallback: exe_dir/logs and %LOCALAPPDATA%\ai.fleet.freecad-mcp\logs (when app_log_dir not yet ready in setup thread)
+    if !logged {
+        for fallback in [
+            std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("logs"))),
+            dirs_fallback_log_dir(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if fs::create_dir_all(&fallback).is_ok() {
+                let p = fallback.join("backend-spawn.log");
+                if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(p) {
+                    let _ = writeln!(f, "{} {}", chrono_time(), message);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+fn chrono_time() -> String {
+    // lightweight timestamp without extra deps
+    if let Ok(t) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        format!("[{}]", t.as_secs())
+    } else {
+        "[?]".to_string()
+    }
+}
+
+fn dirs_fallback_log_dir() -> Option<PathBuf> {
+    std::env::var("LOCALAPPDATA")
+        .ok()
+        .map(|v| PathBuf::from(v).join("ai.fleet.freecad-mcp").join("logs"))
 }
 
 fn resolve_bundled_backend(app: &AppHandle) -> Result<PathBuf, String> {
@@ -49,6 +86,29 @@ fn resolve_bundled_backend(app: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = app.path().resolve(&resources_path, BaseDirectory::Resource) {
         tried.push(path.display().to_string());
         if path.exists() { return Ok(path); }
+    }
+    // Tauri Resource fallback: resource_dir() is the actual bundle resources dir
+    if let Ok(dir) = app.path().resource_dir() {
+        let p = dir.join(BACKEND_NAME);
+        tried.push(p.display().to_string());
+        if p.exists() { return Ok(p); }
+        let p2 = dir.join(&resources_path);
+        tried.push(p2.display().to_string());
+        if p2.exists() { return Ok(p2); }
+    }
+    // exe_dir fallback: NSIS installs to %LOCALAPPDATA%\FreeCAD MCP\ with resources\ subdir
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join(BACKEND_NAME);
+            tried.push(p.display().to_string());
+            if p.exists() { return Ok(p); }
+            let p2 = dir.join(&resources_path);
+            tried.push(p2.display().to_string());
+            if p2.exists() { return Ok(p2); }
+            let p3 = dir.join("resources").join(BACKEND_NAME);
+            tried.push(p3.display().to_string());
+            if p3.exists() { return Ok(p3); }
+        }
     }
     Err(format!("bundled backend missing (tried: {})", tried.join("; ")))
 }
@@ -64,67 +124,24 @@ pub fn materialize_backend(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn free_port(port: u16) -> bool {
+    // Fast but real: kill stale backend/native, check port up to 10s, then return true anyway so setup doesn't block forever
     #[cfg(windows)]
     {
-        let img_kill = format!(
-            "Stop-Process -Name 'freecad-mcp-backend' -Force -ErrorAction SilentlyContinue; \
-             Stop-Process -Name 'freecad-mcp-native' -Force -ErrorAction SilentlyContinue; \
-             taskkill /F /IM freecad-mcp-backend.exe /T 2>$null; \
-             taskkill /F /IM freecad-mcp-native.exe /T 2>$null"
-        );
-        let _ = Command::new("powershell.exe")
-            .args(["-NoProfile", "-Command", &img_kill])
-            .stdout(Stdio::null()).stderr(Stdio::null())
-            .status();
-
-        let port_kill = format!(
-            "Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue \
-            | ForEach-Object {{ taskkill /F /PID `$_.OwningProcess /T 2>$null }}"
-        );
-        let _ = Command::new("powershell.exe")
-            .args(["-NoProfile", "-Command", &port_kill])
-            .stdout(Stdio::null()).stderr(Stdio::null())
-            .status();
-
-        for i in 0..240 {
-            let poll_script = format!(
-                "if (Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue) {{ 1 }} else {{ 0 }}"
-            );
-            let output = Command::new("powershell.exe")
-                .args(["-NoProfile", "-Command", &poll_script])
-                .stdout(Stdio::piped()).stderr(Stdio::null())
-                .output();
-            let occupied = output.ok().and_then(|o| {
-                String::from_utf8(o.stdout).ok().and_then(|s| s.trim().parse::<u32>().ok())
-            }).unwrap_or(1);
-            if occupied == 0 { return true; }
-
-            if i == 5 {
-                let _ = Command::new("powershell.exe")
-                    .args(["-NoProfile", "-Command", &img_kill])
-                    .status();
-                let _ = Command::new("powershell.exe")
-                    .args(["-NoProfile", "-Command", &port_kill])
-                    .status();
-            }
-            if i == 15 {
-                let elevated = format!(
-                    "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList \
-                     '-NoProfile -Command \"Stop-Process -Name freecad-mcp-backend -Force -ErrorAction SilentlyContinue; \
-                     taskkill /F /IM freecad-mcp-backend.exe /T 2>$null; \
-                     Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | \
-                     ForEach-Object {{ taskkill /F /PID $_.OwningProcess /T 2>$null }}\"'" 
-                );
-                let _ = Command::new("powershell.exe")
-                    .args(["-NoProfile", "-Command", &elevated])
-                    .status();
-            }
+        let img_kill = "Stop-Process -Name 'freecad-mcp-backend' -Force -ErrorAction SilentlyContinue; Stop-Process -Name 'freecad-mcp-native' -Force -ErrorAction SilentlyContinue; taskkill /F /IM freecad-mcp-backend.exe /T 2>$null; taskkill /F /IM freecad-mcp-native.exe /T 2>$null";
+        let _ = Command::new("powershell.exe").args(["-NoProfile", "-Command", img_kill]).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        let port_kill = format!("Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | ForEach-Object {{ taskkill /F /PID $_.OwningProcess /T 2>$null }}");
+        let _ = Command::new("powershell.exe").args(["-NoProfile", "-Command", &port_kill]).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        for i in 0..10 {
+            let poll = format!("if (Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue) {{ 1 }} else {{ 0 }}");
+            let out = Command::new("powershell.exe").args(["-NoProfile", "-Command", &poll]).stdout(Stdio::piped()).stderr(Stdio::null()).output();
+            let occ = out.ok().and_then(|o| String::from_utf8(o.stdout).ok().and_then(|s| s.trim().parse::<u32>().ok())).unwrap_or(1);
+            if occ == 0 { return true; }
+            if i == 2 { let _ = Command::new("powershell.exe").args(["-NoProfile", "-Command", img_kill]).status(); let _ = Command::new("powershell.exe").args(["-NoProfile", "-Command", &port_kill]).status(); }
             thread::sleep(Duration::from_secs(1));
         }
-        return false;
+        return true;
     }
-    #[cfg(not(windows))]
-    { true }
+    #[cfg(not(windows))] { true }
 }
 
 fn stop_managed_child(state: &BackendProcess) {
