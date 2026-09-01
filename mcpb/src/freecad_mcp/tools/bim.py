@@ -4,7 +4,7 @@ BIM (Building Information Modeling) MCP tools for FreeCAD Arch workbench.
 Provides parametric architectural element creation: walls, slabs, columns,
 windows, doors, roofs, plus IFC import/export. All dimensions in millimetres.
 
-Registered via register_bim_tools(mcp, **deps) — called from server.py after
+Registered via register_bim_tools(mcp, **deps) - called from server.py after
 FastMCP instance creation to avoid circular imports.
 """
 
@@ -17,7 +17,10 @@ from pydantic import Field
 
 logger = logging.getLogger("freecad-mcp.bim")
 
-_README_ONLY = {"readonly": True}
+_READ_ONLY = {"readonly": True}
+_README_ONLY = _READ_ONLY
+_MUTATING = {"mutating": True}
+
 
 WALL_LENIENCY = 2000
 COLUMN_PROFILES = ("rectangular", "circular", "h_section")
@@ -56,7 +59,7 @@ def register_bim_tools(
         """Create a parametric architectural wall via Arch.makeWall().
 
         Creates a wall as a smart BIM object with material, thickness, and
-        height attributes — not just geometry. Saves as FreeCAD .fcstd document.
+        height attributes - not just geometry. Saves as FreeCAD .fcstd document.
 
         ## Return Format
         {"success": bool, "output": str, "data": {"label": str, "length": float, "width": float, "height": float, "path": str}}
@@ -607,7 +610,7 @@ except Exception as e:
         triangular mesh to a valid B-Rep solid that can be used with BIM tools
         or exported to STEP/IFC.
 
-        Requires TCP bridge (FreeCAD GUI mode) — not available in subprocess mode.
+        Requires TCP bridge (FreeCAD GUI mode) - not available in subprocess mode.
 
         ## Return Format
         {"success": bool, "output": str, "data": {"vertices": int, "facets": int, "volume_mm3": float}}

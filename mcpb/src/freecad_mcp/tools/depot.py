@@ -1,4 +1,4 @@
-"""CAD file depot tools — persistent file management for the FreeCAD MCP server."""
+"""CAD file depot tools - persistent file management for the FreeCAD MCP server."""
 
 import json
 import logging

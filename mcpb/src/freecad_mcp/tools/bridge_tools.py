@@ -1,4 +1,4 @@
-"""FreeCAD bridge portmanteau — Hands-In live GUI control."""
+"""FreeCAD bridge portmanteau - Hands-In live GUI control."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ from freecad_mcp.model_ops import validate_bridge_script
 
 logger = logging.getLogger("freecad-mcp.bridge")
 
-_README_ONLY = {"readonly": True}
+_READ_ONLY = {"readonly": True}
+_MUTATING = {"mutating": True}
 _EXECUTION_MODES = ("auto", "hands_in", "hands_off")
 
 
@@ -37,7 +38,7 @@ def register_bridge_tools(
 ):
     """Register freecad_bridge portmanteau tool."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=_MUTATING)
     async def freecad_bridge(
         operation: Annotated[
             str,

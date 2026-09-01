@@ -1,4 +1,4 @@
-"""FEM tools for FreeCAD CalculiX — structural analysis via bridge/subprocess.
+"""FEM tools for FreeCAD CalculiX - structural analysis via bridge/subprocess.
 
 Provides the complete FEA pipeline: mesh → material → constraints → solve → results.
 Includes a convenience run_fem_analysis end-to-end tool.
@@ -14,7 +14,10 @@ from pydantic import Field
 
 logger = logging.getLogger("freecad-mcp.fem")
 
-_README_ONLY = {"readonly": True}
+_READ_ONLY = {"readonly": True}
+_README_ONLY = _READ_ONLY
+_MUTATING = {"mutating": True}
+
 
 _MATERIAL_PRESETS = {
     "steel": ("Steel", 210000, 0.30),
@@ -578,7 +581,7 @@ if frd_files:
         with open(frd_path, 'r') as frd:
             content = frd.read()
 
-        # Extract DISP node blocks — format: node# dx dy dz
+        # Extract DISP node blocks - format: node# dx dy dz
         disp_matches = list(re.finditer(
             r'^\\s*-1\\s*\\n\\s*DISP.*?\\n(.*?)(?=\\s*-1\\s*$|\\Z)',
             content, re.MULTILINE | re.DOTALL
@@ -593,7 +596,7 @@ if frd_files:
                 except ValueError:
                     pass
 
-        # Extract STRESS node blocks — each node has 6 components (Sxx, Syy, Szz, Sxy, Sxz, Syz)
+        # Extract STRESS node blocks - each node has 6 components (Sxx, Syy, Szz, Sxy, Sxz, Syz)
         stress_matches = list(re.finditer(
             r'^\\s*-1\\s*\\n\\s*STRESS.*?\\n(.*?)(?=\\s*-1\\s*$|\\Z)',
             content, re.MULTILINE | re.DOTALL
