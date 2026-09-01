@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from contextlib import asynccontextmanager
@@ -158,16 +159,16 @@ def _freecad_already_running() -> bool:
 
 
 def _start_freecad_bridge():
-    """Launch FreeCAD GUI with the bridge script — only if no FreeCAD is already running."""
+    """Launch FreeCAD GUI with the bridge script - only if no FreeCAD is already running."""
     global _bridge_proc
     if _freecad_already_running():
-        logger.info("FreeCAD GUI already running — skipping bridge launch (will attempt to connect)")
+        logger.info("FreeCAD GUI already running - skipping bridge launch (will attempt to connect)")
         return False
     if not os.path.isfile(FREECAD_PATH):
         logger.warning("FreeCAD not found at %s", FREECAD_PATH)
         return False
     if "FreeCADCmd" in FREECAD_PATH:
-        logger.info("FreeCADCmd detected — skipping TCP bridge (headless subprocess mode)")
+        logger.info("FreeCADCmd detected - skipping TCP bridge (headless subprocess mode)")
         return False
     if not os.path.isfile(BRIDGE_SCRIPT):
         logger.warning("Bridge script not found at %s", BRIDGE_SCRIPT)
@@ -269,7 +270,7 @@ async def lifespan(app: FastAPI):
                     logger.info("Waiting for bridge (attempt %d/5)...", attempt + 1)
 
             if not _state.get("freecad_ok"):
-                # Subprocess fallback — FreeCADCmd works even if bridge/version hangs
+                # Subprocess fallback - FreeCADCmd works even if bridge/version hangs
                 try:
                     cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
                     r = subprocess.run([cmd_path, "--version"], capture_output=True, text=True, timeout=10, check=False)
@@ -283,7 +284,7 @@ async def lifespan(app: FastAPI):
                 logger.info("Falling back to subprocess mode (FreeCADCmd)")
     elif not bridge_already_running and skip_auto_launch:
         _state["bridge_mode"] = "subprocess"
-        logger.info("FREECAD_SKIP_AUTO_LAUNCH set — not starting FreeCAD GUI bridge")
+        logger.info("FREECAD_SKIP_AUTO_LAUNCH set - not starting FreeCAD GUI bridge")
     else:
         # Bridge already running, just connect
         _state["freecad_version"] = "bridge_running"
@@ -401,7 +402,7 @@ def _build_result(script_type: str, out: str, err: str, code: int, extra: dict |
     return result
 
 
-# Register BIM tools (bound to mcp via decorator closures) — must be after _build_result
+# Register BIM tools (bound to mcp via decorator closures) - must be after _build_result
 _bim_tools = register_bim_tools(
     mcp=mcp,
     state=_state,
@@ -697,7 +698,7 @@ async def create_shape(
     return _build_result("create_shape", out, err, code, extra={"output": output_name})
 
 
-# Register CAD file depot tools (cad_depot, cad_create) — must be after create_shape definition
+# Register CAD file depot tools (cad_depot, cad_create) - must be after create_shape definition
 _depot_tools = register_depot_tools(
     mcp=mcp,
     state=_state,
@@ -850,7 +851,7 @@ async def freecad_gui(
         return {"success": False, "error": str(e)}
 
 
-# ── FastMCP 3.2 Features — Sampling, Prompts, Resources ──────────────────────
+# ── FastMCP 3.2 Features - Sampling, Prompts, Resources ──────────────────────
 
 
 async def _sampling_tool(
@@ -897,7 +898,7 @@ async def freecad_design_loop(
     ctx: Context = None,
 ) -> dict:
     """
-    Autonomous engineering design loop — CAD to simulate to analyze to refine.
+    Autonomous engineering design loop - CAD to simulate to analyze to refine.
 
     Uses the host LLM (via MCP sampling) to plan and execute a multi-step
     design workflow. The LLM decides which tools to call (create_shape,
@@ -935,7 +936,7 @@ Available tool categories (you can call them via the function_call mechanism):
 - Marketplace: marketplace_search, marketplace_download
 
 Strategy:
-1. Parse the goal — what's being designed, constraints, success criteria
+1. Parse the goal - what's being designed, constraints, success criteria
 2. Create geometry with create_shape or generate with CAD tools
 3. Simulate: run CFD (fluid) or FEM (structural) analysis
 4. Read results and evaluate against criteria
@@ -1070,7 +1071,7 @@ async def freecad_depot_file_resource(filename: str) -> str:
 
 
 def _error_response(error: str, error_type: str = "general", **kwargs) -> dict:
-    """Auto-logging error response — traceback logged before returning to caller."""
+    """Auto-logging error response - traceback logged before returning to caller."""
     logger.exception("Tool error: %s [%s]", error, error_type)
     return {"success": False, "error": error, "error_type": error_type, **kwargs}
 
@@ -1358,7 +1359,7 @@ def _depot_list() -> list[dict]:
     return sorted(files.values(), key=lambda x: x["modified"], reverse=True)
 
 
-# ── REST Endpoints — Depot CRUD ──────────────────────────────────────────────
+# ── REST Endpoints - Depot CRUD ──────────────────────────────────────────────
 
 
 @app.get("/api/v1/depot")
@@ -1629,14 +1630,14 @@ _MARKETPLACE_CATEGORIES = {
 
 
 def _safe_json(response: httpx.Response) -> dict | list | None:
-    """Parse JSON safely — return None on empty or non-JSON."""
+    """Parse JSON safely - return None on empty or non-JSON."""
     if response.status_code >= 400:
         logger.warning("Marketplace API error %s: %s", response.status_code, response.text[:500])
         return None
     try:
         return response.json()
     except Exception as e:
-        logger.warning("Marketplace API non-JSON response: %s — %s", response.text[:200], e)
+        logger.warning("Marketplace API non-JSON response: %s - %s", response.text[:200], e)
         return None
 
 
@@ -1663,7 +1664,7 @@ _PRINTABLES_SEARCH_QUERY = """query Search($query: String!, $limit: Int!, $offse
 
 
 async def _marketplace_search(source: str, query: str, category: str = "", limit: int = 20, page: int = 1) -> dict:
-    """Shared marketplace search logic — used by both REST and MCP tools."""
+    """Shared marketplace search logic - used by both REST and MCP tools."""
     offset = (page - 1) * limit
 
     if source not in ("printables", "grabcad", "thingiverse"):
@@ -1797,7 +1798,7 @@ async def _marketplace_search(source: str, query: str, category: str = "", limit
 
 
 async def _marketplace_download(source: str, model_id: str, file_url: str, filename: str) -> dict:
-    """Shared marketplace download logic — used by both REST and MCP tools."""
+    """Shared marketplace download logic - used by both REST and MCP tools."""
     ext = Path(filename).suffix.lower()
     if ext not in (".step", ".stp", ".stl", ".zip"):
         return {"success": False, "error": f"Unsupported format: {ext}. Use .step, .stp, .stl, or .zip."}
@@ -1908,7 +1909,7 @@ async def marketplace_download(
 ) -> dict:
     """Download a model from a marketplace into the uploads directory.
 
-    Thingiverse downloads are ZIP files — the server auto-extracts STL/STEP files.
+    Thingiverse downloads are ZIP files - the server auto-extracts STL/STEP files.
     After download, use step_to_stl or model_info on the imported file.
 
     ## Return Format
@@ -1975,7 +1976,7 @@ async def show_marketplace_card(
     total = data.get("total", 0)
 
     with Column(gap=3, css_class="p-4") as view:
-        Heading(f"🔍 {source_labels.get(source, source)} — {query}")
+        Heading(f"🔍 {source_labels.get(source, source)} - {query}")
         Muted(f"{total:,} result{'s' if total != 1 else ''}" + (f" in {category}" if category else ""))
         Separator()
         for item in items:
@@ -1997,7 +1998,7 @@ async def show_marketplace_card(
         if items:
             Link("Open on marketplace ↗", href=items[0].get("model_url", ""), css_class="text-indigo-400 text-sm")
 
-    return PrefabApp(view=view, title=f"Marketplace — {query}")
+    return PrefabApp(view=view, title=f"Marketplace - {query}")
 
 
 # ── Shutdown / Diagnostics / Capabilities ─────────────────────────────────────
@@ -2264,12 +2265,29 @@ async def _run_stdio():
 def main():
     import argparse
 
+    # Gate J: isatty shim + Tauri guard — if FREECAD_TAURI/FREECAD_MCP_TAURI is set,
+    # never allow stdio to hijack the Tauri sidecar stdout. Force http/dual.
+    _is_tauri = os.environ.get("FREECAD_TAURI") == "1" or os.environ.get("FREECAD_MCP_TAURI") == "1"
+    if _is_tauri:
+        try:
+            if hasattr(sys.stdout, "isatty"):
+                sys.stdout.isatty = lambda: False  # type: ignore[method-assign]
+            if hasattr(sys.stderr, "isatty"):
+                sys.stderr.isatty = lambda: False  # type: ignore[method-assign]
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description="FreeCAD MCP Server")
     parser.add_argument("--mode", choices=["stdio", "http", "dual"], default="stdio")
     parser.add_argument("--host", default="0.0.0.0")  # noqa: S104
     parser.add_argument("--port", type=int, default=10944)
     parser.add_argument("--freecad-path", help="Path to FreeCADCmd.exe")
     args = parser.parse_args()
+
+    # Gate J: Tauri sidecar must not run stdio even if caller passes --mode stdio
+    if _is_tauri and args.mode == "stdio":
+        logger.warning("FREECAD_TAURI=1 set — forcing --mode http (was stdio) to protect sidecar stdout")
+        args.mode = "http"
 
     if args.freecad_path:
         os.environ["FREECAD_PATH"] = args.freecad_path

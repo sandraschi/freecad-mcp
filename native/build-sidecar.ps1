@@ -25,15 +25,19 @@ try {
     $src = "$Root\dist\freecad-mcp-backend.exe"
     $dstDir = "$Root\native\binaries"
     $dst = "$dstDir\freecad-mcp-backend-$triple.exe"
+    $resDir = "$Root\native\resources"
+    $resDst = "$resDir\freecad-mcp-backend.exe"
 
     if (-not (Test-Path $src)) { throw "Build output not found: $src" }
 
-    New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $dstDir, $resDir -Force | Out-Null
     Copy-Item $src $dst -Force
+    Copy-Item $src $resDst -Force
 
     $sizeMB = [math]::Round((Get-Item $dst).Length / 1MB, 1)
     Write-Host "=== Sidecar ready ===" -ForegroundColor Green
     Write-Host "  $dst ($sizeMB MB)" -ForegroundColor Cyan
+    Write-Host "  $resDst ($sizeMB MB)" -ForegroundColor Cyan
 } finally {
     Pop-Location
 }
