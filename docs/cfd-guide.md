@@ -16,26 +16,26 @@ This guide covers two CFD solvers that serve different jobs:
 | **Auto-installs?** | No (needs Docker + 2GB image) | Yes (clones to %TEMP%) |
 | **Output** | OpenFOAM results (forces, residuals) | Video (WebM), OBJ streamlines, PNG heatmap |
 
-**OpenFOAM = complex physics, complex mesh, slow, CPU.**  
+**OpenFOAM = complex physics, complex mesh, slow, CPU.**
 **FluidX3D = fast iteration, simple geometry, GPU, automatic video.**
 
 Use OpenFOAM when you need fidelity or have complex geometry. Use FluidX3D when you have a GPU and the problem fits a Cartesian grid.
 
 ---
 
-The OpenFOAM pipeline covers: parametric CAD in FreeCAD, hexahedral mesh generation via blockMesh, solver execution through Docker, results parsing, headless parametric sweeps for design optimization, LLM-driven NL2FOAM configuration, and point cloud sampling for Physics-Informed Neural Networks (PINNs).
+The OpenFOAM pipeline covers: parametric CAD in FreeCAD, structured hexahedral meshing (`blockMesh`), complex CAD meshing (`snappyHexMesh`), thermal & buoyant flow solvers (`buoyantBoussinesqSimpleFoam`), solver execution through Docker, aerodynamic force coefficient post-processing ($C_d, C_l$), Fluid-Structure Interaction load mapping (CFD → CalculiX FEM), headless parametric sweeps for design optimization, LLM-driven NL2FOAM configuration, and point cloud sampling for Physics-Informed Neural Networks (PINNs).
 
 ---
 
 ## Architecture Overview
 
 ```
-FreeCAD (geometry)  ──→  blockMeshDict  ──→  OpenFOAM (Docker)  ──→  Results
-       │                      │                       │
-       │               cfd_configure_physics     cfd_run_solver
-       │               cfd_set_boundary           cfd_read_results
+FreeCAD (geometry)  ──→  blockMesh / snappyHexMesh  ──→  OpenFOAM (Docker)  ──→  Results & Cd/Cl Post-Proc
+       │                          │                            │                      │
+       │                   cfd_configure_physics        cfd_run_solver          cfd_post_process
+       │                   cfd_set_boundary            cfd_read_results        cfd_map_loads_to_fem (FSI)
        │
-cfd_create_domain
+cfd_create_domain / cfd_snappy_mesh
        │
 Parametric variations  ──→  cfd_parametric_study  ──→  Design optimization / ML datasets
        │
@@ -44,7 +44,7 @@ Natural language  ──→  cfd_nl2foam (Ollama)  ──→  Auto-generated Ope
 Point clouds  ──→  cfd_sample_for_pinns  ──→  NVIDIA Modulus / PyTorch Geometric
 ```
 
-All 10 CFD tools use the same dual-mode execution pattern as CAD/BIM tools:
+All **13** CFD tools use the same dual-mode execution pattern as CAD/BIM tools:
 - **TCP bridge** (primary): Full FreeCAD Python API via `fc_bridge.py`
 - **Subprocess** (fallback): `FreeCADCmd.exe` with piped Python scripts
 

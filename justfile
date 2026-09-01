@@ -3,7 +3,7 @@ import 'scripts/just/fleet.just'
 
 export NAME := "FreeCAD MCP"
 export DESC := "CAD operations via MCP tools and REST API"
-export VER  := "0.5.1"
+export VER  := "0.6.0"
 export PORT := "10944"
 export HOST := "0.0.0.0"
 
@@ -58,9 +58,12 @@ dev port=PORT:
 # Execute linting (ruff + biome + tsc)
 lint:
     uv run ruff check src/
-    Set-Location '{{justfile_directory()}}\webapp'
-    npx @biomejs/biome ci .
-    npx tsc --noEmit
+    Set-Location '{{justfile_directory()}}\webapp'; npx @biomejs/biome ci .; npx tsc --noEmit
+
+
+
+
+
 
 # Execute auto-fixes and formatting
 fix:
@@ -68,6 +71,8 @@ fix:
     uv run ruff format src/
     Set-Location '{{justfile_directory()}}\webapp'
     npx @biomejs/biome check --write .
+
+
 
 # Fast quality check (lint + tests)
 check: lint test
@@ -118,9 +123,11 @@ install-paraview:
 gates-green:
     uv run ruff check src/ --quiet
     uv run ruff format src/ --check --quiet
-    Set-Location '{{justfile_directory()}}\webapp'
-    npx tsc --noEmit --quiet
+    Set-Location '{{justfile_directory()}}\webapp'; npx tsc --noEmit
     uv run pytest --quiet -x
+
+
+
 
 # Run cert gates
 certify: gates-green

@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.2",
   "name": "freecad-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "FreeCAD MCP server â€” CAD operations via MCP tools and REST API",
   "author": {
     "name": "sandraschi"

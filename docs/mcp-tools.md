@@ -1,12 +1,13 @@
 # MCP Tools
 
-All **46+** tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, `src/freecad_mcp/tools/fem.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 7 for CAD/slicing, 10 for BIM/Arch (incl. `mesh_to_solid`), 10 for CFD/OpenFOAM, 8 for FEM/structural (CalculiX), **8 for FluidX3D GPU**, 3 for marketplace, 1 Prefab card.
+All **50+** tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/model_tools.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, `src/freecad_mcp/tools/fem.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 8 for CAD/slicing (incl. `freecad_model` portmanteau tool), 10 for BIM/Arch (incl. `mesh_to_solid`), 13 for CFD/OpenFOAM (incl. `snappyHexMesh`, $C_d/C_l$ post-proc, FSI load mapping), 8 for FEM/structural (CalculiX), **8 for FluidX3D GPU**, 3 for marketplace, 1 Prefab card.
 
 ## Tool Manifest
 
 | Tool | Annotation | Description |
 |:---|:---|:---|
 | `freecad_status` | READ_ONLY | FreeCAD availability + version check |
+| `freecad_model` | MUTATING | Portmanteau tool for 2D TechDraw blueprints, 2D sketch constraint extrusion, multi-part STEP assemblies, generative weight reduction, heuristic filleting, and STEP assembly introspection |
 | `step_to_stl` | MUTATING | Convert STEP/STP → STL mesh |
 | `model_info` | READ_ONLY | Object count, solids, volume, bounding box |
 | `create_shape` | MUTATING | Box, cylinder, sphere, cone → STL |
@@ -29,11 +30,14 @@ All **46+** tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `
 | `show_marketplace_card` | PREFAB | Rich card view of marketplace results |
 | `cfd_status` | READ_ONLY | Docker/OpenFOAM availability check |
 | `cfd_create_domain` | MUTATING | Parametric fluid domain → STEP + blockMeshDict |
-| `cfd_configure_physics` | MUTATING | Solver/physics/fluid property config → OpenFOAM dicts |
-| `cfd_set_boundary` | MUTATING | Per-patch boundary condition field files |
+| `cfd_snappy_mesh` | MUTATING | Complex 3D CAD mesh generation via snappyHexMeshDict & surfaceFeatureExtractDict |
+| `cfd_configure_physics` | MUTATING | Solver/physics/thermal property config → OpenFOAM dicts (simpleFoam, buoyantBoussinesqSimpleFoam) |
+| `cfd_set_boundary` | MUTATING | Per-patch boundary condition field files (velocity, pressure, temperature) |
 | `cfd_build_case` | READ_ONLY | Validate OpenFOAM case completeness |
 | `cfd_run_solver` | MUTATING | Execute OpenFOAM solver via Docker |
 | `cfd_read_results` | READ_ONLY | Parse forces, residuals, time directories |
+| `cfd_post_process` | READ_ONLY | Aerodynamic force coefficients (Cd, Cl), pressure drop (delta P), and loss coefficient |
+| `cfd_map_loads_to_fem` | MUTATING | Map OpenFOAM surface pressure loads onto FreeCAD B-Rep for CalculiX FEM stress analysis |
 | `cfd_parametric_study` | MUTATING | Parameter sweep for design optimization |
 | `cfd_nl2foam` | MUTATING | Natural language → OpenFOAM config via LLM |
 | `cfd_sample_for_pinns` | MUTATING | Export point clouds for PINN/GNN training |
