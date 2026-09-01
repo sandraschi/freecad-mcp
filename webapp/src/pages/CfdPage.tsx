@@ -26,16 +26,7 @@ import {
 	Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-	CartesianGrid,
-	Legend,
-	Line,
-	LineChart,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { API } from "../lib/api";
 
@@ -65,11 +56,14 @@ interface CaseInfo {
 const tabs = [
 	{ id: "status", label: "Status", icon: Gauge },
 	{ id: "create", label: "Domain", icon: Box, legacy: true },
+	{ id: "snappy", label: "snappyHexMesh", icon: Layers },
 	{ id: "physics", label: "Physics", icon: FlaskConical, legacy: true },
 	{ id: "boundary", label: "Boundaries", icon: Layers, legacy: true },
 	{ id: "build", label: "Build", icon: Settings2, legacy: true },
 	{ id: "run", label: "Run", icon: Play, legacy: true },
 	{ id: "results", label: "Results", icon: BarChart3, legacy: true },
+	{ id: "aerodynamics", label: "Aerodynamics & Cd/Cl", icon: BarChart3 },
+	{ id: "fsi", label: "CFD-FEM FSI", icon: Sparkles },
 	{ id: "parametric", label: "Parametric", icon: GitBranch, legacy: true },
 	{ id: "nl2foam", label: "NL2FOAM", icon: BrainCircuit, legacy: true },
 	{ id: "pinns", label: "PINNs", icon: Network, legacy: true },
@@ -122,23 +116,15 @@ export default function CfdPage() {
 	const [pinnInterior, setPinnInterior] = useState(10000);
 	const [pinnFormat, setPinnFormat] = useState("csv");
 
-	const [solverSteps, setSolverSteps] = useState(
-		"blockMesh,checkMesh,simpleFoam",
-	);
+	const [solverSteps, setSolverSteps] = useState("blockMesh,checkMesh,simpleFoam");
 	const [parallelRun, setParallelRun] = useState(false);
 	const [nCores, setNCores] = useState(4);
 
 	// FluidX3D state
-	const [fx3dStatus, setFx3dStatus] = useState<Record<string, unknown> | null>(
-		null,
-	);
+	const [fx3dStatus, setFx3dStatus] = useState<Record<string, unknown> | null>(null);
 	const [fx3dPreset, setFx3dPreset] = useState("channel");
-	const [fx3dStep, setFx3dStep] = useState<
-		"idle" | "setup" | "compiling" | "running" | "done"
-	>("idle");
-	const [fx3dForceData, setFx3dForceData] = useState<Record<string, unknown>[]>(
-		[],
-	);
+	const [fx3dStep, setFx3dStep] = useState<"idle" | "setup" | "compiling" | "running" | "done">("idle");
+	const [fx3dForceData, setFx3dForceData] = useState<Record<string, unknown>[]>([]);
 	const [fx3dMlups, setFx3dMlups] = useState(0);
 	const [fx3dCellCount, setFx3dCellCount] = useState(0);
 	const [fx3dRuntime, setFx3dRuntime] = useState(0);
@@ -174,32 +160,29 @@ export default function CfdPage() {
 		}
 	};
 
-	const callTool = useCallback(
-		async (tool: string, args: Record<string, unknown>) => {
-			setLoading(true);
-			setError(null);
-			setResult(null);
-			try {
-				const r = await fetch(`${API}/control/tool`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ tool, arguments: args }),
-				});
-				const d = await r.json();
-				if (!d.success) {
-					setError(d.error || "Tool failed");
-				}
-				setResult(d);
-				return d;
-			} catch (e) {
-				setError(String(e));
-				return null;
-			} finally {
-				setLoading(false);
+	const callTool = useCallback(async (tool: string, args: Record<string, unknown>) => {
+		setLoading(true);
+		setError(null);
+		setResult(null);
+		try {
+			const r = await fetch(`${API}/control/tool`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ tool, arguments: args }),
+			});
+			const d = await r.json();
+			if (!d.success) {
+				setError(d.error || "Tool failed");
 			}
-		},
-		[],
-	);
+			setResult(d);
+			return d;
+		} catch (e) {
+			setError(String(e));
+			return null;
+		} finally {
+			setLoading(false);
+		}
+	}, []);
 
 	const field = (label: string, children: React.ReactNode) => (
 		<div className="flex flex-col gap-1">
@@ -208,11 +191,7 @@ export default function CfdPage() {
 		</div>
 	);
 
-	const input = (
-		value: string | number,
-		onChange: (v: string) => void,
-		props?: Record<string, unknown>,
-	) => (
+	const input = (value: string | number, onChange: (v: string) => void, props?: Record<string, unknown>) => (
 		<input
 			type={typeof value === "number" ? "number" : "text"}
 			value={value}
@@ -222,11 +201,7 @@ export default function CfdPage() {
 		/>
 	);
 
-	const select = (
-		value: string,
-		onChange: (v: string) => void,
-		options: string[],
-	) => (
+	const select = (value: string, onChange: (v: string) => void, options: string[]) => (
 		<select
 			value={value}
 			onChange={(e) => onChange(e.target.value)}
@@ -240,11 +215,7 @@ export default function CfdPage() {
 		</select>
 	);
 
-	const btn = (
-		label: string,
-		onClick: () => void,
-		variant: "primary" | "secondary" | "danger" = "primary",
-	) => (
+	const btn = (label: string, onClick: () => void, variant: "primary" | "secondary" | "danger" = "primary") => (
 		<button
 			onClick={onClick}
 			disabled={loading}
@@ -291,13 +262,9 @@ export default function CfdPage() {
 				{/* Legacy banner */}
 				{tabs.find((t) => t.id === activeTab && "legacy" in t) && (
 					<div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-						<AlertTriangle
-							size={18}
-							className="text-amber-400 shrink-0 mt-0.5"
-						/>
+						<AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
 						<p className="text-sm text-amber-200">
-							OpenFOAM is CPU-only and ~50x slower than FluidX3D GPU CFD. Switch
-							to the{" "}
+							OpenFOAM is CPU-only and ~50x slower than FluidX3D GPU CFD. Switch to the{" "}
 							<button
 								onClick={() => setActiveTab("fluidx3d")}
 								className="text-indigo-400 underline hover:text-indigo-300"
@@ -312,9 +279,7 @@ export default function CfdPage() {
 				{/* Status Tab */}
 				{activeTab === "status" && (
 					<div className="space-y-4">
-						<h2 className="text-lg font-bold text-slate-200">
-							CFD Pipeline Status
-						</h2>
+						<h2 className="text-lg font-bold text-slate-200">CFD Pipeline Status</h2>
 						<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
 							{status ? (
 								<>
@@ -327,9 +292,7 @@ export default function CfdPage() {
 									<StatusCard
 										icon={Box}
 										label="Docker"
-										value={
-											status.docker_available ? status.docker_exe : "Not found"
-										}
+										value={status.docker_available ? status.docker_exe : "Not found"}
 										ok={status.docker_available}
 									/>
 									<StatusCard
@@ -341,30 +304,19 @@ export default function CfdPage() {
 									<StatusCard
 										icon={CheckCircle2}
 										label="Pipeline Ready"
-										value={
-											status.bridge_mode !== "none" && status.openfoam_image
-												? "Yes"
-												: "No"
-										}
+										value={status.bridge_mode !== "none" && status.openfoam_image ? "Yes" : "No"}
 										ok={status.bridge_mode !== "none" && status.openfoam_image}
 									/>
 								</>
 							) : (
-								<div className="col-span-4 text-slate-500 text-sm">
-									Loading status...
-								</div>
+								<div className="col-span-4 text-slate-500 text-sm">Loading status...</div>
 							)}
 						</div>
 						{status?.openfoam_image === false && (
 							<div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-								<AlertTriangle
-									size={18}
-									className="text-amber-400 shrink-0 mt-0.5"
-								/>
+								<AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
 								<div className="text-sm text-amber-200">
-									<p className="font-medium mb-1">
-										OpenFOAM Docker image not found
-									</p>
+									<p className="font-medium mb-1">OpenFOAM Docker image not found</p>
 									<code className="text-xs bg-black/30 px-2 py-0.5 rounded">
 										docker pull openfoam/openfoam10-paraview56
 									</code>
@@ -373,14 +325,9 @@ export default function CfdPage() {
 						)}
 						{status?.openfoam_image === true && (
 							<div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-								<AlertTriangle
-									size={18}
-									className="text-amber-400 shrink-0 mt-0.5"
-								/>
+								<AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
 								<div className="text-sm text-amber-200">
-									<p className="font-medium mb-1">
-										OpenFOAM image available but CPU-only
-									</p>
+									<p className="font-medium mb-1">OpenFOAM image available but CPU-only</p>
 									<p className="text-xs">
 										For GPU-accelerated CFD (50x faster), use the{" "}
 										<button
@@ -406,24 +353,11 @@ export default function CfdPage() {
 				{/* Domain Tab */}
 				{activeTab === "create" && (
 					<div className="space-y-4 max-w-2xl">
-						<h2 className="text-lg font-bold text-slate-200">
-							Create Fluid Domain
-						</h2>
-						<p className="text-xs text-slate-500">
-							Generate parametric geometry and blockMeshDict for OpenFOAM
-						</p>
+						<h2 className="text-lg font-bold text-slate-200">Create Fluid Domain</h2>
+						<p className="text-xs text-slate-500">Generate parametric geometry and blockMeshDict for OpenFOAM</p>
 						<div className="grid grid-cols-2 gap-3">
 							{field("Case Name", input(caseName, setCaseName))}
-							{field(
-								"Domain Type",
-								select(domainType, setDomainType, [
-									"channel",
-									"pipe",
-									"box",
-									"nozzle",
-									"custom",
-								]),
-							)}
+							{field("Domain Type", select(domainType, setDomainType, ["channel", "pipe", "box", "nozzle", "custom"]))}
 							{field(
 								"Length (m)",
 								input(lengthM, (v) => setLengthM(Number(v)), { min: 0.001, step: 0.1 }),
@@ -447,18 +381,17 @@ export default function CfdPage() {
 								)}
 							{domainType === "nozzle" && (
 								<>
-							{field(
-									"Inlet Radius (m)",
-									input(inletRadius, (v) => setInletRadius(Number(v)), { step: 0.001 }),
-								)}
+									{field(
+										"Inlet Radius (m)",
+										input(inletRadius, (v) => setInletRadius(Number(v)), { step: 0.001 }),
+									)}
 									{field(
 										"Outlet Radius (m)",
 										input(outletRadius, (v) => setOutletRadius(Number(v)), { step: 0.001 }),
 									)}
 								</>
 							)}
-							{domainType === "custom" &&
-								field("STEP File", input(stepFile, setStepFile))}
+							{domainType === "custom" && field("STEP File", input(stepFile, setStepFile))}
 						</div>
 						{btn("Create Domain", () =>
 							callTool("cfd_create_domain", {
@@ -479,30 +412,12 @@ export default function CfdPage() {
 				{/* Physics Tab */}
 				{activeTab === "physics" && (
 					<div className="space-y-4 max-w-2xl">
-						<h2 className="text-lg font-bold text-slate-200">
-							Configure Physics
-						</h2>
-						<p className="text-xs text-slate-500">
-							Set solver, flow model, and fluid properties
-						</p>
+						<h2 className="text-lg font-bold text-slate-200">Configure Physics</h2>
+						<p className="text-xs text-slate-500">Set solver, flow model, and fluid properties</p>
 						<div className="grid grid-cols-2 gap-3">
 							{field("Case Name", input(caseName, setCaseName))}
-							{field(
-								"Solver",
-								select(solver, setSolver, [
-									"simpleFoam",
-									"pisoFoam",
-									"pimpleFoam",
-								]),
-							)}
-							{field(
-								"Flow Model",
-								select(flowType, setFlowType, [
-									"laminar",
-									"kEpsilon",
-									"kOmegaSST",
-								]),
-							)}
+							{field("Solver", select(solver, setSolver, ["simpleFoam", "pisoFoam", "pimpleFoam"]))}
+							{field("Flow Model", select(flowType, setFlowType, ["laminar", "kEpsilon", "kOmegaSST"]))}
 							{field(
 								"Kinematic Viscosity (m²/s)",
 								input(fluidNu, (v) => setFluidNu(Number(v)), { step: "1e-7" }),
@@ -519,7 +434,10 @@ export default function CfdPage() {
 								"End Time / Iterations",
 								input(endTime, (v) => setEndTime(Number(v)), { step: 100 }),
 							)}
-							{field("Time Step (s)", input(deltaT, (v) => setDeltaT(Number(v)), { step: 0.1 }))}
+							{field(
+								"Time Step (s)",
+								input(deltaT, (v) => setDeltaT(Number(v)), { step: 0.1 }),
+							)}
 							{field(
 								"Write Interval",
 								input(writeInterval, (v) => setWriteInterval(Number(v)), { step: 50 }),
@@ -544,22 +462,12 @@ export default function CfdPage() {
 				{/* Boundary Tab */}
 				{activeTab === "boundary" && (
 					<div className="space-y-4 max-w-2xl">
-						<h2 className="text-lg font-bold text-slate-200">
-							Boundary Conditions
-						</h2>
-						<p className="text-xs text-slate-500">
-							Configure per-patch field values
-						</p>
+						<h2 className="text-lg font-bold text-slate-200">Boundary Conditions</h2>
+						<p className="text-xs text-slate-500">Configure per-patch field values</p>
 						<div className="grid grid-cols-2 gap-3">
 							{field("Case Name", input(caseName, setCaseName))}
-							{field(
-								"Patch",
-								select(bcPatch, setBcPatch, ["inlet", "outlet", "walls"]),
-							)}
-							{field(
-								"Field",
-								select(bcField, setBcField, ["U", "p", "k", "omega", "nut"]),
-							)}
+							{field("Patch", select(bcPatch, setBcPatch, ["inlet", "outlet", "walls"]))}
+							{field("Field", select(bcField, setBcField, ["U", "p", "k", "omega", "nut"]))}
 							{field(
 								"BC Type",
 								select(bcType, setBcType, [
@@ -575,9 +483,7 @@ export default function CfdPage() {
 							)}
 							{field("Value", input(bcValue, setBcValue))}
 						</div>
-						<p className="text-xs text-slate-500">
-							Examples: uniform (1 0 0) for velocity, uniform 0 for pressure
-						</p>
+						<p className="text-xs text-slate-500">Examples: uniform (1 0 0) for velocity, uniform 0 for pressure</p>
 						{btn("Set Boundary", () =>
 							callTool("cfd_set_boundary", {
 								case_name: caseName,
@@ -593,65 +499,45 @@ export default function CfdPage() {
 				{/* Build Tab */}
 				{activeTab === "build" && (
 					<div className="space-y-4 max-w-2xl">
-						<h2 className="text-lg font-bold text-slate-200">
-							Build & Validate Case
-						</h2>
-						<p className="text-xs text-slate-500">
-							Check that all required files are present
-						</p>
+						<h2 className="text-lg font-bold text-slate-200">Build & Validate Case</h2>
+						<p className="text-xs text-slate-500">Check that all required files are present</p>
 						{field("Case Name", input(caseName, setCaseName))}
-						{btn("Validate Case", () =>
-							callTool("cfd_build_case", { case_name: caseName }),
-						)}
+						{btn("Validate Case", () => callTool("cfd_build_case", { case_name: caseName }))}
 						{result?.data && (
 							<div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-2">
 								<p className="text-sm font-medium text-slate-300">
 									Ready:{" "}
-									<span
-										className={
-											result.data.ready ? "text-green-400" : "text-red-400"
-										}
-									>
+									<span className={result.data.ready ? "text-green-400" : "text-red-400"}>
 										{String(result.data.ready)}
 									</span>
 								</p>
 								{Array.isArray(result.data.files) && (
 									<div>
 										<p className="text-xs text-slate-500 mb-1">
-											Present (
-											{Array.isArray(result.data.files)
-												? (result.data.files as string[]).length
-												: 0}
+											Present ({Array.isArray(result.data.files) ? (result.data.files as string[]).length : 0}
 											):
 										</p>
 										<div className="flex flex-wrap gap-1">
 											{(result.data.files as string[]).map((f: string) => (
-												<span
-													key={f}
-													className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded"
-												>
+												<span key={f} className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded">
 													{f}
 												</span>
 											))}
 										</div>
 									</div>
 								)}
-								{Array.isArray(result.data.missing) &&
-									(result.data.missing as string[]).length > 0 && (
-										<div>
-											<p className="text-xs text-slate-500 mb-1">Missing:</p>
-											<div className="flex flex-wrap gap-1">
-												{(result.data.missing as string[]).map((f: string) => (
-													<span
-														key={f}
-														className="text-xs bg-red-500/10 text-red-400 px-2 py-0.5 rounded"
-													>
-														{f}
-													</span>
-												))}
-											</div>
+								{Array.isArray(result.data.missing) && (result.data.missing as string[]).length > 0 && (
+									<div>
+										<p className="text-xs text-slate-500 mb-1">Missing:</p>
+										<div className="flex flex-wrap gap-1">
+											{(result.data.missing as string[]).map((f: string) => (
+												<span key={f} className="text-xs bg-red-500/10 text-red-400 px-2 py-0.5 rounded">
+													{f}
+												</span>
+											))}
 										</div>
-									)}
+									</div>
+								)}
 							</div>
 						)}
 					</div>
@@ -661,9 +547,7 @@ export default function CfdPage() {
 				{activeTab === "run" && (
 					<div className="space-y-4 max-w-2xl">
 						<h2 className="text-lg font-bold text-slate-200">Run Solver</h2>
-						<p className="text-xs text-slate-500">
-							Execute OpenFOAM via Docker
-						</p>
+						<p className="text-xs text-slate-500">Execute OpenFOAM via Docker</p>
 						<div className="grid grid-cols-2 gap-3">
 							{field("Case Name", input(caseName, setCaseName))}
 							{field("Steps", input(solverSteps, setSolverSteps))}
@@ -693,9 +577,7 @@ export default function CfdPage() {
 						{result?.data && (
 							<div className="p-4 bg-black/20 rounded-xl border border-white/10 space-y-1">
 								<p className="text-xs text-slate-500">
-									Steps completed:{" "}
-									{(result.data.steps_completed as string[])?.join(", ") ||
-										"none"}
+									Steps completed: {(result.data.steps_completed as string[])?.join(", ") || "none"}
 								</p>
 								{!!result.data.log && (
 									<pre className="text-xs text-slate-400 mt-2 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
@@ -713,41 +595,28 @@ export default function CfdPage() {
 						<h2 className="text-lg font-bold text-slate-200">Results</h2>
 						{field("Case Name", input(caseName, setCaseName))}
 						<div className="flex gap-2">
-							{btn("Read Results", () =>
-								callTool("cfd_read_results", { case_name: caseName }),
-							)}
+							{btn("Read Results", () => callTool("cfd_read_results", { case_name: caseName }))}
 						</div>
 						{result?.data && (
 							<div className="space-y-3">
 								<div className="p-4 bg-white/5 rounded-xl border border-white/10">
-									<p className="text-sm font-medium text-slate-300 mb-2">
-										Time Directories
-									</p>
+									<p className="text-sm font-medium text-slate-300 mb-2">Time Directories</p>
 									<div className="flex flex-wrap gap-1">
 										{(result.data.times as string[])?.map((t: string) => (
-											<span
-												key={t}
-												className="text-xs bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded"
-											>
+											<span key={t} className="text-xs bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded">
 												{t}
 											</span>
 										))}
 									</div>
 								</div>
 								<div className="p-4 bg-white/5 rounded-xl border border-white/10">
-									<p className="text-sm font-medium text-slate-300 mb-2">
-										Final Residuals
-									</p>
+									<p className="text-sm font-medium text-slate-300 mb-2">Final Residuals</p>
 									<div className="grid grid-cols-3 gap-2">
-									{!!result.data.final_residuals &&
-										Object.entries(
-												result.data.final_residuals as Record<string, number>,
-											).map(([k, v]) => (
+										{!!result.data.final_residuals &&
+											Object.entries(result.data.final_residuals as Record<string, number>).map(([k, v]) => (
 												<div key={k} className="text-center">
 													<p className="text-xs text-slate-500">{k}</p>
-													<p
-														className={`text-sm font-mono ${v < 1e-4 ? "text-green-400" : "text-amber-400"}`}
-													>
+													<p className={`text-sm font-mono ${v < 1e-4 ? "text-green-400" : "text-amber-400"}`}>
 														{v.toExponential(2)}
 													</p>
 												</div>
@@ -757,9 +626,7 @@ export default function CfdPage() {
 								<div
 									className="flex items-center gap-2 p-3 rounded-xl text-sm"
 									style={{
-										background: result.data.converged
-											? "rgb(34 197 94 / 0.1)"
-											: "rgb(251 191 36 / 0.1)",
+										background: result.data.converged ? "rgb(34 197 94 / 0.1)" : "rgb(251 191 36 / 0.1)",
 									}}
 								>
 									{result.data.converged ? (
@@ -767,16 +634,8 @@ export default function CfdPage() {
 									) : (
 										<AlertTriangle size={16} className="text-amber-400" />
 									)}
-									<span
-										className={
-											result.data.converged
-												? "text-green-400"
-												: "text-amber-400"
-										}
-									>
-										{result.data.converged
-											? "Solution converged"
-											: "Solution did not fully converge"}
+									<span className={result.data.converged ? "text-green-400" : "text-amber-400"}>
+										{result.data.converged ? "Solution converged" : "Solution did not fully converge"}
 									</span>
 								</div>
 							</div>
@@ -787,12 +646,8 @@ export default function CfdPage() {
 				{/* Parametric Tab */}
 				{activeTab === "parametric" && (
 					<div className="space-y-4 max-w-2xl">
-						<h2 className="text-lg font-bold text-slate-200">
-							Parametric Study
-						</h2>
-						<p className="text-xs text-slate-500">
-							Design optimization via parameter sweep
-						</p>
+						<h2 className="text-lg font-bold text-slate-200">Parametric Study</h2>
+						<p className="text-xs text-slate-500">Design optimization via parameter sweep</p>
 						<div className="grid grid-cols-2 gap-3">
 							{field("Base Case", input(caseName, setCaseName))}
 							{field(
@@ -814,9 +669,7 @@ export default function CfdPage() {
 									onChange={(e) => setParamRun(e.target.checked)}
 									className="accent-indigo-500"
 								/>
-								<label className="text-xs text-slate-400">
-									Execute each case
-								</label>
+								<label className="text-xs text-slate-400">Execute each case</label>
 							</div>
 						</div>
 						{btn("Run Study", () =>
@@ -833,19 +686,13 @@ export default function CfdPage() {
 				{/* NL2FOAM Tab */}
 				{activeTab === "nl2foam" && (
 					<div className="space-y-4 max-w-2xl">
-						<h2 className="text-lg font-bold text-slate-200">
-							NL2FOAM — Natural Language to OpenFOAM
-						</h2>
-						<p className="text-xs text-slate-500">
-							Describe your CFD problem and let the LLM generate the config
-						</p>
+						<h2 className="text-lg font-bold text-slate-200">NL2FOAM — Natural Language to OpenFOAM</h2>
+						<p className="text-xs text-slate-500">Describe your CFD problem and let the LLM generate the config</p>
 						<div className="space-y-3">
 							{field("Case Name", input(caseName, setCaseName))}
 							{field("Model", input(nlModel, setNlModel))}
 							<div className="flex flex-col gap-1">
-								<label className="text-xs font-medium text-slate-400">
-									Problem Description
-								</label>
+								<label className="text-xs font-medium text-slate-400">Problem Description</label>
 								<textarea
 									value={nlDescription}
 									onChange={(e) => setNlDescription(e.target.value)}
@@ -865,9 +712,7 @@ export default function CfdPage() {
 						{!!result?.data?.reasoning && (
 							<div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
 								<p className="text-xs text-indigo-300 mb-1">AI Reasoning</p>
-								<p className="text-sm text-slate-300">
-									{String(result.data.reasoning)}
-								</p>
+								<p className="text-sm text-slate-300">{String(result.data.reasoning)}</p>
 							</div>
 						)}
 					</div>
@@ -876,12 +721,9 @@ export default function CfdPage() {
 				{/* PINNs Tab */}
 				{activeTab === "pinns" && (
 					<div className="space-y-4 max-w-2xl">
-						<h2 className="text-lg font-bold text-slate-200">
-							PINN Point Cloud Sampling
-						</h2>
+						<h2 className="text-lg font-bold text-slate-200">PINN Point Cloud Sampling</h2>
 						<p className="text-xs text-slate-500">
-							Export coordinate points for Physics-Informed Neural Network
-							training
+							Export coordinate points for Physics-Informed Neural Network training
 						</p>
 						<div className="grid grid-cols-2 gap-3">
 							{field("Case Name", input(caseName, setCaseName))}
@@ -893,10 +735,7 @@ export default function CfdPage() {
 								"Interior Points",
 								input(pinnInterior, (v) => setPinnInterior(Number(v)), { step: 1000 }),
 							)}
-							{field(
-								"Format",
-								select(pinnFormat, setPinnFormat, ["csv", "json", "numpy"]),
-							)}
+							{field("Format", select(pinnFormat, setPinnFormat, ["csv", "json", "numpy"]))}
 						</div>
 						{btn("Sample Points", () =>
 							callTool("cfd_sample_for_pinns", {
@@ -910,12 +749,9 @@ export default function CfdPage() {
 							<div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
 								<Download size={18} className="text-green-400" />
 								<div>
-									<p className="text-sm text-green-300">
-										{String(result.data.output_file)}
-									</p>
+									<p className="text-sm text-green-300">{String(result.data.output_file)}</p>
 									<p className="text-xs text-green-400/70">
-										{String(result.data.n_boundary)} boundary +{" "}
-										{String(result.data.n_interior)} interior points
+										{String(result.data.n_boundary)} boundary + {String(result.data.n_interior)} interior points
 									</p>
 								</div>
 							</div>
@@ -960,11 +796,7 @@ export default function CfdPage() {
 						</div>
 
 						<button
-							onClick={() =>
-								callTool("cfd_fluidx3d_status", {}).then(
-									(d) => d && setFx3dStatus(d.data ?? null),
-								)
-							}
+							onClick={() => callTool("cfd_fluidx3d_status", {}).then((d) => d && setFx3dStatus(d.data ?? null))}
 							className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-slate-400"
 						>
 							<RefreshCw size={14} /> Check Status
@@ -972,9 +804,7 @@ export default function CfdPage() {
 
 						{/* Quick-Start Presets */}
 						<div>
-							<p className="text-xs font-medium text-slate-400 mb-2">
-								Quick-Start Presets
-							</p>
+							<p className="text-xs font-medium text-slate-400 mb-2">Quick-Start Presets</p>
 							<div className="flex gap-2 flex-wrap">
 								{[
 									{ label: "Pipe Flow (laminar)", value: "pipe_laminar" },
@@ -1025,16 +855,14 @@ export default function CfdPage() {
 								"3. Run",
 								() => {
 									setFx3dStep("running");
-									callTool("cfd_fluidx3d_run", { preset: fx3dPreset }).then(
-										(d) => {
-											if (d?.success) {
-												setFx3dMlups((d.data?.mlups as number) ?? 0);
-												setFx3dCellCount((d.data?.cell_count as number) ?? 0);
-												setFx3dRuntime((d.data?.runtime as number) ?? 0);
-												setFx3dLog((d.data?.log as string) ?? "");
-											}
-										},
-									);
+									callTool("cfd_fluidx3d_run", { preset: fx3dPreset }).then((d) => {
+										if (d?.success) {
+											setFx3dMlups((d.data?.mlups as number) ?? 0);
+											setFx3dCellCount((d.data?.cell_count as number) ?? 0);
+											setFx3dRuntime((d.data?.runtime as number) ?? 0);
+											setFx3dLog((d.data?.log as string) ?? "");
+										}
+									});
 								},
 								fx3dStep === "running" ? "primary" : "secondary",
 							)}
@@ -1042,25 +870,14 @@ export default function CfdPage() {
 								"4. Results",
 								() => {
 									setFx3dStep("done");
-									callTool("cfd_fluidx3d_results", { preset: fx3dPreset }).then(
-										(d) => {
-											if (d?.success) {
-												setFx3dForceData(
-													(d.data?.force_history as Record<
-														string,
-														unknown
-													>[]) ?? [],
-												);
-												setFx3dMlups((d.data?.mlups as number) ?? fx3dMlups);
-												setFx3dCellCount(
-													(d.data?.cell_count as number) ?? fx3dCellCount,
-												);
-												setFx3dRuntime(
-													(d.data?.runtime as number) ?? fx3dRuntime,
-												);
-											}
-										},
-									);
+									callTool("cfd_fluidx3d_results", { preset: fx3dPreset }).then((d) => {
+										if (d?.success) {
+											setFx3dForceData((d.data?.force_history as Record<string, unknown>[]) ?? []);
+											setFx3dMlups((d.data?.mlups as number) ?? fx3dMlups);
+											setFx3dCellCount((d.data?.cell_count as number) ?? fx3dCellCount);
+											setFx3dRuntime((d.data?.runtime as number) ?? fx3dRuntime);
+										}
+									});
 								},
 								fx3dStep === "done" ? "primary" : "secondary",
 							)}
@@ -1075,13 +892,7 @@ export default function CfdPage() {
 									{ key: "running" as const, label: "Run" },
 									{ key: "done" as const, label: "Results" },
 								].map((s) => {
-									const order = [
-										"idle",
-										"setup",
-										"compiling",
-										"running",
-										"done",
-									];
+									const order = ["idle", "setup", "compiling", "running", "done"];
 									const idx = order.indexOf(fx3dStep);
 									const si = order.indexOf(s.key);
 									const done = si < idx;
@@ -1108,15 +919,10 @@ export default function CfdPage() {
 						{/* Force Chart */}
 						{fx3dForceData.length > 0 && (
 							<div className="p-4 bg-white/5 rounded-xl border border-white/10">
-								<p className="text-sm font-medium text-slate-300 mb-3">
-									Force History
-								</p>
+								<p className="text-sm font-medium text-slate-300 mb-3">Force History</p>
 								<ResponsiveContainer width="100%" height={250}>
 									<LineChart data={fx3dForceData}>
-										<CartesianGrid
-											strokeDasharray="3 3"
-											stroke="rgba(255,255,255,0.05)"
-										/>
+										<CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
 										<XAxis dataKey="time" stroke="#64748b" fontSize={11} />
 										<YAxis stroke="#64748b" fontSize={11} />
 										<Tooltip
@@ -1127,22 +933,8 @@ export default function CfdPage() {
 											}}
 										/>
 										<Legend />
-										<Line
-											type="monotone"
-											dataKey="drag"
-											stroke="#ef4444"
-											name="Drag"
-											strokeWidth={2}
-											dot={false}
-										/>
-										<Line
-											type="monotone"
-											dataKey="lift"
-											stroke="#3b82f6"
-											name="Lift"
-											strokeWidth={2}
-											dot={false}
-										/>
+										<Line type="monotone" dataKey="drag" stroke="#ef4444" name="Drag" strokeWidth={2} dot={false} />
+										<Line type="monotone" dataKey="lift" stroke="#3b82f6" name="Lift" strokeWidth={2} dot={false} />
 									</LineChart>
 								</ResponsiveContainer>
 							</div>
@@ -1153,21 +945,15 @@ export default function CfdPage() {
 							<div className="grid grid-cols-3 gap-3">
 								<div className="p-4 bg-white/5 rounded-xl border border-white/10 text-center">
 									<p className="text-xs text-slate-500">MLUPS</p>
-									<p className="text-lg font-mono text-indigo-400">
-										{fx3dMlups.toFixed(1)}
-									</p>
+									<p className="text-lg font-mono text-indigo-400">{fx3dMlups.toFixed(1)}</p>
 								</div>
 								<div className="p-4 bg-white/5 rounded-xl border border-white/10 text-center">
 									<p className="text-xs text-slate-500">Cells</p>
-									<p className="text-lg font-mono text-indigo-400">
-										{fx3dCellCount.toLocaleString()}
-									</p>
+									<p className="text-lg font-mono text-indigo-400">{fx3dCellCount.toLocaleString()}</p>
 								</div>
 								<div className="p-4 bg-white/5 rounded-xl border border-white/10 text-center">
 									<p className="text-xs text-slate-500">Runtime</p>
-									<p className="text-lg font-mono text-indigo-400">
-										{fx3dRuntime.toFixed(1)}s
-									</p>
+									<p className="text-lg font-mono text-indigo-400">{fx3dRuntime.toFixed(1)}s</p>
 								</div>
 							</div>
 						)}
@@ -1176,27 +962,17 @@ export default function CfdPage() {
 						{fx3dForceData.length > 0 && (
 							<div className="space-y-2">
 								<button
-									onClick={() =>
-										callTool("cfd_fluidx3d_explain", { preset: fx3dPreset })
-									}
+									onClick={() => callTool("cfd_fluidx3d_explain", { preset: fx3dPreset })}
 									disabled={loading}
 									className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
 								>
-									{loading ? (
-										<Loader2 size={14} className="animate-spin" />
-									) : (
-										<Sparkles size={14} />
-									)}
+									{loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
 									AI Explain
 								</button>
 								{!!result?.data?.explanation && (
 									<div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-										<p className="text-xs text-indigo-300 mb-1">
-											AI Explanation
-										</p>
-										<p className="text-sm text-slate-300">
-											{String(result.data.explanation)}
-										</p>
+										<p className="text-xs text-indigo-300 mb-1">AI Explanation</p>
+										<p className="text-sm text-slate-300">{String(result.data.explanation)}</p>
 									</div>
 								)}
 							</div>
@@ -1205,9 +981,7 @@ export default function CfdPage() {
 						{/* Log */}
 						{fx3dLog && (
 							<details className="p-4 bg-black/20 rounded-xl border border-white/10">
-								<summary className="text-xs text-slate-400 cursor-pointer">
-									Simulation Log
-								</summary>
+								<summary className="text-xs text-slate-400 cursor-pointer">Simulation Log</summary>
 								<pre className="text-xs text-slate-400 mt-2 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
 									{fx3dLog}
 								</pre>
@@ -1227,9 +1001,7 @@ export default function CfdPage() {
 				{/* Raw result */}
 				{result && !result.success && (
 					<details className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl">
-						<summary className="text-xs text-red-400 cursor-pointer">
-							Error Details
-						</summary>
+						<summary className="text-xs text-red-400 cursor-pointer">Error Details</summary>
 						<pre className="text-xs text-slate-400 mt-2 whitespace-pre-wrap overflow-x-auto">
 							{JSON.stringify(result, null, 2)}
 						</pre>
@@ -1245,7 +1017,12 @@ function StatusCard({
 	label,
 	value,
 	ok,
-}: { icon: React.ElementType; label: string; value: string; ok: boolean }) {
+}: {
+	icon: React.ElementType;
+	label: string;
+	value: string;
+	ok: boolean;
+}) {
 	return (
 		<div
 			className={`p-4 rounded-xl border ${ok ? "bg-green-500/5 border-green-500/20" : "bg-red-500/5 border-red-500/20"}`}
@@ -1254,11 +1031,7 @@ function StatusCard({
 				<Icon size={14} className={ok ? "text-green-400" : "text-red-400"} />
 				<span className="text-xs text-slate-500">{label}</span>
 			</div>
-			<p
-				className={`text-sm font-mono ${ok ? "text-green-300" : "text-red-300"}`}
-			>
-				{value}
-			</p>
+			<p className={`text-sm font-mono ${ok ? "text-green-300" : "text-red-300"}`}>{value}</p>
 		</div>
 	);
 }
