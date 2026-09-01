@@ -1,5 +1,5 @@
 """
-FreeCAD TCP bridge — runs inside FreeCAD GUI as a startup macro.
+FreeCAD TCP bridge - runs inside FreeCAD GUI as a startup macro.
 Listens on a TCP socket for JSON commands, executes them using FreeCAD's
 full API (including Import/Part/Mesh), and returns JSON responses.
 
@@ -19,7 +19,7 @@ import Import
 import Mesh
 import Part
 
-# BIM module imports — available inside FreeCAD GUI
+# BIM module imports - available inside FreeCAD GUI
 try:
     import Arch
     import Draft
@@ -96,7 +96,7 @@ def _place_shape(shape, x, y, z):
 
 
 def _build_sports_car_shape(body_length, body_width, body_height, wheel_radius, wheelbase):
-    """Elaborate sports-toy car solid — chassis, cabin, arches, torus wheels."""
+    """Elaborate sports-toy car solid - chassis, cabin, arches, torus wheels."""
     l_val = float(body_length)
     w_val = float(body_width)
     h_val = float(body_height)
@@ -599,7 +599,7 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                     )
                     view = FreeCADGui.activeDocument().activeView()
                     if view is None:
-                        raise RuntimeError("No active 3D view — open FreeCAD GUI with a document")
+                        raise RuntimeError("No active 3D view - open FreeCAD GUI with a document")
                     view.saveImage(output_path, width, height)
                     with open(output_path, "rb") as img_file:
                         encoded = base64.b64encode(img_file.read()).decode("ascii")

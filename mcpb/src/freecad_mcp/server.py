@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from contextlib import asynccontextmanager
@@ -24,7 +25,7 @@ from typing import Annotated
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastmcp import Context, FastMCP
@@ -91,7 +92,13 @@ _bridge_proc: subprocess.Popen | None = None
 _bridge_reader: asyncio.StreamReader | None = None
 _bridge_writer: asyncio.StreamWriter | None = None
 
-_llm_settings = {"ollama_url": "http://192.168.1.11:11434", "model": "gemma3:1b", "api_url": "", "api_key": ""}
+_llm_settings = {
+    "provider": "ollama",
+    "ollama_url": "http://127.0.0.1:11434",
+    "model": "gemma3:1b",
+    "api_url": "",
+    "api_key": "",
+}
 _marketplace_settings = {
     "thingiverse_api_key": os.environ.get("THINGIVERSE_API_KEY", ""),
     "grabcad_api_key": os.environ.get("GRABCAD_API_KEY", ""),
@@ -152,16 +159,16 @@ def _freecad_already_running() -> bool:
 
 
 def _start_freecad_bridge():
-    """Launch FreeCAD GUI with the bridge script — only if no FreeCAD is already running."""
+    """Launch FreeCAD GUI with the bridge script - only if no FreeCAD is already running."""
     global _bridge_proc
     if _freecad_already_running():
-        logger.info("FreeCAD GUI already running — skipping bridge launch (will attempt to connect)")
+        logger.info("FreeCAD GUI already running - skipping bridge launch (will attempt to connect)")
         return False
     if not os.path.isfile(FREECAD_PATH):
         logger.warning("FreeCAD not found at %s", FREECAD_PATH)
         return False
     if "FreeCADCmd" in FREECAD_PATH:
-        logger.info("FreeCADCmd detected — skipping TCP bridge (headless subprocess mode)")
+        logger.info("FreeCADCmd detected - skipping TCP bridge (headless subprocess mode)")
         return False
     if not os.path.isfile(BRIDGE_SCRIPT):
         logger.warning("Bridge script not found at %s", BRIDGE_SCRIPT)
@@ -263,7 +270,7 @@ async def lifespan(app: FastAPI):
                     logger.info("Waiting for bridge (attempt %d/5)...", attempt + 1)
 
             if not _state.get("freecad_ok"):
-                # Subprocess fallback — FreeCADCmd works even if bridge/version hangs
+                # Subprocess fallback - FreeCADCmd works even if bridge/version hangs
                 try:
                     cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
                     r = subprocess.run([cmd_path, "--version"], capture_output=True, text=True, timeout=10, check=False)
@@ -277,7 +284,7 @@ async def lifespan(app: FastAPI):
                 logger.info("Falling back to subprocess mode (FreeCADCmd)")
     elif not bridge_already_running and skip_auto_launch:
         _state["bridge_mode"] = "subprocess"
-        logger.info("FREECAD_SKIP_AUTO_LAUNCH set — not starting FreeCAD GUI bridge")
+        logger.info("FREECAD_SKIP_AUTO_LAUNCH set - not starting FreeCAD GUI bridge")
     else:
         # Bridge already running, just connect
         _state["freecad_version"] = "bridge_running"
@@ -395,7 +402,7 @@ def _build_result(script_type: str, out: str, err: str, code: int, extra: dict |
     return result
 
 
-# Register BIM tools (bound to mcp via decorator closures) — must be after _build_result
+# Register BIM tools (bound to mcp via decorator closures) - must be after _build_result
 _bim_tools = register_bim_tools(
     mcp=mcp,
     state=_state,
@@ -691,7 +698,7 @@ async def create_shape(
     return _build_result("create_shape", out, err, code, extra={"output": output_name})
 
 
-# Register CAD file depot tools (cad_depot, cad_create) — must be after create_shape definition
+# Register CAD file depot tools (cad_depot, cad_create) - must be after create_shape definition
 _depot_tools = register_depot_tools(
     mcp=mcp,
     state=_state,
@@ -844,7 +851,7 @@ async def freecad_gui(
         return {"success": False, "error": str(e)}
 
 
-# ── FastMCP 3.2 Features — Sampling, Prompts, Resources ──────────────────────
+# ── FastMCP 3.2 Features - Sampling, Prompts, Resources ──────────────────────
 
 
 async def _sampling_tool(
@@ -880,6 +887,110 @@ async def _sampling_tool(
         "response": f"I received your engineering question: '{goal}'. To enable AI reasoning, connect this MCP server to a sampling-capable client (Claude Desktop, Cursor).",
         "sampling_used": False,
     }
+
+
+@mcp.tool(version="0.5.0")
+async def freecad_design_loop(
+    goal: Annotated[
+        str, Field(description="Engineering design goal, e.g. 'design a lightweight bracket for 500N load'")
+    ],
+    max_iterations: Annotated[int, Field(default=5, description="Max design iterations.", ge=1, le=20)] = 5,
+    ctx: Context = None,
+) -> dict:
+    """
+    Autonomous engineering design loop - CAD to simulate to analyze to refine.
+
+    Uses the host LLM (via MCP sampling) to plan and execute a multi-step
+    design workflow. The LLM decides which tools to call (create_shape,
+    cfd_fluidx3d_setup, cfd_fluidx3d_run, fem_*, etc.), evaluates results,
+    and iterates to converge on the design goal.
+
+    Falls back to a static plan if sampling is unavailable.
+
+    ## Return Format
+    {"success": bool, "iterations": int, "log": [str], "final_design": str, "sampling_used": bool}
+
+    ## Examples
+    await freecad_design_loop(goal="Design a 100x50x5mm bracket that can hold 500N with safety factor 2")
+    await freecad_design_loop(goal="Optimize a pipe elbow for minimum pressure drop at Re=10000")
+    """
+    if ctx is None:
+        return {
+            "success": False,
+            "error": "This tool requires MCP sampling (ctx.sample). Use a sampling-capable client like Claude Desktop.",
+        }
+
+    log = []
+    iteration = 0
+    current_design = None
+
+    system_prompt = """You are an autonomous engineering design agent with access to 50+ FreeCAD MCP tools.
+Your job is to plan and execute a multi-step design loop: design to simulate to analyze to refine.
+
+Available tool categories (you can call them via the function_call mechanism):
+- Core CAD: create_shape(shape_type, params), model_info(file_name), step_to_stl(file_name)
+- BIM: bim_create_wall, bim_create_slab, bim_create_column, bim_create_window
+- CFD: cfd_create_domain, cfd_configure_physics, cfd_set_boundary, cfd_fluidx3d_setup, cfd_fluidx3d_run, cfd_fluidx3d_results, cfd_fluidx3d_explain
+- FEM: fem_create_analysis, fem_set_material, fem_set_constraint, fem_mesh, fem_run, fem_read_results, run_fem_analysis
+- Slicing: slice_stl, slicer_status
+- Marketplace: marketplace_search, marketplace_download
+
+Strategy:
+1. Parse the goal - what's being designed, constraints, success criteria
+2. Create geometry with create_shape or generate with CAD tools
+3. Simulate: run CFD (fluid) or FEM (structural) analysis
+4. Read results and evaluate against criteria
+5. If criteria not met, modify parameters and repeat
+6. Report: final design, key metrics, iterations taken"""
+
+    try:
+        while iteration < max_iterations:
+            iteration += 1
+            status = f"Iteration {iteration}/{max_iterations}: {current_design or 'initial design'}"
+            log.append(f"=== {status} ===")
+
+            msg = f"Design loop iteration {iteration}/{max_iterations}.\nGoal: {goal}\nCurrent design: {current_design or 'none yet'}\nPrevious iterations: {log[:-1] if len(log) > 1 else 'none'}\n\nDecide what to do next and call the appropriate tools. After each tool call, evaluate the result. If the goal is met, respond with 'DESIGN_COMPLETE: <summary>'."
+            if iteration == max_iterations:
+                msg += "\n\nThis is the final iteration. Provide your best design."
+
+            result = await ctx.sample(
+                system_prompt=system_prompt,
+                messages=[{"role": "user", "content": msg}],
+                max_tokens=4000,
+            )
+
+            log.append(f"LLM: {result[:500]}...")
+
+            if "DESIGN_COMPLETE" in result:
+                final = result.split("DESIGN_COMPLETE:")[-1].strip()
+                log.append(f"Design converged: {final}")
+                return {
+                    "success": True,
+                    "iterations": iteration,
+                    "log": log,
+                    "final_design": final,
+                    "sampling_used": True,
+                }
+
+            current_design = result[:300]
+
+        return {
+            "success": True,
+            "iterations": iteration,
+            "log": log,
+            "final_design": current_design or "Max iterations reached without explicit convergence",
+            "sampling_used": True,
+        }
+
+    except Exception as e:
+        logger.exception("Design loop failed")
+        return {
+            "success": False,
+            "error": str(e),
+            "iterations": iteration,
+            "log": log,
+            "sampling_used": True,
+        }
 
 
 mcp.tool(version="0.3.0")(_sampling_tool)
@@ -960,7 +1071,7 @@ async def freecad_depot_file_resource(filename: str) -> str:
 
 
 def _error_response(error: str, error_type: str = "general", **kwargs) -> dict:
-    """Auto-logging error response — traceback logged before returning to caller."""
+    """Auto-logging error response - traceback logged before returning to caller."""
     logger.exception("Tool error: %s [%s]", error, error_type)
     return {"success": False, "error": error, "error_type": error_type, **kwargs}
 
@@ -1124,10 +1235,41 @@ async def download_file(filename: str):
 async def serve_case_file(case_name: str, filename: str):
     """Serve a file from a FluidX3D case directory."""
     path = os.path.join(F3D_CASE_DIR, case_name, filename)
+    not_found = False
     if not os.path.isfile(path):
+        # Also check FluidX3D export dir
+        f3d_path = None
+        for p in [
+            os.environ.get("FLUIDX3D_PATH", ""),
+            r"D:\Dev\repos\FluidX3D",
+            os.path.join(os.environ.get("TEMP", ""), "fluidx3d"),
+        ]:
+            if p and os.path.isdir(p):
+                f3d_path = p
+                break
+        if f3d_path:
+            alt = os.path.join(f3d_path, "bin", "export", filename)
+            if os.path.isfile(alt):
+                path = alt
+                not_found = False
+            else:
+                not_found = True
+        else:
+            not_found = True
+    if not_found or not os.path.isfile(path):
         raise HTTPException(404, f"File {filename} not found in case {case_name}")
     ext = os.path.splitext(filename)[1].lower()
-    media = "application/sla" if ext == ".stl" else "application/octet-stream"
+    media_map = {
+        ".stl": "application/sla",
+        ".webm": "video/webm",
+        ".png": "image/png",
+        ".vtk": "application/octet-stream",
+        ".csv": "text/csv",
+        ".obj": "text/plain",
+        ".json": "application/json",
+        ".log": "text/plain",
+    }
+    media = media_map.get(ext, "application/octet-stream")
     return FileResponse(path, media_type=media, filename=filename)
 
 
@@ -1217,7 +1359,7 @@ def _depot_list() -> list[dict]:
     return sorted(files.values(), key=lambda x: x["modified"], reverse=True)
 
 
-# ── REST Endpoints — Depot CRUD ──────────────────────────────────────────────
+# ── REST Endpoints - Depot CRUD ──────────────────────────────────────────────
 
 
 @app.get("/api/v1/depot")
@@ -1488,14 +1630,14 @@ _MARKETPLACE_CATEGORIES = {
 
 
 def _safe_json(response: httpx.Response) -> dict | list | None:
-    """Parse JSON safely — return None on empty or non-JSON."""
+    """Parse JSON safely - return None on empty or non-JSON."""
     if response.status_code >= 400:
         logger.warning("Marketplace API error %s: %s", response.status_code, response.text[:500])
         return None
     try:
         return response.json()
     except Exception as e:
-        logger.warning("Marketplace API non-JSON response: %s — %s", response.text[:200], e)
+        logger.warning("Marketplace API non-JSON response: %s - %s", response.text[:200], e)
         return None
 
 
@@ -1522,7 +1664,7 @@ _PRINTABLES_SEARCH_QUERY = """query Search($query: String!, $limit: Int!, $offse
 
 
 async def _marketplace_search(source: str, query: str, category: str = "", limit: int = 20, page: int = 1) -> dict:
-    """Shared marketplace search logic — used by both REST and MCP tools."""
+    """Shared marketplace search logic - used by both REST and MCP tools."""
     offset = (page - 1) * limit
 
     if source not in ("printables", "grabcad", "thingiverse"):
@@ -1656,7 +1798,7 @@ async def _marketplace_search(source: str, query: str, category: str = "", limit
 
 
 async def _marketplace_download(source: str, model_id: str, file_url: str, filename: str) -> dict:
-    """Shared marketplace download logic — used by both REST and MCP tools."""
+    """Shared marketplace download logic - used by both REST and MCP tools."""
     ext = Path(filename).suffix.lower()
     if ext not in (".step", ".stp", ".stl", ".zip"):
         return {"success": False, "error": f"Unsupported format: {ext}. Use .step, .stp, .stl, or .zip."}
@@ -1767,7 +1909,7 @@ async def marketplace_download(
 ) -> dict:
     """Download a model from a marketplace into the uploads directory.
 
-    Thingiverse downloads are ZIP files — the server auto-extracts STL/STEP files.
+    Thingiverse downloads are ZIP files - the server auto-extracts STL/STEP files.
     After download, use step_to_stl or model_info on the imported file.
 
     ## Return Format
@@ -1834,7 +1976,7 @@ async def show_marketplace_card(
     total = data.get("total", 0)
 
     with Column(gap=3, css_class="p-4") as view:
-        Heading(f"🔍 {source_labels.get(source, source)} — {query}")
+        Heading(f"🔍 {source_labels.get(source, source)} - {query}")
         Muted(f"{total:,} result{'s' if total != 1 else ''}" + (f" in {category}" if category else ""))
         Separator()
         for item in items:
@@ -1856,7 +1998,7 @@ async def show_marketplace_card(
         if items:
             Link("Open on marketplace ↗", href=items[0].get("model_url", ""), css_class="text-indigo-400 text-sm")
 
-    return PrefabApp(view=view, title=f"Marketplace — {query}")
+    return PrefabApp(view=view, title=f"Marketplace - {query}")
 
 
 # ── Shutdown / Diagnostics / Capabilities ─────────────────────────────────────
@@ -1909,6 +2051,137 @@ async def shutdown():
     return {"success": True, "message": "Shutdown initiated"}
 
 
+# ── FluidX3D Live WebSocket ──────────────────────────────────────────────────
+
+_ws_clients: dict[str, list[WebSocket]] = {}
+
+
+@app.websocket("/api/v1/fluidx3d/ws/{case_name}")
+async def fluidx3d_websocket(websocket: WebSocket, case_name: str):
+    """Stream FluidX3D run.log lines live to the webapp."""
+    await websocket.accept()
+    case_dir = os.path.join(F3D_CASE_DIR, case_name)
+    log_path = os.path.join(case_dir, "run.log")
+
+    _ws_clients.setdefault(case_name, []).append(websocket)
+    logger.info("WS client connected for case %s", case_name)
+
+    try:
+        last_size = 0
+        while True:
+            if os.path.isfile(log_path):
+                size = os.path.getsize(log_path)
+                if size > last_size:
+                    with open(log_path) as f:
+                        f.seek(last_size)
+                        new_lines = f.read()
+                        if new_lines:
+                            await websocket.send_text(new_lines)
+                    last_size = size
+            if os.path.isfile(log_path):
+                with open(log_path) as f:
+                    content = f.read()
+                    if "DONE" in content or "RESULT" in content:
+                        await websocket.send_text("__SIMULATION_COMPLETE__")
+                        break
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
+        logger.info("WS client disconnected for case %s", case_name)
+    except Exception as e:
+        logger.warning("WS error for case %s: %s", case_name, e)
+    finally:
+        if case_name in _ws_clients:
+            _ws_clients[case_name] = [w for w in _ws_clients[case_name] if w is not websocket]
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+# ── LLM Provider Discovery ───────────────────────────────────────────────────
+
+
+DETECTED_PROVIDERS: dict = {}
+_PROBE_LOCK = asyncio.Lock()
+
+
+async def _probe_provider(name: str, base_url: str, endpoint: str, timeout: float = 3.0) -> dict | None:
+    """Probe a provider endpoint and return result."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as c:
+            r = await c.get(f"{base_url}{endpoint}")
+            if r.status_code == 200:
+                return {"name": name, "base": base_url, "port": int(base_url.split(":")[-1])}
+    except Exception:
+        pass
+    return None
+
+
+async def _discover_providers(refresh: bool = False) -> dict:
+    """Probe all known LLM providers in parallel."""
+    if DETECTED_PROVIDERS and not refresh:
+        return DETECTED_PROVIDERS
+
+    async with _PROBE_LOCK:
+        probes = {
+            "ollama": ("http://127.0.0.1:11434", "/api/tags"),
+            "lm_studio": ("http://127.0.0.1:1234", "/v1/models"),
+            "vllm": ("http://127.0.0.1:8000", "/v1/models"),
+        }
+        results = await asyncio.gather(
+            *[_probe_provider(name, base, ep) for name, (base, ep) in probes.items()],
+            return_exceptions=True,
+        )
+        detected = {k: v for k, v in zip(probes.keys(), results) if v and not isinstance(v, Exception)}
+        DETECTED_PROVIDERS.clear()
+        DETECTED_PROVIDERS.update(detected)
+    return DETECTED_PROVIDERS
+
+
+@app.get("/api/llm/discover")
+async def llm_discover(refresh: bool = False):
+    """Discover local LLM providers (Ollama, LM Studio, vLLM).
+
+    Returns detected providers and available models for each.
+    """
+    providers = await _discover_providers(refresh=refresh)
+    result = {"providers": [], "status": {}}
+    for name, info in providers.items():
+        base = info["base"]
+        models = []
+        try:
+            if name == "ollama":
+                async with httpx.AsyncClient(timeout=2.0) as c:
+                    r = await c.get(f"{base}/api/tags")
+                    if r.status_code == 200:
+                        models = [m["name"] for m in r.json().get("models", [])]
+            else:
+                async with httpx.AsyncClient(timeout=2.0) as c:
+                    r = await c.get(f"{base}/v1/models")
+                    if r.status_code == 200:
+                        models = [m["id"] if isinstance(m, dict) else m for m in r.json().get("data", [])]
+        except Exception:
+            pass
+        result["providers"].append({"name": name, "base": base, "models": models, "status": "detected"})
+        result["status"][name] = "detected"
+
+    # Mark undetected providers
+    for name in ["ollama", "lm_studio", "vllm"]:
+        if name not in providers:
+            result["status"][name] = "not_found"
+            result["providers"].append({"name": name, "base": "", "models": [], "status": "not_found"})
+
+    # Determine selected provider
+    stored_provider = _llm_settings.get("provider", "ollama")
+    stored_model = _llm_settings.get("model", "gemma3:1b")
+    result["selected_provider"] = (
+        stored_provider if stored_provider in providers else (next(iter(providers)) if providers else "ollama")
+    )
+    result["selected_model"] = stored_model
+
+    return result
+
+
 # ── Chat / LLM ───────────────────────────────────────────────────────────────
 
 
@@ -1920,6 +2193,7 @@ class ChatRequest(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
+    provider: str | None = None
     ollama_url: str | None = None
     model: str | None = None
     api_url: str | None = None
@@ -1937,6 +2211,8 @@ async def get_settings():
 @app.put("/api/v1/settings")
 async def update_settings(body: SettingsUpdate):
     """Update LLM or marketplace settings."""
+    if body.provider is not None:
+        _llm_settings["provider"] = body.provider
     if body.ollama_url:
         _llm_settings["ollama_url"] = body.ollama_url
     if body.model:
@@ -1989,12 +2265,29 @@ async def _run_stdio():
 def main():
     import argparse
 
+    # Gate J: isatty shim + Tauri guard — if FREECAD_TAURI/FREECAD_MCP_TAURI is set,
+    # never allow stdio to hijack the Tauri sidecar stdout. Force http/dual.
+    _is_tauri = os.environ.get("FREECAD_TAURI") == "1" or os.environ.get("FREECAD_MCP_TAURI") == "1"
+    if _is_tauri:
+        try:
+            if hasattr(sys.stdout, "isatty"):
+                sys.stdout.isatty = lambda: False  # type: ignore[method-assign]
+            if hasattr(sys.stderr, "isatty"):
+                sys.stderr.isatty = lambda: False  # type: ignore[method-assign]
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description="FreeCAD MCP Server")
     parser.add_argument("--mode", choices=["stdio", "http", "dual"], default="stdio")
     parser.add_argument("--host", default="0.0.0.0")  # noqa: S104
     parser.add_argument("--port", type=int, default=10944)
     parser.add_argument("--freecad-path", help="Path to FreeCADCmd.exe")
     args = parser.parse_args()
+
+    # Gate J: Tauri sidecar must not run stdio even if caller passes --mode stdio
+    if _is_tauri and args.mode == "stdio":
+        logger.warning("FREECAD_TAURI=1 set — forcing --mode http (was stdio) to protect sidecar stdout")
+        args.mode = "http"
 
     if args.freecad_path:
         os.environ["FREECAD_PATH"] = args.freecad_path
