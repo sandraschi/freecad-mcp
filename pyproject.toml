@@ -35,7 +35,7 @@ pythonpath = ["src"]
 markers = [
     "integration: FluidX3D GPU tests requiring FLUIDX3D_PATH, compiler, and OpenCL (deselect with -m 'not integration')",
 ]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration' --cov=src --cov-report=term-missing --cov-fail-under=15"
 
 [tool.ruff]
 line-length = 120
@@ -54,4 +54,5 @@ ignore = ["S101", "S106", "S110", "S112", "S101", "S106", "S110", "S112", "RUF01
 [dependency-groups]
 dev = [
     "pyinstaller>=6.21.0",
+    "pytest-cov>=7.1.0",
 ]
