@@ -1044,7 +1044,7 @@ def register_fluidx3d_tools(
         if stl_src and not stl_files:
             dst = os.path.join(case_dir, os.path.basename(stl_src))
             if os.path.abspath(stl_src).lower() != os.path.abspath(dst).lower():
-                shutil.copy(stl_src, dst)
+                await asyncio.to_thread(shutil.copy, stl_src, dst)
             stl_files = [dst]
         elif domain_type == "stl" and stl_file and not stl_files:
             return {"success": False, "error": f"STL file '{stl_file}' not found in uploads, outputs, or CFD cases."}
@@ -1054,7 +1054,7 @@ def register_fluidx3d_tools(
             for src_path, cfg in zip(stl_files, stl_configs):
                 dst = os.path.join(case_dir, os.path.basename(src_path))
                 if os.path.abspath(src_path).lower() != os.path.abspath(dst).lower():
-                    shutil.copy(src_path, dst)
+                    await asyncio.to_thread(shutil.copy, src_path, dst)
 
         # LBM unit conversion (keep u <= 0.1 for stability)
         lbm_velocity = min(velocity_ms * 0.05, 0.08)
@@ -1280,8 +1280,8 @@ def register_fluidx3d_tools(
         if not os.path.isdir(f3d_src):
             return {"success": False, "error": f"FluidX3D src/ not found at {f3d_src}. Is FluidX3D cloned correctly?"}
 
-        shutil.copy(setup_src, os.path.join(f3d_src, "setup.cpp"))
-        shutil.copy(defines_src, os.path.join(f3d_src, "defines.hpp"))
+        await asyncio.to_thread(shutil.copy, setup_src, os.path.join(f3d_src, "setup.cpp"))
+        await asyncio.to_thread(shutil.copy, defines_src, os.path.join(f3d_src, "defines.hpp"))
 
         # Build binary path
         bin_dir = os.path.join(case_dir, "bin")
@@ -1322,7 +1322,7 @@ def register_fluidx3d_tools(
                 stdout_text = stdout.decode("utf-8", errors="replace") if stdout else ""
                 stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
                 if proc.returncode == 0 and os.path.isfile(built_exe):
-                    shutil.copy2(built_exe, binary_path)
+                    await asyncio.to_thread(shutil.copy2, built_exe, binary_path)
                 elif proc.returncode == 0 and not os.path.isfile(binary_path):
                     proc.returncode = 1
                     stderr_text = (stderr_text + "\n" if stderr_text else "") + f"Expected binary missing: {built_exe}"
@@ -1430,10 +1430,10 @@ def register_fluidx3d_tools(
                 defines_src = os.path.join(case_dir, "defines.hpp")
                 f3d_src = os.path.join(f3d_path, "src")
                 if os.path.isfile(setup_src) and os.path.isdir(f3d_src):
-                    shutil.copy(setup_src, os.path.join(f3d_src, "setup.cpp"))
-                    shutil.copy(defines_src, os.path.join(f3d_src, "defines.hpp"))
+                    await asyncio.to_thread(shutil.copy, setup_src, os.path.join(f3d_src, "setup.cpp"))
+                    await asyncio.to_thread(shutil.copy, defines_src, os.path.join(f3d_src, "defines.hpp"))
                     os.makedirs(os.path.join(case_dir, "bin"), exist_ok=True)
-                    shutil.copy(prebuilt, binary_path)
+                    await asyncio.to_thread(shutil.copy, prebuilt, binary_path)
                     os.chmod(binary_path, 0o755)  # noqa: S103
                     prebuilt_used = True
                 else:
@@ -2145,12 +2145,12 @@ def register_fluidx3d_tools(
             for cfg_file in [".f3d_config.json", "config.json", "defines.hpp"]:
                 src = os.path.join(case_dir, cfg_file)
                 if os.path.isfile(src):
-                    shutil.copy2(src, os.path.join(variant_dir, cfg_file))
+                    await asyncio.to_thread(shutil.copy2, src, os.path.join(variant_dir, cfg_file))
 
             # Copy setup.cpp if it exists (for compile path)
             setup_src = os.path.join(case_dir, "setup.cpp")
             if os.path.isfile(setup_src):
-                shutil.copy2(setup_src, os.path.join(variant_dir, "setup.cpp"))
+                await asyncio.to_thread(shutil.copy2, setup_src, os.path.join(variant_dir, "setup.cpp"))
 
             # Modify the config
             for cfg_file in [".f3d_config.json", "config.json"]:

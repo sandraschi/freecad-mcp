@@ -497,7 +497,7 @@ def register_cfd_tools(
             if not os.path.isfile(src):
                 src = os.path.join(output_dir, step_file)
             if os.path.isfile(src):
-                shutil.copy(src, step_output)
+                await asyncio.to_thread(shutil.copy, src, step_output)
             else:
                 return {"success": False, "error": f"Custom STEP file '{step_file}' not found in uploads or outputs."}
         else:
@@ -624,7 +624,7 @@ except Exception as e:
         if os.path.isfile(stl_src):
             f3d_stl_dir = os.path.join(fluidx3d_cases_dir, case_name)
             os.makedirs(f3d_stl_dir, exist_ok=True)
-            shutil.copy(stl_src, os.path.join(f3d_stl_dir, "geometry.stl"))
+            await asyncio.to_thread(shutil.copy, stl_src, os.path.join(f3d_stl_dir, "geometry.stl"))
 
         return {"success": True, "case_name": case_name, "case_dir": case_dir, "data": data}
 
@@ -1169,12 +1169,13 @@ boundaryField
             variant_dir = os.path.join(CFD_CASE_DIR, variant_name)
 
             if not os.path.isdir(variant_dir):
-                shutil.copytree(base_case_dir, variant_dir)
-                # Remove any previous results
+                # Whole case tree incl. meshes — far too big for the event loop.
+                await asyncio.to_thread(shutil.copytree, base_case_dir, variant_dir)
+
                 for item in os.listdir(variant_dir):
                     ip = os.path.join(variant_dir, item)
                     if os.path.isdir(ip) and item.replace(".", "").isdigit():
-                        shutil.rmtree(ip, ignore_errors=True)
+                        await asyncio.to_thread(shutil.rmtree, ip, ignore_errors=True)
 
             variant_cfg = dict(session_cfg)
             variant_cfg[parameter] = val
@@ -1579,7 +1580,7 @@ except Exception as e:
             if not os.path.isfile(src_stl):
                 src_stl = os.path.join(upload_dir, stl_file)
             if os.path.isfile(src_stl):
-                shutil.copy(src_stl, target_stl)
+                await asyncio.to_thread(shutil.copy, src_stl, target_stl)
 
         feature_dict = f"""FoamFile
 {{

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -176,7 +177,7 @@ async def build_toy_car_via_marketplace(
             continue
 
         os.makedirs(os.path.dirname(export_stl) or ".", exist_ok=True)
-        shutil.copy2(src, export_stl)
+        await asyncio.to_thread(shutil.copy2, src, export_stl)
         return {
             "success": True,
             "car_source": "marketplace",

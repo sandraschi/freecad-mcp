@@ -1,5 +1,6 @@
 """CAD file depot tools - persistent file management for the FreeCAD MCP server."""
 
+import asyncio
 import json
 import logging
 import os
@@ -140,7 +141,7 @@ def register_depot_tools(
         if os.path.isfile(src):
             import shutil
 
-            shutil.copy2(src, dst)
+            await asyncio.to_thread(shutil.copy2, src, dst)
 
         meta = {
             "created": datetime.now().isoformat(),

@@ -190,7 +190,11 @@ def _start_freecad_bridge():
 
 
 def _init_freecad():
-    """Detect FreeCAD and populate _state. Idempotent -- safe to call from main() and lifespan()."""
+    """Detect FreeCAD and populate _state. Idempotent -- safe to call from main().
+
+    Synchronous by design (spawns FreeCAD --version, up to 10s): lifespan()
+    offloads the whole call via to_thread instead.
+    """
     if _state.get("freecad_initialized"):
         return
     _state["freecad_initialized"] = True
@@ -234,7 +238,8 @@ def _init_freecad():
 async def lifespan(app: FastAPI):
     """Startup: connect to an existing bridge; launch GUI only when opted in."""
     logger.info("FreeCAD MCP startup")
-    _init_freecad()
+    # _init_freecad spawns FreeCAD --version (seconds): off the loop.
+    await asyncio.to_thread(_init_freecad)
     skip_auto_launch = os.environ.get("FREECAD_SKIP_AUTO_LAUNCH", "").lower() in ("1", "true", "yes")
 
     # Check if FreeCAD bridge is already running on its port
@@ -253,7 +258,14 @@ async def lifespan(app: FastAPI):
             logger.warning("FreeCAD not found at %s", FREECAD_PATH)
         else:
             try:
-                r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)
+                r = await asyncio.to_thread(
+                    subprocess.run,
+                    [FREECAD_PATH, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
                 _state["freecad_version"] = r.stdout.strip() or r.stderr.strip() or "unknown"
             except Exception as e:
                 _state["freecad_version"] = f"error: {e}"
@@ -273,7 +285,14 @@ async def lifespan(app: FastAPI):
                 # Subprocess fallback - FreeCADCmd works even if bridge/version hangs
                 try:
                     cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
-                    r = subprocess.run([cmd_path, "--version"], capture_output=True, text=True, timeout=10, check=False)
+                    r = await asyncio.to_thread(
+                        subprocess.run,
+                        [cmd_path, "--version"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
                     ver = r.stdout.strip() or r.stderr.strip()
                     if ver:
                         _state["freecad_version"] = ver
@@ -736,7 +755,9 @@ async def slicer_status() -> dict:
         return {"success": False, "available": False, "version": None, "profiles_dir": None}
 
     try:
-        r = subprocess.run([_SLICER_PATH, "--help"], capture_output=True, text=True, timeout=10)
+        r = await asyncio.to_thread(
+            subprocess.run, [_SLICER_PATH, "--help"], capture_output=True, text=True, timeout=10
+        )
         first = r.stdout.strip().split("\n")[0] if r.stdout else "unknown"
         return {
             "success": True,
@@ -792,7 +813,8 @@ async def slice_stl(
         cmd += ["--filament-settings", filament_profile]
 
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        # Slicing runs minutes — never on the event loop.
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=300)
         if r.returncode != 0:
             return {"success": False, "error": r.stderr.strip() or r.stdout.strip()}
         size_kb = round(os.path.getsize(gcode_path) / 1024, 1)
@@ -1130,7 +1152,9 @@ async def health_check():
 
     docker_available = False
     try:
-        r = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=10)
+        r = await asyncio.to_thread(
+            subprocess.run, ["docker", "info"], capture_output=True, text=True, timeout=10
+        )
         docker_available = r.returncode == 0
     except Exception:
         pass
@@ -1138,7 +1162,8 @@ async def health_check():
     openfoam_image = False
     if docker_available:
         try:
-            r = subprocess.run(
+            r = await asyncio.to_thread(
+                subprocess.run,
                 ["docker", "images", "openfoam/openfoam", "-q"],
                 capture_output=True,
                 text=True,
@@ -1165,7 +1190,9 @@ async def health_check():
     compiler = None
     for exe in ["g++", "g++-14", "g++-13", "g++-12", "clang++"]:
         try:
-            r = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
+            r = await asyncio.to_thread(
+                subprocess.run, [exe, "--version"], capture_output=True, text=True, timeout=5
+            )
             if r.returncode == 0:
                 compiler = exe
                 break
@@ -1173,7 +1200,10 @@ async def health_check():
             continue
     if compiler is None:
         try:
-            r = subprocess.run(["cl"], capture_output=True, text=True, timeout=5, shell=True)  # noqa: S602
+            # cl needs shell resolution; fixed arg list, no user input.
+            r = await asyncio.to_thread(  # noqa: S604
+                subprocess.run, ["cl"], capture_output=True, text=True, timeout=5, shell=True
+            )
             if "Microsoft" in r.stdout or "Microsoft" in r.stderr:
                 compiler = "cl"
         except Exception:
@@ -1208,7 +1238,7 @@ async def upload_file(file: UploadFile):
     # Also save to persistent depot
     depot_dest = os.path.join(DEPOT_DIR, file.filename)
     if not os.path.isfile(depot_dest):
-        shutil.copy2(dest, depot_dest)
+        await asyncio.to_thread(shutil.copy2, dest, depot_dest)
         _depot_ensure_meta(file.filename)
     return {"success": True, "filename": file.filename, "size_bytes": len(content), "path": dest}
 
@@ -1436,7 +1466,7 @@ async def depot_create(body: dict):
     src = os.path.join(OUTPUT_DIR, out_name)
     dst = os.path.join(DEPOT_DIR, out_name)
     if os.path.isfile(src):
-        shutil.copy2(src, dst)
+        await asyncio.to_thread(shutil.copy2, src, dst)
     _depot_write_meta(
         out_name,
         {
