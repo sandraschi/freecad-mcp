@@ -174,7 +174,9 @@ import FreeCAD as App, Arch, json, os, Part
 doc = App.newDocument("BIM_Slab")
 try:
     box = Part.makeBox({width_mm}, {length_mm}, {thickness_mm})
-    slab = Arch.makeStructure(box)
+    base = doc.addObject("Part::Feature", "SlabBase")
+    base.Shape = box
+    slab = Arch.makeStructure(base)
     slab.Label = "Slab"
     slab.IfcType = "Slab"
     slab.Placement = App.Placement(
@@ -438,7 +440,9 @@ import FreeCAD as App, Arch, json, os, Part
 doc = App.newDocument("BIM_Roof")
 try:
     face = Part.makePlane({width_mm}, {length_mm})
-    roof = Arch.makeRoof(face, angle={angle_deg}, thickness={thickness_mm})
+    base = doc.addObject("Part::Feature", "RoofBase")
+    base.Shape = face
+    roof = Arch.makeRoof(base, angles=[{angle_deg}], thickness=[{thickness_mm}])
     roof.Label = "Roof"
     roof.Placement = App.Placement(
         App.Vector({placement_x}, {placement_y}, {placement_z}),
@@ -711,7 +715,9 @@ import FreeCAD as App, Arch, Part, json, os
 doc = App.newDocument("BIM_Column")
 try:
     s = {shape}
-    col = Arch.makeStructure(s)
+    base = doc.addObject("Part::Feature", "ColumnBase")
+    base.Shape = s
+    col = Arch.makeStructure(base)
     col.Label = "Column"
     col.IfcType = "Column"
     col.Placement = App.Placement(

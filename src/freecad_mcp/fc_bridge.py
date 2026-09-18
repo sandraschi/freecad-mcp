@@ -367,7 +367,9 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                     doc = FreeCAD.newDocument("BIM_Slab")
                     try:
                         box = Part.makeBox(params["width"], params["length"], params["thickness"])
-                        slab = Arch.makeStructure(box)
+                        base = doc.addObject("Part::Feature", "SlabBase")
+                        base.Shape = box
+                        slab = Arch.makeStructure(base)
                         slab.Label = "Slab"
                         slab.IfcType = "Slab"
                         slab.Placement = FreeCAD.Placement(
@@ -403,7 +405,9 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                             s = wb.fuse(s1).fuse(s2)
                         else:
                             s = Part.makeBox(w, d, h)
-                        col = Arch.makeStructure(s)
+                        base = doc.addObject("Part::Feature", "ColumnBase")
+                        base.Shape = s
+                        col = Arch.makeStructure(base)
                         col.Label = "Column"
                         col.IfcType = "Column"
                         col.Placement = FreeCAD.Placement(
@@ -500,7 +504,9 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                     doc = FreeCAD.newDocument("BIM_Roof")
                     try:
                         face = Part.makePlane(params["width"], params["length"])
-                        roof = Arch.makeRoof(face, angle=params["angle"], thickness=params["thickness"])
+                        base = doc.addObject("Part::Feature", "RoofBase")
+                        base.Shape = face
+                        roof = Arch.makeRoof(base, angles=[params["angle"]], thickness=[params["thickness"]])
                         roof.Label = "Roof"
                         roof.Placement = FreeCAD.Placement(
                             FreeCAD.Vector(params["x"], params["y"], params["z"]),
@@ -550,8 +556,8 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                         FreeCAD.closeDocument(doc.Name)
 
                 elif method == "mesh_to_solid":
-                    import MeshPart
-
+                    # Mesh -> Shape recipe: makeShapeFromMesh + makeSolid.
+                    # (MeshPart.meshFromShape is the reverse direction, Shape -> Mesh.)
                     stl_path = params["path"]
                     output_path = params.get("output_path", stl_path.replace(".stl", "_solid.FCStd"))
                     doc = FreeCAD.newDocument("MeshToSolid")
@@ -561,7 +567,8 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                             result["success"] = False
                             result["error"] = "Empty mesh"
                         else:
-                            shape = MeshPart.meshFromShape(mesh)
+                            shape = Part.Shape()
+                            shape.makeShapeFromMesh(mesh.Topology, 0.1)
                             solid = Part.makeSolid(shape)
                             if solid.isValid():
                                 obj = doc.addObject("Part::Feature", "Solid")
@@ -789,7 +796,22 @@ class ThreadedServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
 
 
-if __name__ == "__main__":
-    server = ThreadedServer(("127.0.0.1", PORT), BridgeHandler)
+def _serve():
+    try:
+        server = ThreadedServer(("127.0.0.1", PORT), BridgeHandler)
+    except OSError as e:
+        # Already listening (macro executed twice) — the live server answers.
+        FreeCAD.Console.PrintWarning(f"FreeCAD Bridge: port {PORT} busy ({e}), keeping existing server.\n")
+        return
     FreeCAD.Console.PrintMessage(f"Bridge listening on 127.0.0.1:{PORT}\n")
     server.serve_forever()
+
+
+# NOTE: when FreeCAD runs this file (CLI arg or macro), __name__ is NOT
+# "__main__", so a classic gate would silently do nothing. Serve unconditionally
+# in a daemon thread — this file has no other purpose. Blocking serve_forever()
+# in the GUI thread would freeze the UI, hence the thread.
+import threading
+
+_bridge_thread = threading.Thread(target=_serve, daemon=True, name="fc-bridge")
+_bridge_thread.start()
