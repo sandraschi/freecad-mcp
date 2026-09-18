@@ -17,9 +17,7 @@ default:
 
 # Synchronise all dependencies and dev extras
 bootstrap:
-    uv sync --all-extras
-    Set-Location '{{justfile_directory()}}\webapp'
-    cmd /c npm install
+    uv sync --all-extras; Set-Location '{{justfile_directory()}}\webapp'; cmd /c npm install
 
 # Workspace sanitisation
 clean:
@@ -44,8 +42,7 @@ stdio:
 
 # Start the Vite dashboard
 web:
-    Set-Location '{{justfile_directory()}}\webapp'
-    cmd /c npm run dev
+    Set-Location '{{justfile_directory()}}\webapp'; cmd /c npm run dev
 
 # --- Development ---
 
@@ -67,10 +64,7 @@ lint:
 
 # Execute auto-fixes and formatting
 fix:
-    uv run ruff check src/ --fix
-    uv run ruff format src/
-    Set-Location '{{justfile_directory()}}\webapp'
-    npx @biomejs/biome check --write .
+    uv run ruff check src/ --fix; uv run ruff format src/; Set-Location '{{justfile_directory()}}\webapp'; npx @biomejs/biome check --write .
 
 
 
@@ -158,19 +152,12 @@ tauri-build:
     $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"; & '{{justfile_directory()}}\native\build.ps1'
 
 tauri-dev:
-    powershell.exe -NoProfile -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
-    Set-Location '{{justfile_directory()}}\native'
-    $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
-    npm install
-    npx @tauri-apps/cli dev
+    powershell.exe -NoProfile -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'; Set-Location '{{justfile_directory()}}\native'; $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"; npm install; npx @tauri-apps/cli dev
 
 build-native: tauri-build
 
 build-native-debug:
-    powershell.exe -NoProfile -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'
-    Set-Location '{{justfile_directory()}}\native'
-    $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
-    npx @tauri-apps/cli build --debug
+    powershell.exe -NoProfile -File '{{justfile_directory()}}\native\ensure-sidecar-stub.ps1'; Set-Location '{{justfile_directory()}}\native'; $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"; npx @tauri-apps/cli build --debug
 
 
 
