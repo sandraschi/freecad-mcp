@@ -631,7 +631,31 @@ class BridgeHandler(socketserver.StreamRequestHandler):
                         "doc": doc,
                         "FreeCADGui": FreeCADGui,
                     }
-                    exec(script, {"__builtins__": {}}, local_ns)  # noqa: S102
+                    exec(  # noqa: S102 — bridge execute_script tool, scripts validated by caller
+                        script,
+                        {
+                            "__builtins__": {
+                                "len": len,
+                                "range": range,
+                                "str": str,
+                                "int": int,
+                                "float": float,
+                                "bool": bool,
+                                "list": list,
+                                "dict": dict,
+                                "tuple": tuple,
+                                "set": set,
+                                "min": min,
+                                "max": max,
+                                "abs": abs,
+                                "round": round,
+                                "enumerate": enumerate,
+                                "zip": zip,
+                                "print": print,
+                            }
+                        },
+                        local_ns,
+                    )
                     doc.recompute()
                     result["data"] = {
                         "document": doc.Name,
@@ -807,11 +831,41 @@ def _serve():
     server.serve_forever()
 
 
-# NOTE: when FreeCAD runs this file (CLI arg or macro), __name__ is NOT
-# "__main__", so a classic gate would silently do nothing. Serve unconditionally
-# in a daemon thread — this file has no other purpose. Blocking serve_forever()
-# in the GUI thread would freeze the UI, hence the thread.
-import threading
+def _serve_gui_thread():
+    """Serve bridge requests on the FreeCAD GUI thread via a QTimer pump.
 
-_bridge_thread = threading.Thread(target=_serve, daemon=True, name="fc-bridge")
-_bridge_thread.start()
+    WHY: FreeCAD document/viewport calls are only safe on the main thread.
+    Serving them from a daemon thread hangs or segfaults (dead GUI,
+    dropped connections). Pumping handle_request() from a 50 ms timer keeps
+    every call on the GUI thread; a slow call only pauses the UI while it
+    runs, exactly like a modal tool.
+    """
+    try:
+        try:
+            from PySide6 import QtCore
+        except ImportError:
+            from PySide import QtCore  # Qt5-era FreeCAD
+        global _gui_server, _gui_timer
+        _gui_server = socketserver.TCPServer(("127.0.0.1", PORT), BridgeHandler)
+        _gui_server.timeout = 0.05
+        _gui_timer = QtCore.QTimer()
+        _gui_timer.timeout.connect(_gui_server.handle_request)
+        _gui_timer.start(50)
+        FreeCAD.Console.PrintMessage(f"Bridge listening on 127.0.0.1:{PORT} (GUI thread pump)\n")
+    except OSError as e:
+        FreeCAD.Console.PrintWarning(f"FreeCAD Bridge: port {PORT} busy ({e}), keeping existing server.\n")
+    except Exception as e:
+        FreeCAD.Console.PrintWarning(f"FreeCAD Bridge: GUI pump unavailable ({e}), using background thread.\n")
+        import threading
+
+        _t = threading.Thread(target=_serve, daemon=True, name="fc-bridge")
+        _t.start()
+
+
+_gui_server = None
+_gui_timer = None
+
+# NOTE: when FreeCAD runs this file (CLI arg or macro), __name__ is NOT
+# "__main__", so a classic gate would silently do nothing. Serve
+# unconditionally — this file has no other purpose.
+_serve_gui_thread()
