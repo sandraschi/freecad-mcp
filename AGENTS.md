@@ -21,7 +21,7 @@ FreeCAD MCP server — Parametric 3D CAD modeling, 2D TechDraw drafting, 2D cons
 ## Standards & Patterns
 - **FastMCP 3.4+ Portmanteau Pattern**: Portmanteau tool `freecad_model` maps `execution_mode` ("hands_off" or "hands_in") to underlying operational modules in `src/freecad_mcp/model_ops.py`.
 - **Annotation Constants**: Every `@mcp.tool()` explicitly includes `annotations=READ_ONLY` or `annotations=MUTATING`.
-- **Dual Execution Architecture**: Prefers live FreeCAD TCP bridge (port 10946) for full B-Rep tree access; automatically falls back to headless `FreeCADCmd` subprocess if GUI is not connected.
+- **Dual Execution Architecture**: Prefers live FreeCAD TCP bridge (port 11968) for full B-Rep tree access; automatically falls back to headless `FreeCADCmd` subprocess if GUI is not connected.
 - **REST Control Endpoint**: `POST http://localhost:10944/api/v1/control/tool` with payload `{"tool": "...", "arguments": {...}}`.
 
 ## Key Files & Structure

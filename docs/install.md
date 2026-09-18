@@ -20,7 +20,7 @@
 FreeCAD provides the OCCT kernel and Python scripting engine. Two modes:
 
 ### GUI Mode (recommended)
-Launches `FreeCAD.exe` with `fc_bridge.py` as a startup macro. Full AP214 STEP assembly support. TCP bridge on port 10946. Requires a display.
+Launches `FreeCAD.exe` with `fc_bridge.py` as a startup macro. Full AP214 STEP assembly support. TCP bridge on port 11968. Requires a display.
 
 ### Headless Mode (fallback)
 Uses `FreeCADCmd.exe` subprocess. No GUI needed. Limited STEP support (no AP214 assemblies).

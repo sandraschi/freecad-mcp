@@ -1,6 +1,6 @@
 # Configuration — freecad-mcp
 
-Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **10946** FreeCAD bridge TCP. Registry: `mcp-central-docs/operations/WEBAPP_PORTS.md`.
+Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **11968** FreeCAD bridge TCP (moved from 10946 — that port belongs to aiwatcher-mcp). Registry: `mcp-central-docs/operations/WEBAPP_PORTS.md`.
 
 ## Environment
 
@@ -9,7 +9,7 @@ Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **109
 | `FREECAD_PATH` | `D:\Dev\repos\FreeCAD\...\FreeCAD.exe` | FreeCAD binary for bridge/subprocess |
 | `FREECAD_MCP_WORK_DIR` | `%TEMP%\freecad_mcp_work` | uploads/output/fluidx3d_cases |
 | `FREECAD_MCP_DEPOT` | `%LOCALAPPDATA%\freecad-mcp\depot` | Persistent CAD depot |
-| `FC_BRIDGE_PORT` | `10946` | TCP bridge |
+| `FC_BRIDGE_PORT` | `11968` | TCP bridge |
 | `MCP_PORT`/`PORT` | `10944` | Backend HTTP port (Tauri sets `MCP_PORT`) |
 | `MCP_HOST` | `127.0.0.1` | Bind host (Tauri) |
 | `FREECAD_TAURI` | `1` in Tauri | Forces HTTP, isatty shim (Gate J) |

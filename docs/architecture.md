@@ -16,7 +16,7 @@
 │  ┌──────────────────────────────────────────────────┐   │
 │  │                 Lifespan Handler                   │   │
 │  │  1. Verify FreeCAD.exe exists                     │   │
-│  │  2. Launch GUI + fc_bridge.py (TCP :10946)        │   │
+│  │  2. Launch GUI + fc_bridge.py (TCP :11968)        │   │
 │  │  3. Wait 15×2s for bridge connect                 │   │
 │  │  4. Fall back to subprocess mode if bridge fails   │   │
 │  └──────────────────────────────────────────────────┘   │
@@ -38,7 +38,7 @@
    ┌──────────┐ ┌───────────┐ ┌──────────────┐
    │ TCP      │ │ FreeCADCmd│ │ PrusaSlicer  │
    │ Bridge   │ │ subprocess│ │ CLI           │
-   │ :10946   │ │ (fallback)│ │               │
+   │ :11968   │ │ (fallback)│ │               │
    └────┬─────┘ └─────┬─────┘ └──────┬───────┘
         │             │               │
         ▼             ▼               ▼
@@ -57,14 +57,14 @@
 |:---|:---|:---|
 | **10944** | FastAPI + FastMCP SSE | HTTP, SSE |
 | **10945** | Vite dev server | HTTP (proxies `/api` → 10944) |
-| **10946** | FreeCAD TCP Bridge | JSON-over-TCP |
+| **11968** | FreeCAD TCP Bridge | JSON-over-TCP |
 
 ## Dual Execution Paths
 
 ### Path A: TCP Bridge (primary)
 
 `FreeCAD.exe` is launched as a child process with `fc_bridge.py` as a startup macro. The bridge script:
-1. Starts a `socketserver.ThreadingTCPServer` on port 10946
+1. Starts a `socketserver.ThreadingTCPServer` on port 11968
 2. Accepts JSON messages with `method` + `params`
 3. Routes to: `ping`, `status`, `open` (import STEP), `export_stl`, `model_info`, `create_shape`
 4. Returns JSON responses
