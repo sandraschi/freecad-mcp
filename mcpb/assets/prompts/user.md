@@ -1,6 +1,6 @@
 # freecad-mcp — User Guide
 
-FreeCAD MCP exposes FreeCAD 3D modeling, architecture/BIM design, CFD fluid simulation (OpenFOAM CPU + FluidX3D GPU), FEM structural analysis, and 3D printing workflows through 38+ MCP tools. The server runs FreeCAD as a headless geometry engine via TCP bridge (FreeCAD.exe + fc_bridge.py on port 10946) with subprocess fallback (FreeCADCmd.exe).
+FreeCAD MCP exposes FreeCAD 3D modeling, architecture/BIM design, CFD fluid simulation (OpenFOAM CPU + FluidX3D GPU), FEM structural analysis, and 3D printing workflows through 38+ MCP tools. The server runs FreeCAD as a headless geometry engine via TCP bridge (FreeCAD.exe + fc_bridge.py on port 11968) with subprocess fallback (FreeCADCmd.exe).
 
 ## Quick Start
 
@@ -91,7 +91,7 @@ await cfd_fluidx3d_status()
 |------|---------|
 | 10944 | FastAPI + FastMCP SSE / REST API |
 | 10945 | Vite web dashboard |
-| 10946 | FreeCAD TCP Bridge (fc_bridge.py) |
+| 11968 | FreeCAD TCP Bridge (fc_bridge.py) |
 
 ---
 
@@ -876,7 +876,7 @@ GET /api/v1/logs/stream
 | Bridge timeout | FreeCAD GUI not starting | Launch FreeCAD manually first, then start server |
 | Subprocess fallback active | FreeCADCmd.exe only | Install full FreeCAD GUI for AP214 STEP support |
 | "STEP import failed" | Bad STEP file | Verify file in uploads/ directory |
-| "Bridge not connected" | Port 10946 in use | Kill zombie FreeCAD processes |
+| "Bridge not connected" | Port 11968 in use | Kill zombie FreeCAD processes |
 
 ### Docker / OpenFOAM
 
@@ -931,7 +931,7 @@ GET /api/v1/logs/stream
 ## FAQ
 
 **What ports does freecad-mcp use?**
-10944 (FastAPI + MCP SSE + REST API), 10945 (Vite web dashboard), 10946 (FreeCAD TCP bridge). All within the fleet reserved range 10700-11500.
+10944 (FastAPI + MCP SSE + REST API), 10945 (Vite web dashboard), 11968 (FreeCAD TCP bridge). All within the fleet reserved range 10700-11500.
 
 **What if I don't have Docker?**
 You can still generate OpenFOAM case directories with `cfd_create_domain`, `cfd_configure_physics`, and `cfd_set_boundary`. The case will be ready to run on any machine with OpenFOAM. Just skip `cfd_run_solver` and run the case manually.

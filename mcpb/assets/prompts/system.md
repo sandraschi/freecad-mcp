@@ -4,7 +4,7 @@ FreeCAD MCP exposes FreeCAD 3D modeling, BIM/architecture design, CFD fluid simu
 
 ## Architecture
 
-The server operates in three modes: stdio (Claude Desktop), HTTP/SSE (Cursor, any MCP client), or dual transport. FreeCAD geometry operations go through a TCP bridge (FreeCAD.exe with fc_bridge.py on port 10946) with subprocess fallback (FreeCADCmd.exe). CFD tools generate OpenFOAM dictionary files at `work_dir/cfd_cases/` and execute solvers via Docker (openfoam/openfoam10-paraview56). FluidX3D GPU tools generate C++ setup files + config.json at `work_dir/fluidx3d_cases/` and compile/run via g++/MSVC + OpenCL. The web dashboard runs on port 10945. REST API and MCP SSE transport share port 10944.
+The server operates in three modes: stdio (Claude Desktop), HTTP/SSE (Cursor, any MCP client), or dual transport. FreeCAD geometry operations go through a TCP bridge (FreeCAD.exe with fc_bridge.py on port 11968) with subprocess fallback (FreeCADCmd.exe). CFD tools generate OpenFOAM dictionary files at `work_dir/cfd_cases/` and execute solvers via Docker (openfoam/openfoam10-paraview56). FluidX3D GPU tools generate C++ setup files + config.json at `work_dir/fluidx3d_cases/` and compile/run via g++/MSVC + OpenCL. The web dashboard runs on port 10945. REST API and MCP SSE transport share port 10944.
 
 ## Tools by Domain
 
@@ -98,7 +98,7 @@ The server operates in three modes: stdio (Claude Desktop), HTTP/SSE (Cursor, an
 
 FREECAD_PATH — path to FreeCAD.exe. Auto-detected from three candidate paths: D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\bin\FreeCAD.exe (primary), the repo root FreeCAD.exe, and an extracted portable location in TEMP. Falls back to the primary path if none found.
 
-FC_BRIDGE_PORT — TCP port for the FreeCAD bridge connection (default: 10946). The bridge runs inside the FreeCAD GUI process and provides access to the full OCCT geometry kernel via JSON-RPC over TCP.
+FC_BRIDGE_PORT — TCP port for the FreeCAD bridge connection (default: 11968). The bridge runs inside the FreeCAD GUI process and provides access to the full OCCT geometry kernel via JSON-RPC over TCP.
 
 FREECAD_MCP_WORK_DIR — working directory for uploads, outputs, and case files (default: %TEMP%\freecad_mcp_work). Created on startup if it doesn't exist.
 

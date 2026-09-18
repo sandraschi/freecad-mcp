@@ -1,7 +1,7 @@
 # FreeCAD MCP — Product Requirements Document
 
-**Version**: 0.5.0  
-**Status**: Active Development  
+**Version**: 0.5.0
+**Status**: Active Development
 **Updated**: 2026-07-24
 
 ## Purpose
@@ -32,7 +32,7 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 |------|---------|
 | 10944 | FastAPI + MCP SSE + REST API |
 | 10945 | Vite web dashboard |
-| 10946 | FreeCAD TCP bridge (internal) |
+| 11968 | FreeCAD TCP bridge (internal) |
 
 ## Shipped Features
 

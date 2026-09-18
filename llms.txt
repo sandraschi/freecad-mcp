@@ -67,7 +67,7 @@
 - Persistent depot: %LOCALAPPDATA%\freecad-mcp\depot
 - REST API: http://localhost:10944/api/v1/
 - Webapp: http://localhost:10945
-- FreeCAD bridge: port 10946 (internal)
+- FreeCAD bridge: port 11968 (internal)
 
 ## Links
 - Repo: D:\Dev\repos\freecad-mcp
