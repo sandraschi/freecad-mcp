@@ -10,7 +10,7 @@
         Kind          = 'uvicorn'
         UvicornTarget = 'freecad_mcp.server:app'
         SyncExtras    = @('dev')
-        Env           = @{ WEB_PORT = '10944'; FC_BRIDGE_PORT = '11968' }
+        Env           = @{ WEB_PORT = '10944'; FC_BRIDGE_PORT = '11968'; FLUIDX3D_PATH = 'D:\Dev\repos\external\FluidX3D' }
     }
     Frontend = @{
         Kind           = 'vite-npm'

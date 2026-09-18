@@ -106,19 +106,37 @@ _marketplace_settings = {
 
 
 async def _bridge_send(method: str, params: dict | None = None, timeout: float = 120) -> dict:
-    """Send a JSON command to the FreeCAD bridge and return the response."""
+    """Send one JSON command to the FreeCAD bridge and return the response.
+
+    NOTE: the bridge handler serves exactly one request per TCP connection,
+    then closes it — so every call opens a FRESH connection. A cached
+    reader/writer is always stale after its first use (that staleness caused
+    the "Expecting value" / "Connection lost" mesh_to_solid failures).
+    """
     global _req_id
     _req_id += 1
     req = {"id": _req_id, "method": method, "params": params or {}}
     payload = json.dumps(req) + "\n"
 
-    if _bridge_writer is None:
-        return {"success": False, "error": "FreeCAD bridge not connected", "fallback": True}
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection("127.0.0.1", BRIDGE_PORT),
+            timeout=10,
+        )
+    except (TimeoutError, ConnectionRefusedError, OSError) as e:
+        return {"success": False, "error": f"FreeCAD bridge not connected: {e}", "fallback": True}
 
     try:
-        _bridge_writer.write(payload.encode("utf-8"))
-        await _bridge_writer.drain()
-        data = await asyncio.wait_for(_bridge_reader.readline(), timeout=timeout)
+        writer.write(payload.encode("utf-8"))
+        await writer.drain()
+        data = await asyncio.wait_for(reader.readline(), timeout=timeout)
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+        if not data:
+            return {"success": False, "error": "Bridge closed connection without reply", "fallback": True}
         return json.loads(data.decode("utf-8"))
     except TimeoutError:
         return {"success": False, "error": f"Bridge timeout ({timeout}s)", "fallback": True}
@@ -1175,6 +1193,7 @@ async def health_check():
     if not fluidx3d_path or not os.path.isdir(fluidx3d_path):
         for p in [
             r"D:\Dev\repos\FluidX3D",
+            r"D:\Dev\repos\external\FluidX3D",
             os.path.expanduser("~/FluidX3D"),
             os.path.expanduser("~/fluidx3d"),
             "/opt/FluidX3D",

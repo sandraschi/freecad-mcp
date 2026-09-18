@@ -33,6 +33,7 @@ _README_ONLY = {"readonly": True}
 
 _FLUIDX3D_DEFAULT_PATHS = [
     r"D:\Dev\repos\FluidX3D",
+    r"D:\Dev\repos\external\FluidX3D",
     os.path.expanduser("~/FluidX3D"),
     os.path.expanduser("~/fluidx3d"),
     "/opt/FluidX3D",
