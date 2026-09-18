@@ -67,7 +67,7 @@ FREECAD_PATH = os.environ.get("FREECAD_PATH") or next(
     ),
     r"D:\Dev\repos\FreeCAD\FreeCAD_1.1.1-Windows-x86_64-py311\bin\FreeCAD.exe",
 )
-BRIDGE_PORT = int(os.environ.get("FC_BRIDGE_PORT", "10946"))
+BRIDGE_PORT = int(os.environ.get("FC_BRIDGE_PORT", "11968"))  # 10946 belongs to aiwatcher-mcp, see WEBAPP_PORTS.md
 BRIDGE_SCRIPT = Path(__file__).parent / "fc_bridge.py"
 WORK_DIR = os.environ.get("FREECAD_MCP_WORK_DIR", os.path.join(os.environ.get("TEMP", ""), "freecad_mcp_work"))
 os.makedirs(WORK_DIR, exist_ok=True)
@@ -1152,9 +1152,7 @@ async def health_check():
 
     docker_available = False
     try:
-        r = await asyncio.to_thread(
-            subprocess.run, ["docker", "info"], capture_output=True, text=True, timeout=10
-        )
+        r = await asyncio.to_thread(subprocess.run, ["docker", "info"], capture_output=True, text=True, timeout=10)
         docker_available = r.returncode == 0
     except Exception:
         pass
@@ -1190,9 +1188,7 @@ async def health_check():
     compiler = None
     for exe in ["g++", "g++-14", "g++-13", "g++-12", "clang++"]:
         try:
-            r = await asyncio.to_thread(
-                subprocess.run, [exe, "--version"], capture_output=True, text=True, timeout=5
-            )
+            r = await asyncio.to_thread(subprocess.run, [exe, "--version"], capture_output=True, text=True, timeout=5)
             if r.returncode == 0:
                 compiler = exe
                 break

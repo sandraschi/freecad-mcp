@@ -5,12 +5,12 @@
     BackendPort  = 10944
     FrontendPort = 10945
     HealthPath   = '/api/v1/status'
-    WebRoot      = 'D:\Dev\repos\freecad-mcp\webapp'
+    WebRoot      = 'webapp'
     Backend = @{
         Kind          = 'uvicorn'
         UvicornTarget = 'freecad_mcp.server:app'
         SyncExtras    = @('dev')
-        Env           = @{ WEB_PORT = '10944' }
+        Env           = @{ WEB_PORT = '10944'; FC_BRIDGE_PORT = '11968' }
     }
     Frontend = @{
         Kind           = 'vite-npm'

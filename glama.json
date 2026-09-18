@@ -8,7 +8,7 @@
   "env": {
     "FREECAD_PATH": "/path/to/FreeCAD_1.1.1/bin/FreeCAD.exe",
     "FLUIDX3D_PATH": "/path/to/FluidX3D",
-    "FC_BRIDGE_PORT": "10946"
+    "FC_BRIDGE_PORT": "11968"
   },
   "tools": [
     {"name": "freecad_status", "description": "Check FreeCAD availability and version"},

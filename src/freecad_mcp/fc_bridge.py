@@ -28,7 +28,7 @@ try:
 except ImportError:
     _BIM_READY = False
 
-PORT = int(os.environ.get("FC_BRIDGE_PORT", "10946"))
+PORT = int(os.environ.get("FC_BRIDGE_PORT", "11968"))  # 10946 belongs to aiwatcher-mcp, see WEBAPP_PORTS.md
 FreeCAD.Console.PrintMessage(f"FreeCAD Bridge starting on port {PORT}...\n")
 
 
