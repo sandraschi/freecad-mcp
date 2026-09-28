@@ -50,6 +50,7 @@ ignore = ["S101", "S106", "S110", "S112", "S101", "S106", "S110", "S112", "RUF01
 "tests/**/*.py" = ["E501", "S101", "T20"]
 "src/freecad_mcp/fc_bridge.py" = ["S110", "T20"]
 "src/freecad_mcp/server.py" = ["S603", "S110", "S607"]
+"scripts/**" = ["E501", "S110", "S310", "T20"]
 
 [dependency-groups]
 dev = [
