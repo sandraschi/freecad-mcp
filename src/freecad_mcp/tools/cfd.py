@@ -434,8 +434,8 @@ def register_cfd_tools(
         ## Examples
         await cfd_status()
         """
-        docker_ok, docker_exe = _check_docker()
-        openfoam_ok = _check_openfoam_image(docker_exe) if docker_ok else False
+        docker_ok, docker_exe = await asyncio.to_thread(_check_docker)
+        openfoam_ok = await asyncio.to_thread(_check_openfoam_image, docker_exe) if docker_ok else False
         return {
             "success": True,
             "docker_available": docker_ok,
@@ -933,14 +933,14 @@ boundaryField
         if not os.path.isdir(case_dir):
             return {"success": False, "error": f"Case '{case_name}' not found."}
 
-        docker_ok, docker_exe = _check_docker()
+        docker_ok, docker_exe = await asyncio.to_thread(_check_docker)
         if not docker_ok:
             return {
                 "success": False,
                 "error": "Docker/Podman not available. Install Docker Desktop for Windows and pull openfoam/openfoam10-paraview56.",
             }
 
-        openfoam_ok = _check_openfoam_image(docker_exe)
+        openfoam_ok = await asyncio.to_thread(_check_openfoam_image, docker_exe)
         if not openfoam_ok:
             return {
                 "success": False,
@@ -1186,7 +1186,7 @@ boundaryField
 
             if run:
                 # Reconfigure and run
-                docker_ok, _ = _check_docker()
+                docker_ok, _ = await asyncio.to_thread(_check_docker)
                 if docker_ok:
                     # Simple run: just execute the solver
                     case_data = {"case_name": variant_name, parameter: val, "ran": True}

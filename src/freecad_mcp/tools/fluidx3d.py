@@ -823,9 +823,9 @@ def register_fluidx3d_tools(
         ## Examples
         await cfd_fluidx3d_status()
         """
-        f3d_path = _ensure_fluidx3d(auto_clone=True)
-        compiler = _find_compiler()
-        gpu_devices = _query_gpu_devices()
+        f3d_path = await asyncio.to_thread(_ensure_fluidx3d, auto_clone=True)
+        compiler = await asyncio.to_thread(_find_compiler)
+        gpu_devices = await asyncio.to_thread(_query_gpu_devices)
         ready = f3d_path is not None and compiler is not None
 
         if not f3d_path:
@@ -1257,7 +1257,7 @@ def register_fluidx3d_tools(
                 "error": "FluidX3D not found. Clone: git clone https://github.com/ProjectPhysX/FluidX3D.git",
             }
 
-        compiler = _find_compiler()
+        compiler = await asyncio.to_thread(_find_compiler)
         if not compiler:
             return {
                 "success": False,
@@ -1304,7 +1304,7 @@ def register_fluidx3d_tools(
         stderr_text = ""
 
         if compiler == "msvc":
-            vcvars = _find_vs_vcvars64()
+            vcvars = await asyncio.to_thread(_find_vs_vcvars64)
             if not vcvars:
                 return {"success": False, "error": "MSVC vcvars64.bat not found. Install VS Build Tools C++ workload."}
             vcxproj = os.path.join(f3d_path, "FluidX3D.vcxproj")
@@ -1455,7 +1455,7 @@ def register_fluidx3d_tools(
             gpu_index = int(gpu_device)
         except ValueError:
             # Substring match against available devices
-            gpu_devices = _query_gpu_devices()
+            gpu_devices = await asyncio.to_thread(_query_gpu_devices)
             for i, dev in enumerate(gpu_devices):
                 if gpu_device.lower() in dev.get("device", "").lower():
                     gpu_index = i
@@ -2011,7 +2011,7 @@ def register_fluidx3d_tools(
         from freecad_mcp.utils.vtk_renderer import HAS_PIL, _ensure_ffmpeg, parse_vtk_structured_points, render_video
 
         # Ensure ffmpeg is available (auto-installs via winget on Windows)
-        ffmpeg, ffmsg = _ensure_ffmpeg(install=True)
+        ffmpeg, ffmsg = await asyncio.to_thread(_ensure_ffmpeg, install=True)
         if not ffmpeg:
             return {
                 "success": False,
@@ -2024,7 +2024,9 @@ def register_fluidx3d_tools(
             try:
                 import subprocess as _sp
 
-                _sp.run(["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60)
+                await asyncio.to_thread(
+                    _sp.run, ["uv", "pip", "install", "Pillow"], capture_output=True, text=True, timeout=60
+                )
                 # Re-check is best-effort since this is a hot reload
             except Exception:
                 logger.debug("Pillow auto-install failed")
@@ -2063,7 +2065,7 @@ def register_fluidx3d_tools(
 
         video_path = os.path.join(case_dir, f"{case_name}_simulation.webm")
 
-        result = render_video(case_dir, vtk_files, video_path, fps=fps, quality=quality)
+        result = await asyncio.to_thread(render_video, case_dir, vtk_files, video_path, fps=fps, quality=quality)
 
         if not result.get("success"):
             # Fallback: render single frame
