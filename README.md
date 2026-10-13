@@ -8,6 +8,8 @@
   <a href="https://github.com/PrefectHQ/fastmcp"><img src="https://img.shields.io/badge/FastMCP-3.2-7c5cfc?style=flat-square" alt="FastMCP"></a>
 </p>
 
+**Questions, improv ideas, "what if it also did X"?** → [Discussions](https://github.com/sandraschi/freecad-mcp/discussions) — Q&A for support, Ideas for anything you'd improve but wouldn't file a whole Issue for. Bugs still go to [Issues](https://github.com/sandraschi/freecad-mcp/issues).
+
 ## Two ways to use this
 
 This project exposes FreeCAD as a server that two different kinds of users talk to:

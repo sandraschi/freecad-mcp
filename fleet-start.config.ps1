@@ -1,4 +1,4 @@
-﻿# Per-repo fleet start config for freecad-mcp
+# Per-repo fleet start config for freecad-mcp
 # Edit ports/backend target here - start.ps1 is fleet-standard.
 @{
     Name         = 'freecad-mcp'
@@ -10,6 +10,7 @@
         Kind          = 'uvicorn'
         UvicornTarget = 'freecad_mcp.server:app'
         SyncExtras    = @('dev')
+        SyncOnStart  = $true
         Env           = @{ WEB_PORT = '10944'; FC_BRIDGE_PORT = '11968'; FLUIDX3D_PATH = 'D:\Dev\repos\external\FluidX3D' }
     }
     Frontend = @{

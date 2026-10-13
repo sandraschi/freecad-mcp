@@ -1,61 +1,15 @@
-# Handover — freecad-mcp
+# Handover — freecad-mcp (2026-09-01)
 
-**Session**: 2026-05-07
-**Operator**: Sandra
-**Status**: Fleet-standard SOTA webapp + TCP bridge
+## State — SHIPPED, proven
+- **NSIS `FreeCAD MCP_0.6.0_x64-setup.exe` 30.2 MB** — CUA smoke **11/11 PASS** (Kill→Install→Launch healthy attempt 5→Feature 200→Diagnostics 200→Uninstall 0). Backend 27.6 MB, frontend Vite 1.50 MB (manualChunks react/vendor), `cargo check` 0, `tsc` 0, `pytest --cov 15` 123 passed.
+- **MCPB `dist/freecad-mcp-v0.6.0.mcpb` 162 KB, 85 tools, validate PASS.**
+- **Gate F/G/H/J fixed**: `native/src/main.rs` spawn backend on thread + `kill+wait` on Exit; `backend.rs` `resource_dir`/`exe_dir` fallback + `free_port` 10s; `run_server.py` + `server.py::main()` isatty shim + `stdio→http` when `FREECAD_TAURI=1`; `build-sidecar.ps1` → `resources/`+`binaries/`; `src-tauri/` twin removed.
+- **Sweep**: `AGENTS/docs/manifest/justfile`, `.gitignore` (`build/`,`cua-reports/`,`data/`,`*.obj`,`*.bak*`), zustand store, CONFIGURATION/ONBOARDING docs, vite manualChunks, renovate/coverage, glama 85 tools, mcpb fresh-stage.
+- Pushed through `1b860058` (`.assess-fix-timestamp` 82/100 SOTA). MCD project page synced `99799171`.
 
----
+## Files this session
+`native/src/main.rs`, `native/src/backend.rs`, `run_server.py`, `src/freecad_mcp/server.py`, `native/build-sidecar.ps1`, `native/package.json`, `webapp/vite.config.ts`, `webapp/src/store/llm.ts`, `pyproject.toml`, `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.gitattributes`, `docs/CONFIGURATION.md`, `docs/ONBOARDING.md`, `glama.json`, `mcpb/*`, `reports/assess-2026-09-01.md`.
 
-## Running Services
-
-| Service | Port | Status | Notes |
-|---------|------|--------|-------|
-| FastAPI + FastMCP | **10944** | Starts with `just serve` | Dual mode (stdio + HTTP) |
-| Vite webapp | **10945** | Starts with `just web` | Fleet-standard SPA |
-| FreeCAD Bridge | **10946** (TCP) | Launched by server lifespan | FreeCAD GUI window with bridge script |
-
----
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/freecad_mcp/server.py` | FastMCP 3.2 server — all tools + REST endpoints |
-| `src/freecad_mcp/fc_bridge.py` | TCP bridge script run inside FreeCAD GUI |
-| `src/freecad_mcp/__init__.py` | Portmanteau |
-| `webapp/src/` | 8-page SOTA webapp |
-
-## TCP Bridge
-
-The server starts FreeCAD.exe with `fc_bridge.py` on lifespan startup. The bridge listens on TCP port 10946. Server sends JSON commands:
-- `open` — import STEP/STP file (uses `FreeCAD.openDocument` + GUI pipeline, AP214 works)
-- `export_stl` — export current document as STL
-- `model_info` — return object/solid/volume data
-- `create_shape` — box, cylinder, sphere, cone
-
-Fallback: if bridge fails, server uses `FreeCADCmd.exe` subprocess (limited — can't handle AP214 assemblies).
-
-## AP214 STEP Limitation
-
-The Raspbot V2 STEP file (`Raspbot-V2.STEP`) is an AP214 automotive assembly. FreeCAD's console mode (`FreeCADCmd`) returns 0 solids. The **TCP bridge** fixes this by running FreeCAD GUI mode, which has the full Import pipeline.
-
-To convert: open FreeCAD GUI → File → Open → select STEP → Ctrl+A → File → Export → STL.
-
-## Webapp Pages
-
-| Page | Purpose |
-|------|---------|
-| Dashboard | FreeCAD status, file counts, quick actions |
-| Convert | Upload STEP → download STL |
-| Models | Browse files, inspect metadata |
-| CAD Expert | Chat with Ollama CAD specialist |
-| Apps | Tool launcher |
-| Logs | Live SSE stream with filter/export |
-| Settings | Ollama URL + model config |
-| Help | FreeCAD docs, workbenches, formats |
-
-## Next Actions
-
-- Start the server: `just serve` then `just web`
-- Fix `create_shape` output path escaping (was using incorrect Mesh.export syntax, now Mesh.Mesh + .write — untested)
-- QCAD MCP: start from `qcad-mcp/ARCHITECTURE.md`
+## Residual (deferred)
+- `llms-full.txt`/`docs/mcp-tools.md` auto-regen (generator `freecad_mcp.utils.llms_txt` not found — manual sync still pending).
+- 88-file fleet-wide `sota` drift (mcpb/webapp/src) not all swept — next `assfix` chunk to ≥80 SOTA verified.
