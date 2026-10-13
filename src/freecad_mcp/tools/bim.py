@@ -608,13 +608,12 @@ except Exception as e:
             str, Field(default="", description="Output FCStd filename. Default: <input>_solid.fcstd.")
         ] = "",
     ) -> dict:
-        """Convert an STL mesh to a FreeCAD solid via MeshPart.meshFromShape().
+        """Convert an STL mesh to a FreeCAD solid (B-Rep).
 
         Takes an STL file (e.g. from qcad-mcp plan_extrude) and converts the
         triangular mesh to a valid B-Rep solid that can be used with BIM tools
-        or exported to STEP/IFC.
-
-        Requires TCP bridge (FreeCAD GUI mode) - not available in subprocess mode.
+        or exported to STEP/IFC. Tries the live bridge first, falls back to a
+        headless FreeCADCmd subprocess (same pattern as the other BIM tools).
 
         ## Return Format
         {"success": bool, "output": str, "data": {"vertices": int, "facets": int, "volume_mm3": float}}
@@ -633,21 +632,54 @@ except Exception as e:
         out_name = output_name or f"{Path(stl_name).stem}_solid.fcstd"
         output_path = os.path.join(output_dir, out_name)
 
-        if state.get("bridge_mode") != "tcp":
-            return {
-                "success": False,
-                "error": "mesh_to_solid requires TCP bridge (FreeCAD GUI mode). Launch freecad_gui first.",
-            }
+        if state.get("bridge_mode") == "tcp":
+            resp = await bridge_send(
+                "mesh_to_solid",
+                {"path": stl_path, "output_path": output_path},
+                timeout=90,
+            )
+            if resp.get("success"):
+                return {"success": True, "output": out_name, "data": resp.get("data", {})}
+            logger.warning("Bridge mesh_to_solid failed, trying subprocess: %s", resp.get("error"))
 
-        resp = await bridge_send(
-            "mesh_to_solid",
-            {"path": stl_path, "output_path": output_path},
-            timeout=120,
-        )
-        if resp.get("success"):
-            return {"success": True, "output": out_name, "data": resp.get("data", {})}
-        logger.warning("Bridge mesh_to_solid failed: %s", resp.get("error"))
-        return {"success": False, "error": resp.get("error", "mesh_to_solid failed")}
+        script = f"""
+import FreeCAD as App, Mesh, Part, json, os
+
+src = r"{stl_path}"
+dst = r"{output_path}"
+doc = App.newDocument("MeshToSolid")
+try:
+    mesh = Mesh.Mesh(src)
+    if mesh.CountPoints == 0:
+        print(json.dumps({{"error": "Empty mesh"}}))
+    else:
+        shape = Part.Shape()
+        shape.makeShapeFromMesh(mesh.Topology, 0.1)
+        solid = Part.makeSolid(shape)
+        if not solid.isValid():
+            print(json.dumps({{"error": "Could not create valid solid from mesh"}}))
+        else:
+            obj = doc.addObject("Part::Feature", "Solid")
+            obj.Shape = solid
+            doc.recompute()
+            doc.saveAs(dst)
+            doc.recompute()
+            print(json.dumps({{
+                "vertices": mesh.CountPoints,
+                "facets": mesh.CountFacets,
+                "volume_mm3": round(solid.Volume, 1),
+                "path": dst,
+            }}))
+    App.closeDocument(doc.Name)
+except Exception as e:
+    print(json.dumps({{"error": str(e)}}))
+    try:
+        App.closeDocument(doc.Name)
+    except Exception:
+        pass
+"""
+        out, err, code = await run_freecad(script, timeout=300)
+        return build_result("mesh_to_solid", out, err, code, extra={"output": out_name})
 
     # ── bim_status ──────────────────────────────────────────────────────
 

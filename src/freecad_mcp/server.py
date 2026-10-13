@@ -252,10 +252,31 @@ def _init_freecad():
                 logger.debug("FreeCADCmd version check failed", exc_info=True)
 
 
+_QUIET_ACCESS_PATHS = ("/api/v1/status", "/api/v1/health", "/api/docs", "/openapi.json")
+
+
+class _QuietProbesFilter(logging.Filter):
+    """Drop uvicorn access-log lines for high-frequency health probes."""
+
+    def filter(self, record):
+        try:
+            return not any(p in record.getMessage() for p in _QUIET_ACCESS_PATHS)
+        except Exception:
+            return True
+
+
+def _quiet_probe_logs():
+    try:
+        logging.getLogger("uvicorn.access").addFilter(_QuietProbesFilter())
+    except Exception:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: connect to an existing bridge; launch GUI only when opted in."""
     logger.info("FreeCAD MCP startup")
+    _quiet_probe_logs()
     # _init_freecad spawns FreeCAD --version (seconds): off the loop.
     await asyncio.to_thread(_init_freecad)
     skip_auto_launch = os.environ.get("FREECAD_SKIP_AUTO_LAUNCH", "").lower() in ("1", "true", "yes")
