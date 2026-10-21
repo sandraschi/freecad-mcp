@@ -15,7 +15,7 @@ function isTauri(): boolean {
 	);
 }
 
-export const API_BASE = import.meta.env.VITE_API_BASE || (isTauri() ? "http://127.0.0.1:10944" : "");
+export const API_BASE = import.meta.env.VITE_API_BASE || (isTauri() ? "http://127.0.0.1:11249" : "");
 export const API = `${API_BASE}/api/v1`;
 
 export function apiPath(path: string): string {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://glama.ai/mcp/schema/2026",
   "name": "freecad-mcp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "FreeCAD MCP server — mechanical CAD, BIM/architecture, CFD/OpenFOAM simulation, GPU FluidX3D, 3D printing slicing, and model marketplace search through MCP tools and a web dashboard",
   "repository": "https://github.com/sandraschi/freecad-mcp",
   "command": "uv",
@@ -45,6 +45,7 @@
     {"name": "cfd_fluidx3d_results", "description": "Parse FluidX3D forces and MLUPS throughput"},
     {"name": "cfd_fluidx3d_explain", "description": "Explain flow physics (Reynolds, regime)"},
     {"name": "cfd_fluidx3d_prebuilt", "description": "Auto-detect pre-compiled FluidX3D runner"},
+    {"name": "cad_sampling", "description": "Host-LLM reasoning about a CAD/FEM/CFD/BIM goal via MCP sampling"},
     {"name": "freecad_model", "description": "Parametric FreeCAD modeling (sketch, techdraw, assembly, generative, fillet, inspect)"},
     {"name": "freecad_design_loop", "description": "Agentic CAD design loop via ctx.sample() (SEP-2577)"},
     {"name": "cad_depot", "description": "List persistent CAD depot files with metadata"},

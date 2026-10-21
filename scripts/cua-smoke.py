@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 """CUA smoke test for NSIS-installed fleet apps (pywinauto-mcp canary).
 
-CUA_SMOKE_VERSION = 13
+CUA_SMOKE_VERSION = 15  (v15: writes cua-reports/cua-result.json for the release gate; v14: nav pages are discovered from the sidebar, not configured; the phase can fail)
 If this file differs from templates/tauri-native/scripts/cua-smoke.py in
 mcp-central-docs, copy the template over - version number will have changed.
 
@@ -26,6 +27,7 @@ Phases (planned Phase 3): nav sidebar click-through, floating chat visibility.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -58,7 +60,7 @@ def load_config(path: str | None = None) -> dict:
     return {k: _expand(v) for k, v in cfg.items()}
 
 
-CUA_SMOKE_VERSION = 13  # bump when template changes; see docstring
+CUA_SMOKE_VERSION = 15  # bump when template changes; see docstring
 
 
 def _check_version():
@@ -524,99 +526,139 @@ def _verify_page_ocr(text: str, label: str, expected: str) -> bool:
     return False
 
 
-def _nav_click_element(win_handle: int, wx: int, wy: int, idx: int, label: str = ""):
-    """Click a nav item. Tries title-based UIA matching first, then index, then coordinates."""
-    import pywinauto
+_NAV_STATE = {"pages": 0}  # pages visited by the last nav walk; feeds the backend-receipt phase
 
-    app = pywinauto.Application(backend="uia").connect(handle=win_handle)
-    w = app.window(handle=win_handle)
 
-    # Preferred: match by accessible name (title= is the pywinauto criteria for UIA Name).
-    # Index-based Hyperlink ordering is fragile - sidebar order may differ from nav_routes.
-    if label:
+def _sidebar_links(w):
+    """Sidebar links read from the live UI, top to bottom, as [(label, element)].
+
+    The sidebar is the largest group of visible, labelled Hyperlinks sharing one x-extent,
+    so in-page links elsewhere on the page are not mistaken for navigation.
+    """
+    columns = {}
+    for el in w.descendants(control_type="Hyperlink"):
         try:
-            link = w.descendants(title=label)
-            if link:
-                link[0].click_input()
-                return
-        except Exception:
-            pass
-        try:
-            elements = w.descendants(control_type="Hyperlink")
-            el = [e for e in elements if label.lower() in (e.window_text() or "").lower()]
-            if el:
-                el[0].click_input()
-                return
-        except Exception:
-            pass
+            label = (el.window_text() or "").strip()
+            if not label or not el.is_visible():
+                continue
+            rect = el.rectangle()
+        except Exception:  # noqa: S112 - element vanished mid-scan
+            continue
+        columns.setdefault((rect.left, rect.right), []).append((rect.top, label, el))
+    if not columns:
+        return []
+    seen, links = set(), []
+    for _top, label, el in sorted(max(columns.values(), key=len), key=lambda item: item[0]):
+        if label not in seen:
+            seen.add(label)
+            links.append((label, el))
+    return links
 
-    # Fallback: positional Hyperlink
-    try:
-        elements = w.descendants(control_type="Hyperlink")
-        if idx < len(elements):
-            elements[idx].click_input()
-            return
-    except Exception:
-        pass
-    # Try Pane (some WebView versions)
-    try:
-        elements = w.descendants(control_type="Pane")
-        nav_elements = [e for e in elements if e.rectangle().left < wx + 200]
-        nav_elements_sorted = sorted(nav_elements, key=lambda e: e.rectangle().top)
-        if idx < len(nav_elements_sorted):
-            nav_elements_sorted[idx].click_input()
-            return
-    except Exception:
-        pass
 
-    # Fallback to coordinate click
-    click_x = wx + int(cfg("sidebar_click_x", 30))
-    click_y = wy + int(cfg("sidebar_first_y", 90)) + idx * int(cfg("sidebar_step_y", 55))
-    cua_click(win_handle, click_x, click_y)
+def _invoke(el):
+    """Navigate via UIA Invoke (works for links scrolled out of view, no mouse); click as fallback."""
+    try:
+        el.invoke()
+    except Exception:
+        el.click_input()
+
+
+def _log_nav_changes(snap_dir: str, labels: list):
+    """Say when pages were added or removed since the last run, then remember this run."""
+    path = os.path.join(snap_dir, "nav-last.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            before = json.load(f)
+    except (OSError, ValueError):
+        before = None
+    if before is not None:
+        added = [label for label in labels if label not in before]
+        removed = [label for label in before if label not in labels]
+        if added or removed:
+            log(f"Sidebar changed since last run: added {added}, removed {removed}")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(labels, f)
 
 
 def nav_click_through(output_dir: str):
-    """Click each sidebar nav item, verify page loads via OCR."""
+    """Walk every sidebar page the app actually offers; fail the phase on any problem.
+
+    Pages are discovered from the live UI on each run, so adding or deleting a sidebar
+    entry needs no config change (a configured list went stale silently, and a repo with
+    no list walked a hardcoded four-page default). The phase FAILS when no sidebar is found,
+    a page's screenshot is identical to the previous page's (navigation had no visible
+    effect), or a page shows an error/empty OCR. Optional config `nav_must_include`
+    (labels) guards against discovery regressions; legacy `nav_routes` is ignored.
+    """
     if not cua_available():
         log("CUA client unavailable -- nav click-through skipped")
         return
     _release_mouse()
     _show_automation_warning()
 
-    nav_routes = cfg(
-        "nav_routes",
-        [["Dashboard", "Automation Dashboard"], ["Logging", "Logs"], ["Settings", "Settings"], ["Help", "Help"]],
-    )
-    nav_routes = [(r[0], r[1]) for r in nav_routes if len(r) >= 2]
     win = cua_find_window(WINDOW_TITLE_RE)
     if not win:
-        log("No window found for nav click-through")
-        return
-    r = win.get("rect", {}) or {}
-    wx = r.get("left", 0) or 0
-    wy = r.get("top", 0) or 0
-    snap_dir = os.path.join(output_dir, "nav")
+        phase_fail("No window found for nav click-through")
     handle = win.get("handle", 0)
+    snap_dir = os.path.join(output_dir, "nav")
+    os.makedirs(snap_dir, exist_ok=True)
 
     _foreground_and_maximize(handle)
 
-    for idx, (label, expected_header) in enumerate(nav_routes):
+    import pywinauto
+
+    w = pywinauto.Application(backend="uia").connect(handle=handle).window(handle=handle)
+    labels = [label for label, _el in _sidebar_links(w)]
+    if not labels:
+        phase_fail("no sidebar links discovered (icon-only collapsed sidebar, or nav is not <a> links)")
+    log(f"Discovered {len(labels)} sidebar pages: {', '.join(labels)}")
+    if cfg("nav_routes"):
+        log("config nav_routes is ignored: pages are discovered from the sidebar (you can remove it)")
+    _log_nav_changes(snap_dir, labels)
+
+    failures = [
+        (label, "required by nav_must_include but not in sidebar")
+        for label in cfg("nav_must_include", [])
+        if label not in labels
+    ]
+    previous = None
+    for index, label in enumerate(labels, 1):
         try:
-            _nav_click_element(handle, wx, wy, idx, label)
+            el = dict(_sidebar_links(w)).get(label)
+            if el is None:
+                failures.append((label, "link disappeared during the walk"))
+                continue
+            _invoke(el)
             _release_mouse()
             time.sleep(3)
 
-            snap_path = os.path.join(snap_dir, f"nav-{label.lower()}-{int(time.time())}.png")
-            os.makedirs(snap_dir, exist_ok=True)
+            slug = "".join(c if c.isalnum() else "-" for c in label.lower()).strip("-")
+            snap_path = os.path.join(snap_dir, f"nav-{index:02d}-{slug}.png")
             cua_screenshot(handle, snap_path)
-            text = cua_ocr_text(handle, snap_path)
+            with open(snap_path, "rb") as f:
+                digest = hashlib.md5(f.read(), usedforsecurity=False).hexdigest()
+            if digest == previous:
+                failures.append((label, "screenshot identical to the previous page: navigation had no visible effect"))
+            previous = digest
 
-            _verify_page_ocr(text, label, expected_header)
+            text = cua_ocr_text(handle, snap_path)
+            if not _verify_page_ocr(text, label, ""):
+                failures.append((label, "error page or empty OCR"))
+            elif label.lower() not in text.lower():
+                log_warn(f"Page '{label}': its name was not found in OCR (title may differ; check the screenshot)")
+            log(f"Nav {index}/{len(labels)} '{label}': ok")
+        except PhaseFailed:
+            raise
         except Exception as e:
-            log(f"Nav '{label}' failed (non-fatal): {e}")
+            failures.append((label, str(e)))
+            log(f"Nav '{label}' failed: {e}")
             _release_mouse()
 
     _release_mouse()
+    _NAV_STATE["pages"] = len(labels)
+    if failures:
+        phase_fail(f"nav walk problems: {failures}")
+    log(f"All {len(labels)} discovered pages navigated, each visibly different from the last")
 
 
 # ── Phase 9b: Backend-receipt proof (bypasses webview entirely) ─────────
@@ -658,7 +700,7 @@ def verify_backend_received_requests(baseline_count: int):
         return
 
     new_count = data.get("count", 0) - baseline_count
-    nav_route_count = len(cfg("nav_routes", []))
+    nav_route_count = _NAV_STATE["pages"]
     if new_count <= 0:
         phase_fail(
             f"Backend received ZERO new requests during nav click-through "
@@ -761,6 +803,44 @@ def uninstall():
 # ── Main ──────────────────────────────────────────────────────────────
 
 
+def _write_result(output_dir, installer, phase_results, passed, failed, fatal_failed):
+    """Write cua-reports/cua-result.json: the machine-readable record the release gate checks.
+
+    A gate must never trust "a report exists" (see CRITICAL PITFALLs above). It verifies
+    installer_sha256 against the release asset it is about to ship, all_passed, pywinauto, and that the
+    Backend-receipt proof phase ran and passed.
+    """
+    import datetime
+
+    sha = size = None
+    if installer and os.path.isfile(installer):
+        h = hashlib.sha256()
+        with open(installer, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                h.update(chunk)
+        sha, size = h.hexdigest(), os.path.getsize(installer)
+    proof = any(p["name"] == "Backend-receipt proof" and p["ok"] for p in phase_results)
+    result = {
+        "schema": 1,
+        "smoke_version": CUA_SMOKE_VERSION,
+        "product": PRODUCT_NAME,
+        "installer": os.path.basename(installer) if installer else None,
+        "installer_sha256": sha,
+        "installer_size": size,
+        "pywinauto": bool(_HAS_PYWAUTO),
+        "backend_receipt_proof": proof,
+        "phases": phase_results,
+        "passed": passed,
+        "failed": failed,
+        "all_passed": bool(passed and not failed and not fatal_failed and _HAS_PYWAUTO and proof and sha),
+        "finished_at": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, "cua-result.json"), "w", encoding="utf-8") as fh:
+        json.dump(result, fh, indent=2)
+    print(f"  Wrote {os.path.join(output_dir, 'cua-result.json')} (all_passed={result['all_passed']})")
+
+
 def main():
     # Self-check: warn if template version differs
     _check_version()
@@ -783,9 +863,15 @@ def main():
         _capture_nav_baseline()
         nav_click_through(args.output_dir)
 
+    _installer = {"path": None}
+
+    def _install_phase():
+        _installer["path"] = args.installer or find_installer()
+        silent_install(_installer["path"])
+
     phases = [
         (True, "Kill stale processes", lambda: kill_stale()),
-        (True, "Install NSIS", lambda: silent_install(args.installer or find_installer())),
+        (True, "Install NSIS", _install_phase),
         (True, "Launch app", launch_app),
         (False, "Verify window", verify_window),
         (False, "Screenshot", lambda: take_screenshot(args.output_dir)),
@@ -800,6 +886,7 @@ def main():
 
     passed = failed = 0
     fatal_failed = False
+    phase_results: list[dict] = []
 
     print(f"\n{'=' * 50}")
     print(f"  CUA Smoke Test - {PRODUCT_NAME}")
@@ -818,18 +905,22 @@ def main():
                 fn()
                 print(f"  V {name}\n")
                 passed += 1
+                phase_results.append({"name": name, "ok": True})
             except PhaseFailed:
                 print(f"  X {name}\n")
                 failed += 1
+                phase_results.append({"name": name, "ok": False})
                 if is_fatal:
                     fatal_failed = True
             except Exception as e:
                 print(f"  X {name}: {e}\n")
                 failed += 1
+                phase_results.append({"name": name, "ok": False, "error": str(e)[:300]})
                 if is_fatal:
                     fatal_failed = True
     finally:
         _release_mouse()
+        _write_result(args.output_dir, _installer["path"], phase_results, passed, failed, fatal_failed)
 
     print(f"{'=' * 50}")
     print(f"  Result: {passed}/{passed + failed} phases passed")
