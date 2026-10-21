@@ -154,14 +154,18 @@ export default function PartsPage() {
 				body: JSON.stringify(payload),
 			});
 			const data = await res.json();
+			// /api/v1/control/tool returns the tool result directly. Accept a
+			// nested `result` envelope too so either dispatcher shape works.
+			const result = data.result ?? data;
 
-			if (data.success && data.result?.data) {
-				setResultData(data.result.data);
-				const outName = data.result.output || fileName;
+			if (result.success) {
+				// Hands-Off wraps the FreeCAD script payload one level deeper.
+				setResultData(result.data?.data ?? result.data ?? {});
+				const outName = result.output || fileName;
 				setOutputName(outName);
-				setStlUrl(`${API_BASE}/api/v1/files/output/${outName}?t=${Date.now()}`);
+				setStlUrl(`${API_BASE}/api/v1/download/${encodeURIComponent(outName)}?t=${Date.now()}`);
 			} else {
-				setError(data.error || data.result?.error || "Failed to generate parametric model");
+				setError(result.error || data.error || "Failed to generate parametric model");
 			}
 		} catch (err: any) {
 			setError(err.message || "Network error generating model");
@@ -173,25 +177,23 @@ export default function PartsPage() {
 	const handleSaveToDepot = async () => {
 		if (!outputName) return;
 		try {
-			const res = await fetch(API_BASE + "/api/v1/control/tool", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					tool: "depot_add_file",
-					arguments: {
-						source_path: outputName,
-						title: outputName.replace(".stl", "").replace(/_/g, " "),
-						category: category,
-						tags: [category, "parametric", "3d-print"],
-					},
-				}),
-			});
-			const d = await res.json();
-			if (d.success || d.result?.success) {
+			// Fetch the generated STL from the server, then upload it into the
+			// depot through the existing depot CRUD endpoint (create in depot).
+			const fileRes = await fetch(`${API_BASE}/api/v1/download/${encodeURIComponent(outputName)}`);
+			if (!fileRes.ok) throw new Error(`STL not available (${fileRes.status})`);
+			const blob = await fileRes.blob();
+			const fd = new FormData();
+			fd.append("file", blob, outputName);
+			const uploadRes = await fetch(API_BASE + "/api/v1/depot/upload", { method: "POST", body: fd });
+			const d = await uploadRes.json();
+			if (d.success || uploadRes.status === 409) {
+				// 409 = already present in the depot; that is still "saved".
 				setSavedToDepot(true);
+			} else {
+				setError(d.error || d.detail || "Saving to depot failed");
 			}
-		} catch {
-			// ignore
+		} catch (err: any) {
+			setError(err.message || "Saving to depot failed");
 		}
 	};
 
