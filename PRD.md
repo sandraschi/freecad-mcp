@@ -1,12 +1,12 @@
 # FreeCAD MCP — Product Requirements Document
 
-**Version**: 0.5.0
-**Status**: Active Development
-**Updated**: 2026-07-24
+**Version**: 0.6.0
+**Status**: Shipped
+**Updated**: 2026-10-21
 
 ## Purpose
 
-FreeCAD MCP exposes FreeCAD 3D modeling, BIM/architecture design, CFD fluid simulation (OpenFOAM CPU + FluidX3D GPU), FEM structural analysis (CalculiX), and 3D printing workflows through 50+ MCP tools and a web dashboard. The server operates as a headless geometry engine via TCP bridge or FreeCADCmd subprocess.
+FreeCAD MCP exposes FreeCAD 3D modeling, BIM/architecture design, CFD fluid simulation (OpenFOAM CPU + FluidX3D GPU), FEM structural analysis (CalculiX), and 3D printing workflows through 59 MCP tools and a web dashboard. The server operates as a headless geometry engine via TCP bridge or FreeCADCmd subprocess.
 
 ## Target Users
 
@@ -36,10 +36,13 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 
 ## Shipped Features
 
-### Core CAD (6 tools)
+### Core CAD (8 tools)
 - STEP/STP → STL conversion with AP214 support
 - Model inspection (volume, bounding box, object count)
-- Geometric primitive generation (box, cylinder, sphere, cone)
+- Geometric primitive generation (box, cylinder, sphere, cone), verified STL export
+- Parametric portmanteau (`freecad_model`): primitives, gears, fasteners, sketch,
+  TechDraw, assemblies, generative, fillet, booleans, toy car
+- Live bridge control and agentic design loop
 - FreeCAD GUI launcher
 
 ### BIM / Architecture (10 tools)
@@ -49,7 +52,7 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 - IFC import/export for industry-standard BIM exchange
 - Mesh-to-solid conversion
 
-### CFD / OpenFOAM (10 tools)
+### CFD / OpenFOAM (13 tools)
 - Parametric domain creation (channel, pipe, box, nozzle, custom STEP)
 - Physics configuration (laminar/kEpsilon/kOmegaSST)
 - Boundary conditions (14 types: fixedValue, zeroGradient, noSlip, etc.)
@@ -58,8 +61,11 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 - Parametric sweeps for design optimization
 - NL2FOAM: natural language → executable OpenFOAM case via LLM
 - PINN sampling: point cloud export for neural network training
+- snappyHexMesh config generation for complex CAD surfaces
+- Post-processing: Cd/Cl, pressure drop, head loss (refuses when no solver output)
+- CFD → FEM load mapping (FSI)
 
-### FluidX3D GPU CFD (9 tools)
+### FluidX3D GPU CFD (12 tools)
 - Native GPU Lattice-Boltzmann via OpenCL (any GPU vendor)
 - Auto-clone to %TEMP% on first use
 - C++ setup generation with LBM unit conversion
@@ -69,6 +75,7 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 - OBJ streamline export for game engine/VR pipeline
 - WebM video render pipeline (VTK → heatmap PNG → ffmpeg → WebM)
 - Pre-built runner binary support (compile once, run any config)
+- Parametric sweeps, surrogate training and prediction
 
 ### FEM / Structural Analysis (8 tools)
 - CalculiX solver integration
@@ -90,16 +97,18 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 - Persistent storage with metadata (description, tags, shape type)
 - Full CRUD via REST API
 
-### Web Dashboard (11 pages)
-- Dashboard with live KPIs (FreeCAD, Docker, FluidX3D, files)
-- Models page with 3D STL viewer
-- FluidX3D pipeline (6 tabs: Status, Setup, Compile, Run, Results, Video, Explain)
-- BIM demo page
-- Settings with LLM configuration
-- Chat with personality selector
-- Pipeline wizard
-- Help with 12 reference tabs
-- Status/logs viewer
+### Web Dashboard (18 pages)
+- Dashboard with hero, onboarding cue and live KPIs (FreeCAD, Docker, FluidX3D, files)
+- Guided Demo: cube → toy car → depot CRUD in one wizard (real API calls)
+- Parts Studio: primitives, gears, fasteners, sketch, TechDraw, generative
+- Depot with full CRUD and metadata
+- Convert, Models (3D STL viewer), Marketplace
+- BIM demo, CFD demos, Toy Car
+- FluidX3D pipeline (setup, compile, run, results, render, explain)
+- OpenFOAM workspace and Pipeline wizard
+- Chat with skill badge and personalities
+- Settings with LLM provider discovery
+- Apps launcher, Logs viewer, Help reference
 
 ### NSIS Desktop Installer
 - Tauri 2.0 native wrapper
@@ -118,6 +127,8 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 
 ## Future
 
-- v0.6: Webapp SOTA overhaul (Zustand, local LLM glom-on, color-scheme dark)
-- v0.7: snappyHexMesh for complex CFD geometry
-- v0.8: Multi-GPU FluidX3D, parametric sweeps for FluidX3D
+- v0.6.x: finish the Pyright typing pass and rebuild the `freecad-expert` skill
+- v0.7: Inbox / Tools / Skills webapp pages; streaming chat endpoint
+- v0.7: `/api/llm/{providers,models,onboarding}`; GPU detection wired into Settings
+- v0.8: Multi-GPU FluidX3D; live simulation progress via WebSocket
+- v0.9: Thermal and free-surface LBM; OpenFOAM → FluidX3D hybrid pipeline

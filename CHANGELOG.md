@@ -2,7 +2,47 @@
 
 All notable changes to the FreeCAD MCP server and webapp.
 
-## [0.6.1] — 2026-09-01
+## [Unreleased] - 2026-10-21
+
+### Added
+- **Guided Demo page** (`/demo`): build a cube, build a toy car, then exercise depot
+  CRUD in one wizard. Real API calls, STL viewers, per-step loading/error/empty
+  states, activity log. Browser-walked with Playwright.
+- `docs/DEVELOPMENT.md`, `docs/TOOLS.md`, `docs/TROUBLESHOOTING.md`, `docs/README.md`
+  index; README Claude Desktop one-liner and stdio/SSE configs.
+- `pyright` in the dev group; `just fmt`, `just typecheck`, `just ci`.
+- NSIS client registration: vendored canonical `native/windows/mcp-clients.nsh` and
+  `native/resources/install-mcp-clients.ps1`, wired into `hooks.nsh`.
+- Assessment report `docs/assess-reports/2026-10-21.md`.
+
+### Fixed
+- **`create_shape` never wrote an STL**: `Mesh.Mesh(Part.Solid)` raises on FreeCAD
+  1.x and FreeCADCmd exits 0, so the tool returned success with no file. Exports
+  from a document object and verifies the artefact; the depot create path now
+  verifies the copy and returns `size_kb`.
+- **Fabricated CFD results**: `cfd_post_process` returned hardcoded 12.5 N / 2.1 N
+  and a 50 Pa pressure drop when no solver output existed. It now refuses with a
+  clear error, parses real OpenFOAM force vectors, and reports `pressure_drop_pa`
+  as null unless a real artefact exists.
+- **Parts Studio demo**: accepted the real `/api/v1/control/tool` response shape,
+  pointed the viewer at `/api/v1/download/{name}` (was a 404 route), and replaced
+  the non-existent `depot_add_file` call with the depot upload endpoint.
+- **MCPB manifest**: `${PWD}` is not expanded by Claude Desktop; both manifests use
+  `${__dirname}` and start `python -m freecad_mcp.server --mode stdio`.
+- **Ruff**: `S110` / `S112` removed from the ignore list.
+- Pre-existing test lint (E741, import order, unused import) and Biome errors
+  (nested component definitions, unformatted files).
+- `just llms-txt` (referenced a non-existent module) removed.
+- `run_server.py` no longer starts the server at import time; `main()` is guarded.
+
+### Changed
+- Tool count corrected to **59**; `glama.json` and `mcpb/manifest.json` now mirror
+  the 59 registered `@mcp.tool` names (the manifest listed 85, mostly REST routes).
+- All 59 tools document `## Return Format` and `## Examples`.
+- Webapp API base is same-origin by default; absolute loopback only under Tauri.
+- Dashboard: hero, onboarding cue, declared MOCK KPI badge, test ids.
+
+## [0.6.1] - 2026-09-01
 
 ### Fixed
 - **Tauri Gates F/G/H/J (CRITICAL)**: `native/src/main.rs` sync `spawn_backend` in `setup()` + `kill+wait` on Exit (G), `backend.rs` `free_port` 240s poll + TCP health 30×2s (F), `build-sidecar.ps1` now stages `resources/`+`binaries/` (H), `run_server.py`+`server.py:main()` isatty shim + `stdio→http` force when `FREECAD_TAURI=1` (J), `native/package.json` 0.1.0→0.6.0 aligned, stale `src-tauri/` twin removed. NSIS 28.8 MB gate-clean.

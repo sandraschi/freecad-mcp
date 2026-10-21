@@ -1,28 +1,29 @@
 # FreeCAD MCP — Status & Roadmap
 
-**Last updated:** 2026-06-20
+**Last updated:** 2026-10-21
 
 ---
 
 ## Project Status
 
-Production-ready MCP server exposing FreeCAD (mechanical CAD + BIM/architecture) and CFD pipelines (OpenFOAM + FluidX3D GPU) as AI-accessible tools. 37 MCP tools across 5 domains. Dual-transport (stdio + SSE). REST API and Vite web dashboard.
+Production-ready MCP server exposing FreeCAD (mechanical CAD + BIM/architecture) and CFD pipelines (OpenFOAM + FluidX3D GPU) as AI-accessible tools. **59 MCP tools** across 7 domains. Dual-transport (stdio + HTTP/SSE). REST API and Vite web dashboard.
 
 ### Current version
-- **Repo version**: 0.5.0 (pyproject.toml), 0.6.0-dev (unreleased — FluidX3D Runner + pipeline improvements)
-- **Tool count**: 37 registered MCP tools
-- **Tests**: 56 passing (CFD config validation)
+- **Repo version**: 0.6.0 (pyproject.toml, glama, mcpb manifest)
+- **Tool count**: 59 registered MCP tools (verified from source, 2026-10-21)
+- **Tests**: 124 passing, coverage 18.9% (floor 15%)
 
 ### Domains
 
 | Domain | Tools | Status |
 |--------|-------|--------|
-| Mechanical CAD | 7 | Stable |
+| Mechanical CAD / bridge / slicing | 11 | Stable |
+| CAD depot | 2 | Stable |
 | Architecture/BIM | 9 | Stable |
-| CFD / OpenFOAM (CPU) | 10 | Stable |
-| FluidX3D (GPU) | 7 | Stable |
-| Model marketplaces | 3 | Stable |
-| Prefab UI cards | 1 | Stable |
+| CFD / OpenFOAM (CPU) | 13 | Stable |
+| FluidX3D (GPU) | 12 | Stable |
+| Structural FEM (CalculiX) | 8 | Stable |
+| Model marketplaces + Prefab card | 4 | Stable |
 
 ---
 
@@ -88,34 +89,45 @@ Production-ready MCP server exposing FreeCAD (mechanical CAD + BIM/architecture)
 - [x] Chat (Ollama proxy)
 
 ### Webapp Dashboard (port 10945)
-- [x] Dashboard — FreeCAD + OpenFOAM + FluidX3D status cards, quick actions
+- [x] Dashboard — hero + FreeCAD/OpenFOAM/FluidX3D/depot cards, onboarding cue, quick actions
+- [x] Guided Demo — cube → toy car → depot CRUD in one wizard, with STL viewers and activity log
+- [x] Parts Studio — primitives, gears, fasteners, sketch, TechDraw, generative; save to depot
+- [x] Depot — full CRUD (list, download, create, upload, rename, delete)
 - [x] Convert — STEP to STL upload/conversion
 - [x] Models — File browser + Three.js STL viewer
 - [x] Marketplace — Search/browse/import
 - [x] BIM Demo — 8 tab form for building elements
-- [x] CFD — 10 tab workspace (OpenFOAM pipeline)
+- [x] CFD Demo / CFD — sample cases + 10 tab OpenFOAM workspace
 - [x] FluidX3D — 6 tab workspace (GPU pipeline)
+- [x] Toy Car Demo — parametric, Blender, marketplace or auto source
 - [x] Pipeline — 6 step wizard (geometry → solver → physics → BC → run → results)
-- [x] Chat — Ollama CAD expert
+- [x] Chat — Ollama / provider chat with skill badge and personalities
+- [x] Apps — Launcher cards for host apps
 - [x] Logs — Live SSE log stream
-- [x] Settings — API keys, LLM config
-- [x] Help — 11 tabs (FreeCAD, history, scripting, workbenches, comparison, tools, CFD, OpenFOAM, marketplace, 3D printing, links)
+- [x] Settings — API keys, LLM provider discovery, GPU field
+- [x] Help — FreeCAD reference tabs
 
 ### Documentation
-- [x] `docs/install.md` — 9 prerequisites with verification commands
+- [x] `docs/install.md` — prerequisites with verification commands
+- [x] `docs/ONBOARDING.md` — install FreeCAD, verify the bridge, first model
+- [x] `docs/DEVELOPMENT.md` — layout, gates, adding a tool, packaging
+- [x] `docs/TOOLS.md` — tool map by domain
+- [x] `docs/TROUBLESHOOTING.md` — symptom-first fixes
 - [x] `docs/architecture.md` — TCP bridge, subprocess fallback, ports
-- [x] `docs/mcp-tools.md` — All 37 tools with examples
-- [x] `docs/cfd-guide.md` — Complete CFD pipeline (388 lines)
+- [x] `docs/mcp-tools.md` — long-form tool reference
+- [x] `docs/cfd-guide.md` — complete CFD pipeline
 - [x] `docs/openfoam.md` — OpenFOAM fundamentals + GPU options
 - [x] `docs/flow-visualization.md` — FluidX3D graphics mode + ParaView
 - [x] `docs/ai-tooling.md` — Sampling, chat, agentic workflows
 - [x] `docs/about-freecad.md` — FreeCAD overview
 
 ### Quality
-- [x] Ruff linting (Python) — clean
+- [x] Ruff linting + format (Python) — clean
 - [x] TypeScript compilation (webapp) — passes
-- [x] 56 unit tests for CFD config validation
-- [x] Pre-commit hooks (Ruff format + lint)
+- [x] Biome (webapp) — 0 errors
+- [x] 124 tests, coverage 18.9% (floor 15%)
+- [x] Pre-commit hooks (Ruff, Biome, whitespace/EOF)
+- [ ] Pyright — 73 errors (optional-import typing + `ctx.sample` result typing); tracked, not green
 
 ---
 
@@ -136,8 +148,10 @@ Production-ready MCP server exposing FreeCAD (mechanical CAD + BIM/architecture)
 ### Short term
 - [ ] Python-package the FluidX3D runner concept (download binary automatically if not found)
 - [ ] CLI mode: `freecad-mcp --mode cfd-pipeline --case pipe --run-gpu`
-- [ ] Add `cfd_fluidx3d_export_for_render` — convert VTK to OBJ/GLB for Unity/Resonite
+- [x] `cfd_fluidx3d_export_for_render` — export VTK/OBJ/PNG/WebM for Unity/Resonite
 - [ ] Visual flow rendering: animate FluidX3D VTK time series as MP4 via ffmpeg
+- [ ] Pyright typing pass (73 errors; optional imports + FastMCP sampling types)
+- [ ] Rebuild the skill `freecad-expert` (currently 41 lines; needs repo-wide harvest)
 
 ### Medium term
 - [ ] Multi-GPU FluidX3D support (domain decomposition across multiple GPUs)

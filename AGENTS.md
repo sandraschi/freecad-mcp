@@ -1,7 +1,7 @@
 # freecad-mcp — Agent Guide
 
 ## Overview
-FreeCAD MCP server — Parametric 3D CAD modeling, 2D TechDraw drafting, 2D constraint sketching, multi-part STEP assemblies, generative topology optimization, CFD (OpenFOAM CPU + FluidX3D GPU), and CalculiX FEM structural stress analysis via 50+ MCP tools and REST API.
+FreeCAD MCP server — Parametric 3D CAD modeling, 2D TechDraw drafting, 2D constraint sketching, multi-part STEP assemblies, generative topology optimization, CFD (OpenFOAM CPU + FluidX3D GPU), and CalculiX FEM structural stress analysis via 59 MCP tools and REST API.
 
 ## Core Capabilities for Fleet Agents
 
