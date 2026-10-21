@@ -10,6 +10,14 @@
 
 **Questions, improv ideas, "what if it also did X"?** → [Discussions](https://github.com/sandraschi/freecad-mcp/discussions) — Q&A for support, Ideas for anything you'd improve but wouldn't file a whole Issue for. Bugs still go to [Issues](https://github.com/sandraschi/freecad-mcp/issues).
 
+## Install (Windows)
+
+**[Download freecad-mcp-0.6.1-setup.exe](https://github.com/sandraschi/freecad-mcp/releases/latest/download/freecad-mcp-0.6.1-setup.exe)** - the full desktop app (webapp + embedded backend) in one installer.
+
+- The installer is **unsigned**. Windows SmartScreen will warn: choose **More info > Run anyway**.
+- Prefer MCP-only? [freecad-mcp-0.6.1.mcpb](https://github.com/sandraschi/freecad-mcp/releases/latest/download/freecad-mcp-0.6.1.mcpb) registers the server in Claude Desktop.
+- All releases and older versions: [Releases](https://github.com/sandraschi/freecad-mcp/releases).
+
 ## Two ways to use this
 
 This project exposes FreeCAD as a server that two different kinds of users talk to:
@@ -63,7 +71,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 |--:|--|
 | **Example use cases** | "What's inside this STEP file?" — "Convert this assembly to 3D-printable STL" — "Design a room with two windows and a door" — "Simulate water flow through this pipe at 2 m/s" — "Find me a gear on Printables and slice it for my MK4" — "Train a neural network to predict airflow instead of running the full simulation every time" — "Browse my persistent CAD depot, create a test bracket, rename and tag it" |
 | **What it connects to** | FreeCAD 1.1.1+ (the CAD engine), OpenFOAM 10 via Docker (fluid simulation), FluidX3D via OpenCL (GPU-accelerated simulation), PrusaSlicer 2.8+ (3D printing), Ollama (local LLM), Printables / Thingiverse / GrabCAD (model search). **ParaView** (optional, for professional CFD viz): `winget install Kitware.ParaView` |
-| **Ports** | **10944** = MCP server (AI agents), **10945** = web dashboard (humans), **11968** = FreeCAD bridge (internal) |
+| **Ports** | **10944** = MCP server (AI agents), **10945** = web dashboard (humans), **11968** = FreeCAD bridge (internal), **11249** = installed app's own backend (side-by-side with dev) |
 | **Start** | `just bootstrap` then `start.ps1` |
 
 ## Documentation Index
@@ -76,7 +84,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | **[Tools](docs/TOOLS.md)** | Tool map by domain |
 | **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Symptom-first fixes |
 | **[Architecture](docs/architecture.md)** | TCP bridge, subprocess fallback, port layout, file pipeline |
-| **[MCP Tools](docs/mcp-tools.md)** | All 59 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
+| **[MCP Tools](docs/mcp-tools.md)** | All 60 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
 | **[Fleet CFD pipeline](docs/fleet-pipeline.md)** | qcad DXF → freecad OpenFOAM/FluidX3D → resonite/godot/robotics handoff |
 | **[Fluid simulation guide](docs/cfd-guide.md)** | Full walkthrough: creating domains, configuring physics, setting boundary conditions, running solvers, reading results, parametric sweeps, natural language config, and exporting data for neural network training |
 | **[Flow visualization & render guide](docs/flow-visualization.md)** | What FluidX3D produces (VTK, OBJ, WebM, PNG, CSV). How to turn it into video, game engine assets, or VR visuals. Glossary of terms (VTK, OBJ, streamlines, LBM, MLUPS, heatmaps). Integration with Unity3D, Godot, Blender, Resonite. |
@@ -89,7 +97,7 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 ## Quick Start
 
 ```powershell
-just bootstrap   # uv sync + npm install
+just bootstrap   # install Python + webapp dependencies
 start.ps1        # kills zombies, starts backend + frontend, opens browser
 
 # First stop: http://localhost:10945/demo

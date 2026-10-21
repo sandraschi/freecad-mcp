@@ -4,7 +4,7 @@
 
 Full tool reference, schemas and examples: [llms-full.txt](llms-full.txt)
 
-## Tools (59 total)
+## Tools (60 total)
 
 ### Core CAD
 - `freecad_status` — FreeCAD availability + version

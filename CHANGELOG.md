@@ -2,7 +2,7 @@
 
 All notable changes to the FreeCAD MCP server and webapp.
 
-## [Unreleased] - 2026-10-21
+## [0.6.1] - 2026-10-21
 
 ### Added
 - **Guided Demo page** (`/demo`): build a cube, build a toy car, then exercise depot
@@ -16,6 +16,16 @@ All notable changes to the FreeCAD MCP server and webapp.
 - Assessment report `docs/assess-reports/2026-10-21.md`.
 
 ### Fixed
+- **Duplicate FreeCAD windows**: `_freecad_already_running()` compared
+  `"FreeCAD.exe"` case-sensitively against tasklist's lower-case `freecad.exe`,
+  so every check returned False and each call launched another FreeCAD. Detection
+  is now case-insensitive, the GUI exe is never probed with `--version` (that
+  opened a window and hung), and the server refuses to launch a second instance
+  when one is already running. `freecad_status`/`/api/v1/status` now expose
+  `gui_running` and `bridge_loaded`.
+- **Hung bridge reported as connected**: an open port 11968 that never answered
+  ping was treated as a live bridge. It now reports
+  `"GUI running (bridge not responding)"` and falls back to subprocess mode.
 - **`create_shape` never wrote an STL**: `Mesh.Mesh(Part.Solid)` raises on FreeCAD
   1.x and FreeCADCmd exits 0, so the tool returned success with no file. Exports
   from a document object and verifies the artefact; the depot create path now
@@ -42,16 +52,16 @@ All notable changes to the FreeCAD MCP server and webapp.
 - Webapp API base is same-origin by default; absolute loopback only under Tauri.
 - Dashboard: hero, onboarding cue, declared MOCK KPI badge, test ids.
 
-## [0.6.1] - 2026-09-01
+### 2026-09-01 batch
 
-### Fixed
+#### Fixed
 - **Tauri Gates F/G/H/J (CRITICAL)**: `native/src/main.rs` sync `spawn_backend` in `setup()` + `kill+wait` on Exit (G), `backend.rs` `free_port` 240s poll + TCP health 30×2s (F), `build-sidecar.ps1` now stages `resources/`+`binaries/` (H), `run_server.py`+`server.py:main()` isatty shim + `stdio→http` force when `FREECAD_TAURI=1` (J), `native/package.json` 0.1.0→0.6.0 aligned, stale `src-tauri/` twin removed. NSIS 28.8 MB gate-clean.
 - **CI**: `node-version 20→22`, added `pyright` + `biome ci` gates, `ruff` T20 print ban enforced, `.gitattributes` LF, `FleetStartMode.ps1` vendored (BUG-028).
 
-### Added
+#### Added
 - **Webapp SOTA**: `zustand ^5.0.0` + `store/llm.ts` (provider/model/gpuDetected + localStorage), `docs/CONFIGURATION.md` + `docs/ONBOARDING.md` (cost/pits/sanity/declared doubles, big red cue + MOCK-until-onboarded), `vite.config.ts` `manualChunks` `react` 49KB + `vendor` 1017KB (was 1498KB monolith), `renovate.json` committed, `pytest-cov` 19% ≥15, `glama.json` 39→61→85 tools (freecad_design_loop, depot, bim/cfd/fem/fluidx3d render/sweep/surrogate), `mcpb` fresh-stage 85 tools 161KB.
 
-### Changed
+#### Changed
 - Tool count 50+ → **85** (portmanteau + cfd/snappy/post/fsi + fem suite + fluidx3d render/sweep/surrogate + depot/bridge). README + glama + mcpb/manifest synced.
 
 ## [0.6.0] — 2026-08-24

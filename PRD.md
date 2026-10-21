@@ -6,7 +6,7 @@
 
 ## Purpose
 
-FreeCAD MCP exposes FreeCAD 3D modeling, BIM/architecture design, CFD fluid simulation (OpenFOAM CPU + FluidX3D GPU), FEM structural analysis (CalculiX), and 3D printing workflows through 59 MCP tools and a web dashboard. The server operates as a headless geometry engine via TCP bridge or FreeCADCmd subprocess.
+FreeCAD MCP exposes FreeCAD 3D modeling, BIM/architecture design, CFD fluid simulation (OpenFOAM CPU + FluidX3D GPU), FEM structural analysis (CalculiX), and 3D printing workflows through 60 MCP tools and a web dashboard. The server operates as a headless geometry engine via TCP bridge or FreeCADCmd subprocess.
 
 ## Target Users
 
@@ -36,14 +36,14 @@ MCP Client (AI) ──→ FastAPI + FastMCP ──→ FreeCAD (TCP bridge / subp
 
 ## Shipped Features
 
-### Core CAD (8 tools)
+### Core CAD (9 tools)
 - STEP/STP → STL conversion with AP214 support
 - Model inspection (volume, bounding box, object count)
 - Geometric primitive generation (box, cylinder, sphere, cone), verified STL export
 - Parametric portmanteau (`freecad_model`): primitives, gears, fasteners, sketch,
   TechDraw, assemblies, generative, fillet, booleans, toy car
 - Live bridge control and agentic design loop
-- FreeCAD GUI launcher
+- `cad_sampling` (host-LLM reasoning) and FreeCAD GUI launcher
 
 ### BIM / Architecture (10 tools)
 - Parametric walls, slabs, columns (rectangular/circular/H-section)

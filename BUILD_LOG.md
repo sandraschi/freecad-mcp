@@ -1,5 +1,28 @@
 # Build Log — freecad-mcp
 
+## 2026-10-22 - v0.6.1
+
+**Build type:** NSIS (Tauri 2.11.2) + MCPB - release gate PASS
+**Backend:** PyInstaller, 34.26 MB (`dist/freecad-mcp-backend.exe`)
+**Frontend:** Vite 5 production build (`webapp/dist/`)
+**Installer:** 31,179,733 B (29.7 MiB), SHA-256 `e1e7642044ef1b3f9aec4ce04858dbcb719c567e184da8a1479557f9ab1d56af`
+**MCPB:** 168,747 B (164.8 KiB), manifest validates
+**CUA:** 12/12 phases, `all_passed=true`, `pywinauto=true`, `backend_receipt_proof=true`, installer SHA bound to the artifact above.
+
+### Problems found and fixed in this build
+
+- **App exited with -1 right after the window appeared.** `backend.rs::free_port` ran `taskkill /F /IM freecad-mcp-native.exe` from inside that same process, killing itself. Removed the native image from the kill list; NSIS hooks own pre-install shutdown. This was also why CUA reported "Backend not reachable".
+- **Duplicate FreeCAD windows.** `_freecad_already_running()` compared `"FreeCAD.exe"` case-sensitively with tasklist's `freecad.exe`, so it never saw a running GUI and launched another. Also `FreeCAD.exe --version` opens a window and hangs; probing now uses `FreeCADCmd.exe`. The server refuses to launch a second instance and reports `gui_running` / `bridge_loaded`.
+- **NSIS `!include "mcp-clients.nsh"` failed.** makensis runs with the generated `target/release/nsis/x64` as cwd. Include via `${__FILEDIR__}\mcp-clients.nsh`.
+- **Operator port.** 11250 was registered but live-squatted by an unrelated `stable-audio-spike` uvicorn. The installed app now uses 11249 (claimed pair 11249/11250 as `freecad-mcp-native`); the frontend build bakes `VITE_API_BASE=http://127.0.0.1:11249` and the Rust constant matches.
+- **WebView2 profile corruption** made the installed app exit immediately during CUA. Renaming `%LOCALAPPDATA%\ai.fleet.freecad-mcp\EBWebView` fixed it; documented in `docs/TROUBLESHOOTING.md`.
+- **CUA tooling.** Upgraded `scripts/cua-smoke.py` to v15, added `pywinauto`/`pytesseract`/`Pillow` as dev deps, set `bridge_ok_text` to the text the UI actually renders, and added `GET /api/v1/request-log` for receipt proof.
+- **Diagnostics lied.** `/api/v1/diagnostics` used the removed `mcp._tool_manager`, reporting 0 tools and version 0.5.0. Now uses `await mcp.list_tools()` and package metadata (60 tools, 0.6.1).
+
+### Known issue
+
+Pillow/pytesseract are dev dependencies in the same venv, so PyInstaller bundles Pillow and the backend is 34.26 MB instead of ~27 MB. An exclusion attempt broke the frozen `re` import (`ImportError: _compiler`), so it was reverted rather than ship a broken backend. Follow-up: build the sidecar from a runtime-only venv.
+
 ## 2026-09-01 — v0.6.0
 
 **Build type:** NSIS (Tauri 2.11.2) — gate-clean
