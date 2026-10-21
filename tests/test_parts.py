@@ -1,6 +1,5 @@
 """Unit tests for parametric gear, fastener, inspect, and clash check script generators."""
 
-import pytest
 from freecad_mcp.model_ops import (
     script_clash_check,
     script_create_fastener,
@@ -42,7 +41,6 @@ def test_script_create_fastener_nut_and_washer():
     nut_script = script_create_fastener(fastener_type="nut", size="M6")
     assert 'ftype = "nut"' in nut_script
     assert "shape = nut_blank.cut(hole)" in nut_script
-
 
     washer_script = script_create_fastener(fastener_type="washer", size="M5")
     assert 'ftype = "washer"' in washer_script

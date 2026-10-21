@@ -77,9 +77,17 @@ async def test_cfd_post_process_coefficients(cfd_tools):
     case_dir_root = status["cfd_case_dir"]
     case_name = "test_airfoil_case"
     case_dir = os.path.join(case_dir_root, case_name)
-    os.makedirs(case_dir, exist_ok=True)
+    forces_dir = os.path.join(case_dir, "postProcessing", "forces", "0")
+    os.makedirs(forces_dir, exist_ok=True)
 
     try:
+        # Fixture: a real forces.dat line (time, drag/lift vectors). No pressure
+        # artefact exists, so pressure_drop_pa must be reported as None rather
+        # than a fabricated constant.
+        with open(os.path.join(forces_dir, "forces.dat"), "w", encoding="utf-8") as f:
+            f.write("# Time forces\n")
+            f.write("1.0 ((12.5 2.1 0.0) (0 0 0) (0 0 0)) ((0 0 0) (0 0 0) (0 0 0))\n")
+
         tool = cfd_tools["cfd_post_process"]
         res = await tool(
             case_name=case_name,
@@ -89,9 +97,28 @@ async def test_cfd_post_process_coefficients(cfd_tools):
             force_patches=["wing"],
         )
         assert res["success"] is True
+        assert res["data"]["drag_force_n"] == 12.5
         assert res["data"]["drag_coefficient_cd"] > 0
-        assert res["data"]["pressure_drop_pa"] > 0
+        assert res["data"]["pressure_drop_pa"] is None
+        assert res["data"]["loss_coefficient_zeta"] is None
         assert os.path.isfile(os.path.join(case_dir, "cfd_post_summary.json"))
+    finally:
+        if os.path.exists(case_dir):
+            shutil.rmtree(case_dir, ignore_errors=True)
+
+
+@pytest.mark.anyio
+async def test_cfd_post_process_refuses_without_forces(cfd_tools):
+    """No forces.dat means no result: never invent drag/lift numbers."""
+    status = await cfd_tools["cfd_status"]()
+    case_name = "test_unsolved_case"
+    case_dir = os.path.join(status["cfd_case_dir"], case_name)
+    os.makedirs(case_dir, exist_ok=True)
+
+    try:
+        res = await cfd_tools["cfd_post_process"](case_name=case_name)
+        assert res["success"] is False
+        assert "Run cfd_run_solver" in res["message"]
     finally:
         if os.path.exists(case_dir):
             shutil.rmtree(case_dir, ignore_errors=True)

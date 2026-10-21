@@ -106,7 +106,9 @@ class TestBlockMeshDict:
     def test_vertex_count_eight(self):
         vertices = _make_vertices(8)
         bmd = _BLOCK_MESH_DICT.format(scale=1.0, vertices=vertices, nx=10, ny=10, nz=10, boundaries="")
-        vertex_lines = [l for l in bmd.splitlines() if l.strip().startswith("(") and l.strip().endswith(")")]
+        vertex_lines = [
+            line for line in bmd.splitlines() if line.strip().startswith("(") and line.strip().endswith(")")
+        ]
         assert len(vertex_lines) == 8
 
     def test_boundary_patch_count(self):
