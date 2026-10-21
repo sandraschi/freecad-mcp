@@ -1700,19 +1700,35 @@ meshQualityControls
         if not os.path.isdir(case_dir):
             return {"success": False, "error": f"Case directory '{case_name}' not found."}
 
-        # Mock calculation / parse forces if file exists
         forces_file = os.path.join(case_dir, "postProcessing", "forces", "0", "forces.dat")
-        drag_n, lift_n = 12.5, 2.1
-        if os.path.isfile(forces_file):
-            try:
-                with open(forces_file) as f:
-                    lines = [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
-                    if lines:
-                        last = lines[-1].split()
-                        drag_n = float(last[1].replace("(", "").replace(")", ""))
-                        lift_n = float(last[3].replace("(", "").replace(")", ""))
-            except Exception:
-                pass
+        if not os.path.isfile(forces_file):
+            return {
+                "success": False,
+                "message": f"No solved forces for '{case_name}'. Run cfd_run_solver first, then retry.",
+                "error": "forces.dat not found",
+                "case_name": case_name,
+            }
+
+        drag_n: float | None = None
+        lift_n: float | None = None
+        try:
+            with open(forces_file, encoding="utf-8", errors="replace") as f:
+                lines = [ln.strip() for ln in f if ln.strip() and not ln.lstrip().startswith("#")]
+            if lines:
+                # OpenFOAM forces line: time ((Fx Fy Fz) (Mx My Mz) (p...) (v...))
+                match = re.search(r"\(\s*\(\s*([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)", lines[-1])
+                if match:
+                    drag_n, lift_n = float(match.group(1)), float(match.group(2))
+        except (OSError, ValueError, IndexError) as exc:
+            logger.warning("Could not parse forces file %s: %s", forces_file, exc)
+
+        if drag_n is None or lift_n is None:
+            return {
+                "success": False,
+                "message": f"Could not parse forces from {forces_file}. Check the solver log.",
+                "error": "forces.dat unreadable",
+                "case_name": case_name,
+            }
 
         # Compute coefficients (U_ref = 10.0 m/s, rho = 1.225 kg/m^3)
         rho = 1.225
@@ -1721,10 +1737,17 @@ meshQualityControls
         cd = round(drag_n / max(0.0001, q_dyn), 4)
         cl = round(lift_n / max(0.0001, q_dyn), 4)
 
-        p_in = 101325.0
-        p_out = 101280.0
-        delta_p = round(p_in - p_out, 2)
-        loss_coeff = round(delta_p / (0.5 * rho * u_ref**2), 3)
+        # Pressure drop is only reported when a real solver artefact exists --
+        # never substitute a plausible-looking constant.
+        delta_p: float | None = None
+        pressure_file = os.path.join(case_dir, "postProcessing", "pressure_drop.dat")
+        if os.path.isfile(pressure_file):
+            try:
+                with open(pressure_file, encoding="utf-8", errors="replace") as f:
+                    delta_p = round(float(f.read().split()[-1]), 2)
+            except (OSError, ValueError, IndexError) as exc:
+                logger.warning("Could not parse pressure drop file %s: %s", pressure_file, exc)
+        loss_coeff = round(delta_p / (0.5 * rho * u_ref**2), 3) if delta_p is not None else None
 
         summary = {
             "case_name": case_name,
@@ -1738,6 +1761,10 @@ meshQualityControls
             "inlet_patch": inlet_patch,
             "outlet_patch": outlet_patch,
             "force_patches": force_patches or ["wall"],
+            "data_sources": {
+                "forces": forces_file,
+                "pressure_drop": pressure_file if delta_p is not None else None,
+            },
         }
 
         # Write summary JSON file inside case directory
