@@ -7,12 +7,15 @@ libraries that gate on tty do not switch to stdio mode.
 
 import _datetime  # noqa: F401
 import _strptime  # noqa: F401
+import logging
 import os
 import sys
 
 import mcp.types  # noqa: F401
 
 sys.path.insert(0, ".")
+
+logger = logging.getLogger("freecad-mcp.entry")
 
 # Gate J: isatty shim — when Tauri sets FREECAD_TAURI=1, pretend stdout is not a tty
 # so any library checking sys.stdout.isatty() does not enable stdio transport.
@@ -22,20 +25,21 @@ if os.environ.get("FREECAD_TAURI") == "1" or os.environ.get("FREECAD_MCP_TAURI")
             sys.stdout.isatty = lambda: False  # type: ignore[method-assign]
         if hasattr(sys.stderr, "isatty"):
             sys.stderr.isatty = lambda: False  # type: ignore[method-assign]
-    except Exception:
-        pass
+    except Exception as exc:  # pragma: no cover - platform-dependent shim
+        logger.debug("isatty shim failed: %s", exc)
 
 from freecad_mcp.server import main
 
-# Gate J: Tauri sidecar must not fall through to stdio — force HTTP
-is_tauri = os.environ.get("FREECAD_TAURI") == "1" or os.environ.get("FREECAD_MCP_TAURI") == "1"
-port = os.environ.get("MCP_PORT") or os.environ.get("PORT")
-if is_tauri and not port:
-    port = "10944"
-if port:
-    host = os.environ.get("MCP_HOST", "127.0.0.1")
-    sys.argv = ["run_server.py", "--mode", "http", "--host", host, "--port", str(port)]
-elif is_tauri:
-    # Fallback: Tauri without port env — still force http on default
-    sys.argv = ["run_server.py", "--mode", "http", "--host", "127.0.0.1", "--port", "10944"]
-main()
+if __name__ == "__main__":
+    # Gate J: Tauri sidecar must not fall through to stdio — force HTTP
+    is_tauri = os.environ.get("FREECAD_TAURI") == "1" or os.environ.get("FREECAD_MCP_TAURI") == "1"
+    port = os.environ.get("MCP_PORT") or os.environ.get("PORT")
+    if is_tauri and not port:
+        port = "10944"
+    if port:
+        host = os.environ.get("MCP_HOST", "127.0.0.1")
+        sys.argv = ["run_server.py", "--mode", "http", "--host", host, "--port", str(port)]
+    elif is_tauri:
+        # Fallback: Tauri without port env — still force http on default
+        sys.argv = ["run_server.py", "--mode", "http", "--host", "127.0.0.1", "--port", "10944"]
+    main()

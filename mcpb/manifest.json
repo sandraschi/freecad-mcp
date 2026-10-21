@@ -9,9 +9,9 @@
     "entry_point": "run_server.py",
     "mcp_config": {
       "command": "uv",
-      "args": ["run","--directory","${PWD}","run_server.py"],
+      "args": ["run","--directory","${__dirname}","python","-m","freecad_mcp.server","--mode","stdio"],
       "env": {
-        "PYTHONPATH": "${PWD}/src",
+        "PYTHONPATH": "${__dirname}/src",
         "PYTHONUNBUFFERED": "1"
       }
     }

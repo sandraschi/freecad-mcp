@@ -14,11 +14,15 @@
       "args": [
         "run",
         "--directory",
-        "${PWD}",
-        "run_server.py"
+        "${__dirname}",
+        "python",
+        "-m",
+        "freecad_mcp.server",
+        "--mode",
+        "stdio"
       ],
       "env": {
-        "PYTHONPATH": "${PWD}/src",
+        "PYTHONPATH": "${__dirname}/src",
         "PYTHONUNBUFFERED": "1"
       }
     }
