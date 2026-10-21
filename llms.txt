@@ -2,7 +2,9 @@
 
 > FreeCAD-based CAD operations via FastMCP 3.2 server — STEP/STL conversion, BIM (walls/slabs/columns/doors/windows/roofs), CFD/OpenFOAM fluid simulation, FluidX3D GPU CFD, FEM structural analysis (CalculiX), PrusaSlicer G-code, marketplace search (Printables/Thingiverse/GrabCAD), and persistent CAD file depot with full CRUD.
 
-## Tools (32 total)
+Full tool reference, schemas and examples: [llms-full.txt](llms-full.txt)
+
+## Tools (59 total)
 
 ### Core CAD
 - `freecad_status` — FreeCAD availability + version

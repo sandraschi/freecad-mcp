@@ -1,6 +1,7 @@
 {
   "$schema": "https://glama.ai/mcp/schema/2026",
   "name": "freecad-mcp",
+  "version": "0.6.0",
   "description": "FreeCAD MCP server — mechanical CAD, BIM/architecture, CFD/OpenFOAM simulation, GPU FluidX3D, 3D printing slicing, and model marketplace search through MCP tools and a web dashboard",
   "repository": "https://github.com/sandraschi/freecad-mcp",
   "command": "uv",

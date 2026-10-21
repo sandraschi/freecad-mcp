@@ -71,8 +71,12 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 | Guide | Content |
 | :--- | :--- |
 | **[Installation](docs/install.md)** | Prerequisites, FreeCAD setup, PrusaSlicer, `just bootstrap` |
+| **[Onboarding](docs/ONBOARDING.md)** | First run: install FreeCAD, verify the bridge, make a first model |
+| **[Development](docs/DEVELOPMENT.md)** | Layout, gates, adding a tool, packaging |
+| **[Tools](docs/TOOLS.md)** | Tool map by domain |
+| **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Symptom-first fixes |
 | **[Architecture](docs/architecture.md)** | TCP bridge, subprocess fallback, port layout, file pipeline |
-| **[MCP Tools](docs/mcp-tools.md)** | All 85 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
+| **[MCP Tools](docs/mcp-tools.md)** | All 59 tools with examples: geometry conversion, architecture (walls/floors/roofs/IFC), structural FEM (CalculiX stress/strain), fluid simulation (OpenFOAM + FluidX3D), 3D printing, marketplace search, LLM assistance, and **CAD file depot** with persistent storage + full CRUD |
 | **[Fleet CFD pipeline](docs/fleet-pipeline.md)** | qcad DXF → freecad OpenFOAM/FluidX3D → resonite/godot/robotics handoff |
 | **[Fluid simulation guide](docs/cfd-guide.md)** | Full walkthrough: creating domains, configuring physics, setting boundary conditions, running solvers, reading results, parametric sweeps, natural language config, and exporting data for neural network training |
 | **[Flow visualization & render guide](docs/flow-visualization.md)** | What FluidX3D produces (VTK, OBJ, WebM, PNG, CSV). How to turn it into video, game engine assets, or VR visuals. Glossary of terms (VTK, OBJ, streamlines, LBM, MLUPS, heatmaps). Integration with Unity3D, Godot, Blender, Resonite. |
@@ -90,6 +94,32 @@ start.ps1        # kills zombies, starts backend + frontend, opens browser
 ```
 
 ## MCP Client Config
+
+### Claude Desktop (one-click Windows bundle)
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/sandraschi/freecad-mcp/releases/latest/download/install.ps1 | iex"
+```
+
+The installer drops `freecad-mcp.mcpb` and registers it with Claude Desktop.
+Each release also carries the bundle itself:
+[`freecad-mcp.mcpb`](https://github.com/sandraschi/freecad-mcp/releases/latest/download/freecad-mcp.mcpb).
+
+### Other clients (stdio)
+
+```json
+{
+  "mcpServers": {
+    "freecad": {
+      "command": "uv",
+      "args": ["run", "--directory", "D:/Dev/repos/freecad-mcp", "python", "-m", "freecad_mcp.server", "--mode", "stdio"],
+      "env": { "PYTHONPATH": "D:/Dev/repos/freecad-mcp/src" }
+    }
+  }
+}
+```
+
+### HTTP / SSE (webapp or LAN)
 
 ```json
 {
