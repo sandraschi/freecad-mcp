@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-10-21T22:24:55.2390790+02:00",
-  "commit": "490aa108acf6c3d7b352abc936801f5b1cdb2a80",
+  "timestamp": "2026-10-21T22:34:00.0000000+02:00",
+  "commit": "8b68b426",
   "host": "Goliath",
   "score_before": 0,
-  "score_after": 23,
+  "score_after": 39,
   "report": "docs/assess-reports/2026-10-21.md"
 }
