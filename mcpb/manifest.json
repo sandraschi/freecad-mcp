@@ -3,13 +3,24 @@
   "name": "freecad-mcp",
   "version": "0.6.0",
   "description": "FreeCAD 3D CAD automation: headless documents and export, plus CFD via FluidX3D/OpenFOAM",
-  "author": { "name": "sandraschi" },
+  "author": {
+    "name": "sandraschi"
+  },
   "server": {
     "type": "python",
     "entry_point": "run_server.py",
     "mcp_config": {
       "command": "uv",
-      "args": ["run","--directory","${__dirname}","python","-m","freecad_mcp.server","--mode","stdio"],
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "python",
+        "-m",
+        "freecad_mcp.server",
+        "--mode",
+        "stdio"
+      ],
       "env": {
         "PYTHONPATH": "${__dirname}/src",
         "PYTHONUNBUFFERED": "1"
@@ -17,90 +28,241 @@
     }
   },
   "tools": [
-    { "name": "freecad_status", "description": "freecad_status" },
-    { "name": "step_to_stl", "description": "step_to_stl" },
-    { "name": "model_info", "description": "model_info" },
-    { "name": "create_shape", "description": "create_shape" },
-    { "name": "slicer_status", "description": "slicer_status" },
-    { "name": "slice_stl", "description": "slice_stl" },
-    { "name": "freecad_gui", "description": "freecad_gui" },
-    { "name": "freecad_design_loop", "description": "freecad_design_loop" },
-    { "name": "marketplace_search", "description": "marketplace_search" },
-    { "name": "marketplace_download", "description": "marketplace_download" },
-    { "name": "marketplace_categories", "description": "marketplace_categories" },
-    { "name": "show_marketplace_card", "description": "show_marketplace_card" },
-    { "name": "list_skills", "description": "List available skill names." },
-    { "name": "get_skill", "description": "Return the raw SKILL.md content for a skill." },
-    { "name": "get_status", "description": "FreeCAD MCP server status." },
-    { "name": "health_check", "description": "Return server health: FreeCAD status, Docker, uptime." },
-    { "name": "upload_file", "description": "Upload a STEP/STL file for processing." },
-    { "name": "download_file", "description": "Download a processed STL, G-code, IFC, or FCStd file." },
-    { "name": "serve_case_file", "description": "Serve a file from a FluidX3D case directory." },
-    { "name": "list_files", "description": "List uploaded and output files including G-code, IFC, and FCStd." },
-    { "name": "depot_list", "description": "depot_list" },
-    { "name": "depot_get", "description": "depot_get" },
-    { "name": "depot_rename", "description": "depot_rename" },
-    { "name": "depot_delete", "description": "depot_delete" },
-    { "name": "depot_create", "description": "depot_create" },
-    { "name": "depot_upload", "description": "depot_upload" },
-    { "name": "execute_tool", "description": "Execute an MCP tool via REST (for webapp convenience)." },
-    { "name": "stream_logs", "description": "SSE log stream." },
-    { "name": "categories_endpoint", "description": "List categories for a marketplace source." },
-    { "name": "search_endpoint", "description": "Search a marketplace for CAD models." },
-    { "name": "download_endpoint", "description": "Download a model from a marketplace URL into the uploads directory." },
-    { "name": "diagnostics", "description": "Return server diagnostics for CUA smoke test." },
-    { "name": "capabilities", "description": "List server capabilities." },
-    { "name": "shutdown", "description": "Gracefully shut down the server." },
-    { "name": "llm_discover", "description": "Discover local LLM providers (Ollama, LM Studio, vLLM).      Returns detected providers and avail..." },
-    { "name": "get_settings", "description": "Get LLM and marketplace settings." },
-    { "name": "update_settings", "description": "Update LLM or marketplace settings." },
-    { "name": "chat_completion", "description": "Chat with CAD expert via Ollama." },
-    { "name": "bim_create_wall", "description": "bim_create_wall" },
-    { "name": "bim_create_slab", "description": "bim_create_slab" },
-    { "name": "bim_create_column", "description": "bim_create_column" },
-    { "name": "bim_create_window", "description": "bim_create_window" },
-    { "name": "bim_create_door", "description": "bim_create_door" },
-    { "name": "bim_create_roof", "description": "bim_create_roof" },
-    { "name": "bim_export_ifc", "description": "bim_export_ifc" },
-    { "name": "bim_import_ifc", "description": "bim_import_ifc" },
-    { "name": "mesh_to_solid", "description": "mesh_to_solid" },
-    { "name": "bim_status", "description": "bim_status" },
-    { "name": "freecad_bridge", "description": "freecad_bridge" },
-    { "name": "cfd_status", "description": "cfd_status" },
-    { "name": "cfd_create_domain", "description": "cfd_create_domain" },
-    { "name": "cfd_configure_physics", "description": "cfd_configure_physics" },
-    { "name": "cfd_set_boundary", "description": "cfd_set_boundary" },
-    { "name": "cfd_build_case", "description": "cfd_build_case" },
-    { "name": "cfd_run_solver", "description": "cfd_run_solver" },
-    { "name": "cfd_read_results", "description": "cfd_read_results" },
-    { "name": "cfd_parametric_study", "description": "cfd_parametric_study" },
-    { "name": "cfd_nl2foam", "description": "cfd_nl2foam" },
-    { "name": "cfd_sample_for_pinns", "description": "cfd_sample_for_pinns" },
-    { "name": "cfd_snappy_mesh", "description": "cfd_snappy_mesh" },
-    { "name": "cfd_post_process", "description": "cfd_post_process" },
-    { "name": "cfd_map_loads_to_fem", "description": "cfd_map_loads_to_fem" },
-    { "name": "cad_depot", "description": "cad_depot" },
-    { "name": "cad_create", "description": "cad_create" },
-    { "name": "fem_status", "description": "fem_status" },
-    { "name": "fem_create_analysis", "description": "fem_create_analysis" },
-    { "name": "fem_set_material", "description": "fem_set_material" },
-    { "name": "fem_set_constraint", "description": "fem_set_constraint" },
-    { "name": "fem_mesh", "description": "fem_mesh" },
-    { "name": "fem_run", "description": "fem_run" },
-    { "name": "fem_read_results", "description": "fem_read_results" },
-    { "name": "run_fem_analysis", "description": "run_fem_analysis" },
-    { "name": "cfd_fluidx3d_status", "description": "cfd_fluidx3d_status" },
-    { "name": "cfd_fluidx3d_prebuilt", "description": "cfd_fluidx3d_prebuilt" },
-    { "name": "cfd_fluidx3d_setup", "description": "cfd_fluidx3d_setup" },
-    { "name": "cfd_fluidx3d_compile", "description": "cfd_fluidx3d_compile" },
-    { "name": "cfd_fluidx3d_run", "description": "cfd_fluidx3d_run" },
-    { "name": "cfd_fluidx3d_results", "description": "cfd_fluidx3d_results" },
-    { "name": "cfd_fluidx3d_explain", "description": "cfd_fluidx3d_explain" },
-    { "name": "cfd_fluidx3d_export_for_render", "description": "cfd_fluidx3d_export_for_render" },
-    { "name": "cfd_fluidx3d_render", "description": "cfd_fluidx3d_render" },
-    { "name": "cfd_fluidx3d_parametric_sweep", "description": "cfd_fluidx3d_parametric_sweep" },
-    { "name": "cfd_fluidx3d_train_surrogate", "description": "cfd_fluidx3d_train_surrogate" },
-    { "name": "cfd_surrogate_predict", "description": "cfd_surrogate_predict" },
-    { "name": "freecad_model", "description": "freecad_model" }
+    {
+      "name": "freecad_status",
+      "description": "Check FreeCAD availability and version"
+    },
+    {
+      "name": "step_to_stl",
+      "description": "Convert STEP/STP assembly to STL mesh"
+    },
+    {
+      "name": "model_info",
+      "description": "Read CAD file metadata (objects, volume, bounding box)"
+    },
+    {
+      "name": "create_shape",
+      "description": "Create geometric primitive (box, cylinder, sphere, cone)"
+    },
+    {
+      "name": "slicer_status",
+      "description": "Check PrusaSlicer availability"
+    },
+    {
+      "name": "slice_stl",
+      "description": "Slice STL to G-code for 3D printing"
+    },
+    {
+      "name": "freecad_gui",
+      "description": "Launch FreeCAD desktop GUI"
+    },
+    {
+      "name": "bim_status",
+      "description": "Check BIM/Arch workbench availability"
+    },
+    {
+      "name": "bim_create_wall",
+      "description": "Create parametric architectural wall"
+    },
+    {
+      "name": "bim_create_slab",
+      "description": "Create floor slab structure element"
+    },
+    {
+      "name": "bim_create_column",
+      "description": "Create structural column (rectangular, circular, H-section)"
+    },
+    {
+      "name": "bim_create_window",
+      "description": "Create window hosted in auto-generated wall"
+    },
+    {
+      "name": "bim_create_door",
+      "description": "Create door hosted in auto-generated wall"
+    },
+    {
+      "name": "bim_create_roof",
+      "description": "Create sloped or flat roof"
+    },
+    {
+      "name": "bim_export_ifc",
+      "description": "Export FCStd to IFC format"
+    },
+    {
+      "name": "bim_import_ifc",
+      "description": "Import IFC file to FCStd"
+    },
+    {
+      "name": "cfd_status",
+      "description": "Check CFD pipeline (Docker, OpenFOAM)"
+    },
+    {
+      "name": "cfd_create_domain",
+      "description": "Create fluid domain and OpenFOAM case skeleton"
+    },
+    {
+      "name": "cfd_configure_physics",
+      "description": "Configure solver, turbulence model, fluid properties"
+    },
+    {
+      "name": "cfd_set_boundary",
+      "description": "Set per-patch boundary conditions"
+    },
+    {
+      "name": "cfd_build_case",
+      "description": "Validate OpenFOAM case completeness"
+    },
+    {
+      "name": "cfd_run_solver",
+      "description": "Execute OpenFOAM solver via Docker"
+    },
+    {
+      "name": "cfd_read_results",
+      "description": "Parse simulation results (forces, residuals)"
+    },
+    {
+      "name": "cfd_parametric_study",
+      "description": "Run parameter sweep for design optimization"
+    },
+    {
+      "name": "cfd_nl2foam",
+      "description": "Natural language to OpenFOAM config via LLM"
+    },
+    {
+      "name": "cfd_sample_for_pinns",
+      "description": "Export point clouds for PINN training"
+    },
+    {
+      "name": "cfd_fluidx3d_status",
+      "description": "Check FluidX3D and compiler availability"
+    },
+    {
+      "name": "cfd_fluidx3d_setup",
+      "description": "Generate FluidX3D C++ setup for GPU CFD"
+    },
+    {
+      "name": "cfd_fluidx3d_compile",
+      "description": "Compile FluidX3D setup to GPU binary"
+    },
+    {
+      "name": "cfd_fluidx3d_run",
+      "description": "Execute FluidX3D simulation on GPU"
+    },
+    {
+      "name": "cfd_fluidx3d_results",
+      "description": "Parse FluidX3D forces and MLUPS throughput"
+    },
+    {
+      "name": "cfd_fluidx3d_explain",
+      "description": "Explain flow physics (Reynolds, regime)"
+    },
+    {
+      "name": "cfd_fluidx3d_prebuilt",
+      "description": "Auto-detect pre-compiled FluidX3D runner"
+    },
+    {
+      "name": "freecad_model",
+      "description": "Parametric FreeCAD modeling (sketch, techdraw, assembly, generative, fillet, inspect)"
+    },
+    {
+      "name": "freecad_design_loop",
+      "description": "Agentic CAD design loop via ctx.sample() (SEP-2577)"
+    },
+    {
+      "name": "cad_depot",
+      "description": "List persistent CAD depot files with metadata"
+    },
+    {
+      "name": "cad_create",
+      "description": "Create a box/cylinder/sphere/cone and save the STL to the depot"
+    },
+    {
+      "name": "mesh_to_solid",
+      "description": "Repair or convert a mesh into a solid"
+    },
+    {
+      "name": "cfd_fluidx3d_export_for_render",
+      "description": "Export FluidX3D results for rendering (VTK/OBJ/PNG/WebM)"
+    },
+    {
+      "name": "freecad_bridge",
+      "description": "FreeCAD TCP bridge control (hands_on/hands_off)"
+    },
+    {
+      "name": "cfd_snappy_mesh",
+      "description": "Generate snappyHexMesh for complex OpenFOAM geometry"
+    },
+    {
+      "name": "cfd_post_process",
+      "description": "Post-process OpenFOAM case (forces, residuals)"
+    },
+    {
+      "name": "cfd_map_loads_to_fem",
+      "description": "Map CFD loads to FEM for FSI analysis"
+    },
+    {
+      "name": "fem_status",
+      "description": "Check CalculiX FEM availability"
+    },
+    {
+      "name": "fem_create_analysis",
+      "description": "Create FEM analysis case"
+    },
+    {
+      "name": "fem_set_material",
+      "description": "Set FEM material properties"
+    },
+    {
+      "name": "fem_set_constraint",
+      "description": "Set FEM constraints"
+    },
+    {
+      "name": "fem_mesh",
+      "description": "Generate FEM mesh via Gmsh"
+    },
+    {
+      "name": "fem_run",
+      "description": "Run CalculiX FEM solver"
+    },
+    {
+      "name": "fem_read_results",
+      "description": "Read FEM stress/displacement results"
+    },
+    {
+      "name": "run_fem_analysis",
+      "description": "End-to-end FEM analysis (create+mesh+run+read)"
+    },
+    {
+      "name": "cfd_fluidx3d_render",
+      "description": "Render FluidX3D flow as WebM/PNG"
+    },
+    {
+      "name": "cfd_fluidx3d_parametric_sweep",
+      "description": "FluidX3D parameter sweep for design optimization"
+    },
+    {
+      "name": "cfd_fluidx3d_train_surrogate",
+      "description": "Train neural surrogate on FluidX3D dataset"
+    },
+    {
+      "name": "cfd_surrogate_predict",
+      "description": "Predict flow with trained surrogate"
+    },
+    {
+      "name": "marketplace_search",
+      "description": "Search Printables, Thingiverse, GrabCAD"
+    },
+    {
+      "name": "marketplace_download",
+      "description": "Download model from marketplace"
+    },
+    {
+      "name": "marketplace_categories",
+      "description": "List marketplace categories"
+    },
+    {
+      "name": "show_marketplace_card",
+      "description": "Show marketplace search as Prefab card"
+    }
   ]
 }
