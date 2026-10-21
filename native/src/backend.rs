@@ -14,7 +14,9 @@ use tauri::{AppHandle, Emitter, Manager};
 pub struct BackendProcess(pub Mutex<Option<Child>>);
 
 const BACKEND_NAME: &str = "freecad-mcp-backend.exe";
-const BACKEND_PORT: u16 = 10944;
+// Operator port: dedicated to the installed app so it can run side-by-side with
+// the dev stack (10944). Claimed via fleet-gate/claim_ports.py as freecad-mcp-native.
+const BACKEND_PORT: u16 = 11249;
 const BACKEND_TAG: &str = "freecad-mcp-backend-x86_64-pc-windows-msvc.exe";
 const ENV_PORT: &str = "MCP_PORT";
 const ENV_HOST: &str = "MCP_HOST";
@@ -130,7 +132,10 @@ fn free_port(port: u16) -> bool {
     // Fast but real: kill stale backend/native, check port up to 10s, then return true anyway so setup doesn't block forever
     #[cfg(windows)]
     {
-        let img_kill = "Stop-Process -Name 'freecad-mcp-backend' -Force -ErrorAction SilentlyContinue; Stop-Process -Name 'freecad-mcp-native' -Force -ErrorAction SilentlyContinue; taskkill /F /IM freecad-mcp-backend.exe /T 2>$null; taskkill /F /IM freecad-mcp-native.exe /T 2>$null";
+        // Kill stale BACKEND instances only. Never kill freecad-mcp-native here:
+        // this code runs inside that process at startup, and taskkill on it made
+        // the installed app exit with -1 immediately after the window appeared.
+        let img_kill = "Stop-Process -Name 'freecad-mcp-backend' -Force -ErrorAction SilentlyContinue; taskkill /F /IM freecad-mcp-backend.exe /T 2>$null";
         let _ = Command::new("powershell.exe").args(["-NoProfile", "-Command", img_kill]).stdout(Stdio::null()).stderr(Stdio::null()).status();
         let port_kill = format!("Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | ForEach-Object {{ taskkill /F /PID $_.OwningProcess /T 2>$null }}");
         let _ = Command::new("powershell.exe").args(["-NoProfile", "-Command", &port_kill]).stdout(Stdio::null()).stderr(Stdio::null()).status();

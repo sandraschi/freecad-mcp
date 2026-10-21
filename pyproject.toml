@@ -1,6 +1,6 @@
 [project]
 name = "freecad-mcp"
-version = "0.6.0"
+version = "0.6.1"
 description = "FreeCAD 3D CAD automation: headless documents and export, plus CFD via FluidX3D/OpenFOAM"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -51,10 +51,15 @@ ignore = ["S101", "S106", "RUF012", "S603", "S607", "S324", "E402"]
 "src/freecad_mcp/fc_bridge.py" = ["S110", "T20"]
 "src/freecad_mcp/server.py" = ["S603", "S110", "S607"]
 "scripts/**" = ["E501", "S110", "S310", "T20"]
+# PyInstaller specs reference globals injected by the build runtime.
+"*.spec" = ["F821"]
 
 [dependency-groups]
 dev = [
+    "pillow>=13.0.0",
     "pyinstaller>=6.21.0",
     "pyright>=1.1.390",
+    "pytesseract>=0.3.13",
     "pytest-cov>=7.1.0",
+    "pywinauto>=0.6.9",
 ]

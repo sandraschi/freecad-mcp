@@ -20,6 +20,8 @@ import tempfile
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version_str
 from pathlib import Path
 from typing import Annotated
 
@@ -87,6 +89,25 @@ os.makedirs(DEPOT_DIR, exist_ok=True)
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
 _state: dict = {}
+_bg_tasks: set[asyncio.Task] = set()
+_REQUEST_TOTAL = 0
+_REQUEST_LOG: collections.deque = collections.deque(maxlen=500)
+
+
+def _pkg_version() -> str:
+    try:
+        return _pkg_version_str("freecad-mcp")
+    except PackageNotFoundError:
+        return "0.6.1"
+
+
+def _spawn_bg(coro) -> None:
+    """Run a coroutine in the background and keep a reference (RUF006)."""
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
+
 _req_id = 0
 _bridge_proc: subprocess.Popen | None = None
 _bridge_reader: asyncio.StreamReader | None = None
@@ -153,9 +174,18 @@ async def _bridge_connect():
             timeout=10,
         )
         _bridge_reader, _bridge_writer = r, w
-        # Verify with ping
+        # Verify with ping: a stale listener can accept the TCP connection and
+        # never answer, so "port open" alone must not count as connected.
         resp = await _bridge_send("ping", timeout=5)
-        return resp.get("data") == "pong"
+        if resp.get("data") == "pong":
+            return True
+        logger.warning(
+            "Bridge port %s is open but ping failed (%r) - the bridge thread inside FreeCAD may be hung",
+            BRIDGE_PORT,
+            resp.get("error") or resp,
+        )
+        _bridge_reader = _bridge_writer = None
+        return False
     except Exception as e:
         logger.warning("Bridge connect failed: %s", e)
         _bridge_reader = _bridge_writer = None
@@ -163,14 +193,17 @@ async def _bridge_connect():
 
 
 def _freecad_already_running() -> bool:
-    """Check if any FreeCAD GUI process is already running."""
-    import subprocess
+    """Check if any FreeCAD GUI process is already running.
 
+    tasklist prints the image name lower-case ("freecad.exe"), so the previous
+    case-sensitive comparison always returned False and every call launched a
+    second FreeCAD window instead of connecting to the running one.
+    """
     try:
         r = subprocess.run(
             ["tasklist.exe", "/FI", "IMAGENAME eq FreeCAD.exe", "/NH"], capture_output=True, text=True, timeout=5
         )
-        return "FreeCAD.exe" in r.stdout
+        return "freecad.exe" in (r.stdout or "").lower()
     except Exception:
         logger.debug("tasklist check failed", exc_info=True)
         return False
@@ -180,7 +213,12 @@ def _start_freecad_bridge():
     """Launch FreeCAD GUI with the bridge script - only if no FreeCAD is already running."""
     global _bridge_proc
     if _freecad_already_running():
-        logger.info("FreeCAD GUI already running - skipping bridge launch (will attempt to connect)")
+        _state["gui_running"] = True
+        logger.info(
+            "FreeCAD GUI already running - not launching another instance. "
+            "If the MCP bridge is not listening on port %s, run fc_bridge.py inside the open FreeCAD window.",
+            BRIDGE_PORT,
+        )
         return False
     if not os.path.isfile(FREECAD_PATH):
         logger.warning("FreeCAD not found at %s", FREECAD_PATH)
@@ -224,32 +262,28 @@ def _init_freecad():
         logger.warning("FreeCAD not found at %s", FREECAD_PATH)
         return
 
-    try:
-        r = subprocess.run([FREECAD_PATH, "--version"], capture_output=True, text=True, timeout=10, check=False)
-        ver = r.stdout.strip() or r.stderr.strip()
-        if ver:
-            _state["freecad_version"] = ver
-    except Exception as e:
-        logger.warning("FreeCAD version check failed: %s", e)
-
-    # Try FreeCADCmd subprocess fallback
-    if _state.get("freecad_version"):
-        _state["freecad_ok"] = True
-        _state["bridge_mode"] = "subprocess"
-        logger.info("FreeCAD detected: %s (subprocess mode)", _state["freecad_version"])
+    # Probe FreeCADCmd, never the GUI exe: `FreeCAD.exe --version` opens a GUI
+    # window and hangs, which is how repeated probes stacked up FreeCAD instances.
+    cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
+    if cmd_path != FREECAD_PATH and os.path.isfile(cmd_path):
+        try:
+            r = subprocess.run([cmd_path, "--version"], capture_output=True, text=True, timeout=10, check=False)
+            ver = r.stdout.strip() or r.stderr.strip()
+            if ver:
+                _state["freecad_version"] = ver
+                _state["freecad_ok"] = True
+                _state["bridge_mode"] = "subprocess"
+                logger.info("FreeCADCmd detected: %s (subprocess mode)", ver)
+        except Exception:
+            logger.debug("FreeCADCmd version check failed", exc_info=True)
     else:
-        cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
-        if cmd_path != FREECAD_PATH and os.path.isfile(cmd_path):
-            try:
-                r = subprocess.run([cmd_path, "--version"], capture_output=True, text=True, timeout=10, check=False)
-                ver = r.stdout.strip() or r.stderr.strip()
-                if ver:
-                    _state["freecad_version"] = ver
-                    _state["freecad_ok"] = True
-                    _state["bridge_mode"] = "subprocess"
-                    logger.info("FreeCADCmd detected: %s (subprocess mode)", ver)
-            except Exception:
-                logger.debug("FreeCADCmd version check failed", exc_info=True)
+        logger.info("FreeCADCmd not found next to %s; skipping version probe (GUI exe has no --version)", FREECAD_PATH)
+
+    if _freecad_already_running():
+        _state["gui_running"] = True
+        if not _state.get("freecad_ok"):
+            _state["freecad_version"] = "GUI running (bridge not loaded)"
+        logger.info("FreeCAD GUI process already running (bridge not assumed)")
 
 
 _QUIET_ACCESS_PATHS = ("/api/v1/status", "/api/v1/health", "/api/docs", "/openapi.json")
@@ -292,70 +326,59 @@ async def lifespan(app: FastAPI):
     except (TimeoutError, ConnectionRefusedError, OSError):
         pass
 
-    if not bridge_already_running and not skip_auto_launch:
-        if not os.path.isfile(FREECAD_PATH):
-            logger.warning("FreeCAD not found at %s", FREECAD_PATH)
-        else:
-            try:
-                r = await asyncio.to_thread(
-                    subprocess.run,
-                    [FREECAD_PATH, "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    check=False,
-                )
-                _state["freecad_version"] = r.stdout.strip() or r.stderr.strip() or "unknown"
-            except Exception as e:
-                _state["freecad_version"] = f"error: {e}"
+    if bridge_already_running:
+        # Port is open; verify it in the background so a hung bridge cannot delay
+        # HTTP startup. `gui_running` is already set by _init_freecad.
+        _state["freecad_version"] = "GUI running (bridge not responding)"
 
-            # Start bridge
-            if _start_freecad_bridge():
-                for attempt in range(5):
+        async def _connect_existing() -> None:
+            if await _bridge_connect():
+                _state["freecad_ok"] = True
+                _state["bridge_mode"] = "tcp"
+                _state["freecad_version"] = "bridge_running"
+                logger.info("Connected to existing FreeCAD bridge")
+                return
+            _state["bridge_mode"] = "subprocess" if _state.get("freecad_ok") else "none"
+            logger.warning(
+                "FreeCAD is running and port %s is open, but the bridge did not answer. "
+                "Restart the bridge inside FreeCAD (or restart FreeCAD, then retry) - "
+                "the server will not launch a second FreeCAD instance.",
+                BRIDGE_PORT,
+            )
+
+        _spawn_bg(_connect_existing())
+    elif skip_auto_launch:
+        _state["bridge_mode"] = "subprocess" if _state.get("freecad_ok") else "none"
+        logger.info("FREECAD_SKIP_AUTO_LAUNCH set - not starting FreeCAD GUI bridge")
+    elif _freecad_already_running():
+        # Never launch a second FreeCAD just because the bridge is missing.
+        _state["gui_running"] = True
+        _state["bridge_mode"] = "subprocess" if _state.get("freecad_ok") else "none"
+        logger.warning(
+            "FreeCAD GUI is already running but the MCP bridge is not listening on port %s. "
+            "Not launching another instance - run fc_bridge.py inside that FreeCAD window, "
+            "or close FreeCAD and restart the server to auto-launch the bridge.",
+            BRIDGE_PORT,
+        )
+    elif not os.path.isfile(FREECAD_PATH):
+        logger.warning("FreeCAD not found at %s", FREECAD_PATH)
+    else:
+        # No FreeCAD running: launch exactly one GUI with the bridge, then wait
+        # for it in the background so HTTP binds immediately (FreeCAD takes ~15s).
+        if _start_freecad_bridge():
+
+            async def _await_bridge() -> None:
+                for attempt in range(15):
                     await asyncio.sleep(2)
                     if await _bridge_connect():
                         _state["freecad_ok"] = True
                         _state["bridge_mode"] = "tcp"
                         logger.info("FreeCAD bridge connected")
-                        break
-                    logger.info("Waiting for bridge (attempt %d/5)...", attempt + 1)
+                        return
+                    logger.info("Waiting for bridge (attempt %d/15)...", attempt + 1)
+                logger.warning("FreeCAD bridge did not become ready in 30s; staying in subprocess mode")
 
-            if not _state.get("freecad_ok"):
-                # Subprocess fallback - FreeCADCmd works even if bridge/version hangs
-                try:
-                    cmd_path = FREECAD_PATH.replace("FreeCAD.exe", "FreeCADCmd.exe")
-                    r = await asyncio.to_thread(
-                        subprocess.run,
-                        [cmd_path, "--version"],
-                        capture_output=True,
-                        text=True,
-                        timeout=10,
-                        check=False,
-                    )
-                    ver = r.stdout.strip() or r.stderr.strip()
-                    if ver:
-                        _state["freecad_version"] = ver
-                        _state["freecad_ok"] = True
-                except Exception:
-                    pass
-                _state["bridge_mode"] = "subprocess"
-                logger.info("Falling back to subprocess mode (FreeCADCmd)")
-    elif not bridge_already_running and skip_auto_launch:
-        _state["bridge_mode"] = "subprocess"
-        logger.info("FREECAD_SKIP_AUTO_LAUNCH set - not starting FreeCAD GUI bridge")
-    else:
-        # Bridge already running, just connect
-        _state["freecad_version"] = "bridge_running"
-        for attempt in range(5):
-            await asyncio.sleep(1)
-            if await _bridge_connect():
-                _state["freecad_ok"] = True
-                _state["bridge_mode"] = "tcp"
-                logger.info("Connected to existing FreeCAD bridge")
-                break
-        if not _state.get("freecad_ok"):
-            _state["bridge_mode"] = "tcp"  # still tcp, just not connected yet
-            logger.warning("Existing bridge found but could not connect")
+            _spawn_bg(_await_bridge())
 
     _state["work_dir"] = WORK_DIR
     yield
@@ -561,7 +584,8 @@ async def freecad_status() -> dict:
     any conversion or geometry tools.
 
     ## Return Format
-    {"success": bool, "freecad_ok": bool, "version": str, "work_dir": str}
+    {"success": bool, "freecad_ok": bool, "version": str, "gui_running": bool,
+     "bridge_loaded": bool, "work_dir": str}
 
     ## Examples
     await freecad_status()
@@ -570,6 +594,8 @@ async def freecad_status() -> dict:
         "success": _state.get("freecad_ok", False),
         "freecad_ok": _state.get("freecad_ok", False),
         "version": _state.get("freecad_version"),
+        "gui_running": _state.get("gui_running", False),
+        "bridge_loaded": _state.get("bridge_mode") == "tcp",
         "work_dir": WORK_DIR,
     }
 
@@ -974,7 +1000,7 @@ async def _sampling_tool(
     }
 
 
-@mcp.tool(version="0.5.0")
+@mcp.tool(version="0.6.1")
 async def freecad_design_loop(
     goal: Annotated[
         str, Field(description="Engineering design goal, e.g. 'design a lightweight bracket for 500N load'")
@@ -1078,7 +1104,7 @@ Strategy:
         }
 
 
-mcp.tool(version="0.3.0")(_sampling_tool)
+mcp.tool(name="cad_sampling", version="0.6.1")(_sampling_tool)
 
 
 @mcp.prompt()
@@ -1195,6 +1221,8 @@ async def get_status():
         "service": "freecad-mcp",
         "freecad_ok": _state.get("freecad_ok", False),
         "freecad_version": _state.get("freecad_version"),
+        "gui_running": _state.get("gui_running", False),
+        "bridge_loaded": _state.get("bridge_mode") == "tcp",
         "work_dir": WORK_DIR,
     }
 
@@ -2104,14 +2132,15 @@ async def show_marketplace_card(
 @app.get("/api/v1/diagnostics")
 async def diagnostics():
     """Return server diagnostics for CUA smoke test."""
-    tool_count = len(mcp._tool_manager._tools) if hasattr(mcp, "_tool_manager") else 0
+    tools = await mcp.list_tools()
+    names = [getattr(tool, "name", str(tool)) for tool in tools]
     return {
         "status": "ok",
         "server": "freecad-mcp",
-        "version": "0.5.0",
+        "version": _pkg_version(),
         "uptime_seconds": round(time.time() - _START_TIME, 1),
-        "tool_count": tool_count,
-        "tools": [{"name": name} for name in (mcp._tool_manager._tools if hasattr(mcp, "_tool_manager") else [])],
+        "tool_count": len(names),
+        "tools": [{"name": name} for name in names],
         "system": {"windows": True},
         "errors": [],
     }
@@ -2120,16 +2149,40 @@ async def diagnostics():
 @app.get("/api/v1/capabilities")
 async def capabilities():
     """List server capabilities."""
-    tool_count = len(mcp._tool_manager._tools) if hasattr(mcp, "_tool_manager") else 0
+    tools = await mcp.list_tools()
     return {
         "service": "freecad-mcp",
-        "version": "0.5.0",
+        "version": _pkg_version(),
         "freecad_ok": _state.get("freecad_ok", False),
         "freecad_version": _state.get("freecad_version"),
         "bridge_mode": _state.get("bridge_mode", "none"),
-        "tool_count": tool_count,
+        "tool_count": len(tools),
         "features": ["cad", "bim", "cfd", "fem", "slicing", "marketplace", "fluidx3d", "sampling", "prefab"],
     }
+
+
+@app.middleware("http")
+async def _count_requests(request, call_next):
+    """Count non-probe requests so the CUA receipt phase can prove webview traffic."""
+    global _REQUEST_TOTAL
+    response = await call_next(request)
+    path = request.url.path
+    if path not in (
+        "/api/v1/request-log",
+        "/api/v1/health",
+        "/api/v1/status",
+        "/api/v1/capabilities",
+        "/api/v1/diagnostics",
+    ):
+        _REQUEST_TOTAL += 1
+        _REQUEST_LOG.append({"method": request.method, "path": path, "status": response.status_code})
+    return response
+
+
+@app.get("/api/v1/request-log")
+async def request_log():
+    """Request receipt log for CUA backend-receipt proof."""
+    return {"count": _REQUEST_TOTAL, "requests": list(_REQUEST_LOG)}
 
 
 @app.post("/api/v1/shutdown")

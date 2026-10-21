@@ -26,7 +26,7 @@ foreach ($dir in $frontendDirs) {
             throw "TypeScript compilation failed - fix all errors before building NSIS installer"
         }
 
-        $env:VITE_API_BASE = "http://127.0.0.1:10944"
+        $env:VITE_API_BASE = "http://127.0.0.1:11249"
         npm run build
         $env:VITE_API_BASE = $null
         if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
