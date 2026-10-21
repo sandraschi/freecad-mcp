@@ -79,3 +79,23 @@ pipeline (`mcp-central-docs/scripts/fleet-mcpb-pack.ps1`). That pipeline wipes
 and recopies `src/` to `mcpb/src/` before packing; never edit `mcpb/src/` by hand.
 Manifest variables may only use `${__dirname}`, `${HOME}`, `${user_config.*}` etc.
 `${PWD}` is not expanded by Claude Desktop.
+
+## Release
+
+Class A repo (webapp + native): every published release must carry both
+`freecad-mcp-{version}.mcpb` and `freecad-mcp-{version}-setup.exe`.
+
+1. Align the version in `pyproject.toml`, `mcpb/manifest.json`,
+   `native/tauri.conf.json`, `native/package.json` and `glama.json`.
+2. `just build-native` - sidecar (PyInstaller) then Tauri NSIS. The build bakes
+   `VITE_API_BASE=http://127.0.0.1:11249` and the Rust operator port is 11249,
+   so the installed app never fights the dev stack on 10944.
+3. `just mcpb-pack` - import isolation, AST, pollution and launch checks.
+4. `just cua-nsis-test` - installs the real installer, walks the UI, verifies the
+   backend receipts, writes `cua-reports/cua-result.json` (requires pywinauto).
+5. `pwsh D:\Dev\repos\mcp-central-docs\scripts\check-release-gate.ps1 -Repo . -Local -Version {version}`
+6. Tag at HEAD and publish both assets in one command:
+   `gh release create v{version} dist/freecad-mcp-{version}.mcpb dist/freecad-mcp-{version}-setup.exe`
+
+The CUA result is bound to the installer SHA-256: any rebuild invalidates it.
+The installer is unsigned; README/INSTALL must say so.

@@ -1,6 +1,6 @@
 # MCP Tools
 
-All **59** tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/model_tools.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, `src/freecad_mcp/tools/fem.py`, `src/freecad_mcp/tools/depot.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 11 core CAD/bridge/slicing (incl. the `freecad_model` portmanteau), 2 depot, 9 BIM/Arch, 13 CFD/OpenFOAM (incl. `snappyHexMesh`, $C_d/C_l$ post-proc, FSI load mapping), 12 FluidX3D GPU, 8 FEM/structural (CalculiX), 4 marketplace (3 tools + 1 Prefab card).
+All **60** tools registered via `@mcp.tool()` in `src/freecad_mcp/server.py`, `src/freecad_mcp/tools/model_tools.py`, `src/freecad_mcp/tools/bim.py`, `src/freecad_mcp/tools/cfd.py`, `src/freecad_mcp/tools/fem.py`, `src/freecad_mcp/tools/depot.py`, and `src/freecad_mcp/tools/fluidx3d.py`. 12 core CAD/bridge/slicing/sampling (incl. the `freecad_model` portmanteau and `cad_sampling`), 2 depot, 9 BIM/Arch, 13 CFD/OpenFOAM (incl. `snappyHexMesh`, $C_d/C_l$ post-proc, FSI load mapping), 12 FluidX3D GPU, 8 FEM/structural (CalculiX), 4 marketplace (3 tools + 1 Prefab card).
 
 ## Tool Manifest
 

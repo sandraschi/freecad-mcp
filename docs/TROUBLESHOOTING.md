@@ -19,12 +19,33 @@ Fix: set `FREECAD_PATH` to `FreeCADCmd.exe` (headless) or `FreeCAD.exe` in
 Hands-In mode needs the in-FreeCAD bridge:
 
 1. Open the FreeCAD GUI.
-2. Call `freecad_bridge` with the start operation (or run the bridge macro).
-3. `freecad_status` should report `bridge_mode: tcp` and port 11968 listening.
+2. Start the bridge in that window (run `fc_bridge.py` in FreeCAD's Python
+   console, or the bridge macro).
+3. `freecad_status` should report `bridge_mode: tcp`, `bridge_loaded: true` and
+   `gui_running: true`, with port 11968 listening.
 
-If the port is occupied by a stale bridge, stop the FreeCAD process, then
-restart the bridge. Do not kill the bridge child from a shell while FreeCAD is
-still running.
+**The server never launches a second FreeCAD when one is already running.** If
+FreeCAD is open without the bridge, `freecad_status` reports
+`"GUI running (bridge not loaded)"` and the log tells you to start the bridge in
+that window. This is deliberate: auto-launching used to spawn a new FreeCAD
+window on every call.
+
+## Status says "GUI running (bridge not responding)"
+
+The bridge port (11968) is open but does not answer `ping`. The bridge thread
+inside FreeCAD is hung (this can happen after a long solver run or a crashed
+bridge script). The server refuses to launch another instance.
+
+Fix: save your model, restart FreeCAD, then start the bridge again (or restart
+the server while FreeCAD is closed so it can launch one bridged instance).
+`freecad_status` will report `bridge_loaded: false` until the ping succeeds.
+
+## Installed app closes immediately (exit code -1)
+
+A corrupted WebView2 profile can make the Tauri window fail at startup. Close the
+app, rename `%LOCALAPPDATA%\ai.fleet.freecad-mcp\EBWebView` (e.g. add `.old`),
+and launch again. Tauri recreates the profile on next start. This is a WebView2
+profile reset, not a reinstall.
 
 ## Dashboard says "Connecting..." forever
 

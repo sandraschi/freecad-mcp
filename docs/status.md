@@ -6,18 +6,18 @@
 
 ## Project Status
 
-Production-ready MCP server exposing FreeCAD (mechanical CAD + BIM/architecture) and CFD pipelines (OpenFOAM + FluidX3D GPU) as AI-accessible tools. **59 MCP tools** across 7 domains. Dual-transport (stdio + HTTP/SSE). REST API and Vite web dashboard.
+Production-ready MCP server exposing FreeCAD (mechanical CAD + BIM/architecture) and CFD pipelines (OpenFOAM + FluidX3D GPU) as AI-accessible tools. **60 MCP tools** across 7 domains. Dual-transport (stdio + HTTP/SSE). REST API and Vite web dashboard.
 
 ### Current version
 - **Repo version**: 0.6.0 (pyproject.toml, glama, mcpb manifest)
-- **Tool count**: 59 registered MCP tools (verified from source, 2026-10-21)
+- **Tool count**: 60 registered MCP tools (verified from `diagnostics`, 2026-10-22)
 - **Tests**: 124 passing, coverage 18.9% (floor 15%)
 
 ### Domains
 
 | Domain | Tools | Status |
 |--------|-------|--------|
-| Mechanical CAD / bridge / slicing | 11 | Stable |
+| Mechanical CAD / bridge / slicing / sampling | 12 | Stable |
 | CAD depot | 2 | Stable |
 | Architecture/BIM | 9 | Stable |
 | CFD / OpenFOAM (CPU) | 13 | Stable |

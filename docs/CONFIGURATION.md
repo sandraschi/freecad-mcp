@@ -1,6 +1,6 @@
 # Configuration — freecad-mcp
 
-Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **11968** FreeCAD bridge TCP (moved from 10946 — that port belongs to aiwatcher-mcp). Registry: `mcp-central-docs/operations/WEBAPP_PORTS.md`.
+Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **11968** FreeCAD bridge TCP (moved from 10946 — that port belongs to aiwatcher-mcp). The installed Tauri app uses its own operator port **11249** (pair 11249/11249 claimed as `freecad-mcp-native`) so it can run side-by-side with the dev stack. Registry: `mcp-central-docs/operations/WEBAPP_PORTS.md`.
 
 ## Environment
 
@@ -10,7 +10,7 @@ Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **119
 | `FREECAD_MCP_WORK_DIR` | `%TEMP%\freecad_mcp_work` | uploads/output/fluidx3d_cases |
 | `FREECAD_MCP_DEPOT` | `%LOCALAPPDATA%\freecad-mcp\depot` | Persistent CAD depot |
 | `FC_BRIDGE_PORT` | `11968` | TCP bridge |
-| `MCP_PORT`/`PORT` | `10944` | Backend HTTP port (Tauri sets `MCP_PORT`) |
+| `MCP_PORT`/`PORT` | `10944` dev / `11249` installed | Backend HTTP port (Tauri sets `MCP_PORT=11249`) |
 | `MCP_HOST` | `127.0.0.1` | Bind host (Tauri) |
 | `FREECAD_TAURI` | `1` in Tauri | Forces HTTP, isatty shim (Gate J) |
 | `PRUSA_SLICER_PATH` | `PrusaSlicer-2.8.1\prusa-slicer.exe` | Slicer binary |
@@ -22,7 +22,7 @@ Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **119
 
 ## Frontend
 
-`webapp/` Vite 5.4 + React 19 + Tailwind + Zustand (`store/llm.ts`), `VITE_API_BASE=http://127.0.0.1:10944` for Tauri prod, proxy `/api`→10944 in dev.
+`webapp/` Vite 5 + React 19 + Tailwind + Zustand (`store/llm.ts`). Dev uses same-origin `/api` (Vite proxy → 10944). The Tauri build sets `VITE_API_BASE=http://127.0.0.1:11249` in `native/build.ps1`; the runtime fallback in `lib/api.ts` matches.
 
 ## Fleet Start
 
@@ -30,4 +30,4 @@ Ports: **10944** backend (FastAPI+FastMCP SSE), **10945** frontend (Vite), **119
 
 ## MCP Tools
 
-50+ tools via `freecad_model` portmanteau + `cfd_*`, `fem_*`, `fluidx3d_*`, `bim_*`, `marketplace_*`. See `docs/mcp-tools.md` and `llms-full.txt`.
+59 tools via `freecad_model` portmanteau + `cfd_*`, `fem_*`, `fluidx3d_*`, `bim_*`, `marketplace_*`, depot and bridge tools. See `docs/mcp-tools.md` and `llms-full.txt`.

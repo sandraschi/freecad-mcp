@@ -1,6 +1,6 @@
 # Tools
 
-The server exposes 59 MCP tools. `llms-full.txt` is the generated reference with
+The server exposes 60 MCP tools. `llms-full.txt` is the generated reference with
 annotations; this page is the short map.
 
 ## Naming
@@ -21,6 +21,7 @@ annotations; this page is the short map.
 | `freecad_gui` | Launch the desktop app, optionally opening a file |
 | `freecad_model` | Portmanteau: `create_primitive`, `gear`, `fastener`, `inspect`, `clash_check`, `techdraw`, `sketch`, `assembly`, `inspect_assembly`, `generative`, `heuristic_fillet`, `fuse`, `cut`, `common`, `mirror`, `extrude`, `fillet`, `transform`, `export`, `toy_car` |
 | `freecad_design_loop` | Sampling-assisted iterative design |
+| `cad_sampling` | Host-LLM reasoning about a CAD/FEM/CFD/BIM goal via MCP sampling |
 | `create_shape` | Primitive to STL shortcut |
 | `step_to_stl` | STEP/STP assembly to STL |
 | `model_info` | Object count, solids, volume, bounding box |
