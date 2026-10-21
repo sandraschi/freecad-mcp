@@ -1566,6 +1566,14 @@ except Exception as e:
 
         Creates system/surfaceFeatureExtractDict and system/snappyHexMeshDict for surface snapping,
         feature edge refining, and boundary layer insertion.
+
+        ## Return Format
+        {"success": bool, "case_name": str, "data": {"stl_surface": str, "refinement_level": int,
+        "num_surface_layers": int}, "message": str}
+
+        ## Examples
+        await cfd_snappy_mesh(case_name="pipe", stl_file="pipe.stl", refinement_level=3)
+        await cfd_snappy_mesh(case_name="wing", stl_file="wing.stl", feature_angle_deg=30, num_surface_layers=0)
         """
         case_dir = os.path.join(CFD_CASE_DIR, case_name)
         system_dir = os.path.join(case_dir, "system")
@@ -1695,6 +1703,17 @@ meshQualityControls
 
         Parses solved OpenFOAM postProcessing/forces and pressure field logs to compute net drag force,
         drag coefficient (Cd), lift coefficient (Cl), inlet/outlet pressure drop, and loss coefficient.
+
+        ## Return Format
+        {"success": bool, "case_name": str, "data": {"drag_force_n": float, "lift_force_n": float,
+        "drag_coefficient_cd": float, "lift_coefficient_cl": float, "pressure_drop_pa": float|null,
+        "loss_coefficient_zeta": float|null, "data_sources": {...}}, "message": str}
+        Refuses (success=False) when forces.dat is missing or unparsable; pressure_drop_pa is
+        null unless a postProcessing/pressure_drop.dat artefact exists.
+
+        ## Examples
+        await cfd_post_process(case_name="pipe", frontal_area_m2=0.08, force_patches=["wall"])
+        await cfd_post_process(case_name="wing", inlet_patch="inlet", outlet_patch="outlet")
         """
         case_dir = os.path.join(CFD_CASE_DIR, case_name)
         if not os.path.isdir(case_dir):
@@ -1783,7 +1802,19 @@ meshQualityControls
         youngs_modulus_gpa: Annotated[float, Field(description="Material Young's Modulus in GPa.", ge=1.0)] = 70.0,
         poissons_ratio: Annotated[float, Field(description="Material Poisson's ratio.", ge=0.0, le=0.49)] = 0.33,
     ) -> dict:
-        """Map OpenFOAM surface pressure loads onto FreeCAD B-Rep geometry for CalculiX FEM stress analysis."""
+        """Map OpenFOAM surface pressure loads onto FreeCAD B-Rep geometry for CalculiX FEM stress analysis.
+
+        Reads the case's surface pressure field and writes a CalculiX INP with the load
+        applied to the named patch on the supplied STEP solid.
+
+        ## Return Format
+        {"success": bool, "case_name": str, "data": {"inp_file": str, "patch_name": str,
+        "estimated_stress_mpa": float, "youngs_modulus_gpa": float}, "message": str}
+
+        ## Examples
+        await cfd_map_loads_to_fem(case_name="pipe", step_file="pipe.step", patch_name="wall")
+        await cfd_map_loads_to_fem(case_name="wing", step_file="wing.step", youngs_modulus_gpa=70.0)
+        """
         case_dir = os.path.join(CFD_CASE_DIR, case_name)
         step_path = os.path.join(case_dir, step_file)
         if not os.path.isfile(step_path):

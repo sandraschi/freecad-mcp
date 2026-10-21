@@ -736,24 +736,48 @@ async def create_shape(
         w = p.get("width", 10)
         h = p.get("height", 10)
         d = p.get("depth", 10)
-        script = f"import Part, Mesh; s = Part.makeBox({w}, {h}, {d}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
+        shape_expr = f"Part.makeBox({w}, {h}, {d})"
     elif shape_type == "cylinder":
         r = p.get("radius", 5)
         h = p.get("height", 20)
-        script = f"import Part, Mesh; s = Part.makeCylinder({r}, {h}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
+        shape_expr = f"Part.makeCylinder({r}, {h})"
     elif shape_type == "sphere":
         r = p.get("radius", 10)
-        script = f"import Part, Mesh; s = Part.makeSphere({r}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
+        shape_expr = f"Part.makeSphere({r})"
     elif shape_type == "cone":
         r = p.get("radius", 5)
         h = p.get("height", 15)
-        script = f"import Part, Mesh; s = Part.makeCone({r}, 0, {h}); m = Mesh.Mesh(s); m.write(r'{stl_path}')"
+        shape_expr = f"Part.makeCone({r}, 0, {h})"
     else:
         return {"success": False, "error": f"Unknown shape: {shape_type}. Use: box, cylinder, sphere, cone."}
 
-    script += f"\nimport os; print(os.path.getsize(r'{stl_path}'))"
-    out, err, code = await _run_freecad(script, timeout=30)
-    return _build_result("create_shape", out, err, code, extra={"output": output_name})
+    # Mesh.Mesh(Part.Solid) raises "Cannot create a mesh out of a 'Part.Solid'"
+    # in FreeCAD 1.x. Exporting from a document object is the supported path.
+    script = (
+        "import FreeCAD, Part, Mesh, os\n"
+        'doc = FreeCAD.newDocument("ShapeExport")\n'
+        f"obj = doc.addObject('Part::Feature', 'Shape')\n"
+        f"obj.Shape = {shape_expr}\n"
+        "doc.recompute()\n"
+        f"Mesh.export([obj], r'{stl_path}')\n"
+        "FreeCAD.closeDocument(doc.Name)\n"
+        f"print(os.path.getsize(r'{stl_path}'))\n"
+    )
+    out, err, _code = await _run_freecad(script, timeout=60)
+
+    # FreeCADCmd exits 0 even when the script raised, so verify the artefact.
+    if not os.path.isfile(stl_path):
+        detail = (err or out or "").strip().splitlines()
+        return {
+            "success": False,
+            "error": "STL export failed: " + (detail[-1] if detail else "no output file"),
+            "output": output_name,
+        }
+    return {
+        "success": True,
+        "output": output_name,
+        "data": {"size_kb": round(os.path.getsize(stl_path) / 1024, 1), "shape_type": shape_type},
+    }
 
 
 # Register CAD file depot tools (cad_depot, cad_create) - must be after create_shape definition
@@ -1498,11 +1522,14 @@ async def depot_create(body: dict):
     result = await create_shape(shape_type=shape_type, params=params, output_name=out)
     if not result.get("success"):
         raise HTTPException(400, result.get("error", "Creation failed"))
-    out_name = result.get("output", "")
+    out_name = result.get("output") or out
+    if not out_name:
+        raise HTTPException(500, "Shape created but produced no output filename")
     src = os.path.join(OUTPUT_DIR, out_name)
     dst = os.path.join(DEPOT_DIR, out_name)
-    if os.path.isfile(src):
-        await asyncio.to_thread(shutil.copy2, src, dst)
+    if not os.path.isfile(src):
+        raise HTTPException(500, f"Shape created but STL is missing: {out_name}")
+    await asyncio.to_thread(shutil.copy2, src, dst)
     _depot_write_meta(
         out_name,
         {
@@ -1512,7 +1539,11 @@ async def depot_create(body: dict):
             "shape_type": shape_type,
         },
     )
-    return {"success": True, "filename": out_name, "data": result.get("data")}
+    return {
+        "success": True,
+        "filename": out_name,
+        "data": {**(result.get("data") or {}), "size_kb": round(os.path.getsize(dst) / 1024, 1)},
+    }
 
 
 @app.post("/api/v1/depot/upload")

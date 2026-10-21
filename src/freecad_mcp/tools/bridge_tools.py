@@ -75,6 +75,12 @@ def register_bridge_tools(
         - execute_script: run bounded Python in live document context
         - new_document: create empty document in live GUI
 
+        ## Return Format
+        {"success": bool, "bridge_mode": "tcp"|"subprocess"|"none", "effective_mode": str, ...}
+        Operation-specific keys: list_objects -> {"objects": [...]}, screenshot_view ->
+        {"screenshot_path": str, "image_base64": str|None}, execute_script -> {"data": {...}}.
+        Failures carry {"success": False, "error": str, "recovery": str}.
+
         ## Examples
         await freecad_bridge(operation="status")
         await freecad_bridge(operation="ensure_gui")

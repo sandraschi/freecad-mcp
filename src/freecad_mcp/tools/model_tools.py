@@ -144,6 +144,20 @@ def register_model_tools(
         Supports Hands-In (live GUI bridge) and Hands-Off (FreeCADCmd subprocess).
         Operations: create_primitive, gear, fastener, inspect, clash_check, techdraw, sketch,
         assembly, generative, heuristic_fillet, inspect_assembly, fuse, cut, common, mirror, extrude, fillet, transform, export, toy_car.
+
+        ## Return Format
+        {"success": bool, "operation": str, "effective_mode": "hands_in"|"hands_off",
+        "output": str|null, "data": {...}, "message": str}
+        `output` is the written STL/STEP/FCStd filename when the operation exports geometry;
+        `data` carries operation metrics (volume, mass, part count, clash list, ...).
+        Failures carry {"success": False, "error": str}.
+
+        ## Examples
+        await freecad_model(operation="create_primitive", primitive_type="box",
+                            params={"width": 20, "height": 20, "depth": 20}, output_name="cube.stl")
+        await freecad_model(operation="gear", gear_type="spur", num_teeth=24, module=1.5)
+        await freecad_model(operation="toy_car", output_name="toy_car.stl")
+        await freecad_model(operation="inspect", document="MCP_Model")
         """
         op = operation.strip().lower()
         mode = resolve_execution_mode(state, execution_mode or None)
