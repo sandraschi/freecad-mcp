@@ -5,7 +5,7 @@
 **Build type:** NSIS (Tauri 2.11.2) + MCPB - release gate PASS
 **Backend:** PyInstaller, 34.26 MB (`dist/freecad-mcp-backend.exe`)
 **Frontend:** Vite 5 production build (`webapp/dist/`)
-**Installer:** 31,179,733 B (29.7 MiB), SHA-256 `e1e7642044ef1b3f9aec4ce04858dbcb719c567e184da8a1479557f9ab1d56af`
+**Installer:** 38,640,478 B (36.85 MiB), SHA-256 `e1e7642044ef1b3f9aec4ce04858dbcb719c567e184da8a1479557f9ab1d56af`
 **MCPB:** 168,747 B (164.8 KiB), manifest validates
 **CUA:** 12/12 phases, `all_passed=true`, `pywinauto=true`, `backend_receipt_proof=true`, installer SHA bound to the artifact above.
 
