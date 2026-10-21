@@ -24,10 +24,11 @@ FreeCAD MCP exposes parametric CAD, BIM/IFC, OpenFOAM+FluidX3D CFD, and CalculiX
 
 ## First-timer setup
 
-1. `just bootstrap` — `uv sync --all-extras` + `pre-commit install` + `webapp npm install` (needs `bun`? repo uses `npm`, `package-lock.json` present).
+1. `just bootstrap` — `uv sync --all-extras` + `pre-commit install` + `webapp npm install` (`package-lock.json` is committed).
 2. `start.ps1` (or `fleet-start.config.ps1` via `mcp-central-docs\scripts\Invoke-FleetWebappStart.ps1`) — clears port 10944/10945 zombies, starts `freecad_mcp.server:app` on 10944, Vite on 10945, opens browser. Or `just serve` for backend only.
-3. Open `http://localhost:10945` — Dashboard hero → KPIs → Chat → Tools. Big red **Onboarding** cue under hero (`data-testid="onboarding-cue"`) is visible until FreeCAD is detected (status dot green). MOCK KPIs (MOCK badge, names like Joe Mocky) show until onboarding succeeds, then clear.
-4. Verify: `curl http://localhost:10944/api/v1/status` → `{"freecad_ok": true}`. `just fleet-e2e-offline` for CI-safe chain smoke.
+3. Open `http://localhost:10945` — Dashboard hero → KPIs. Big red **Onboarding** cue under the hero (`data-testid="onboarding-cue"`) is visible until FreeCAD is detected (status dot green). MOCK KPIs (badge `MOCK`) show until onboarding succeeds, then clear.
+4. **Guided demo: `http://localhost:10945/demo`** — build a cube, build a toy car (parametric is fastest), then save/rename/delete both in the depot. Every step calls the live API; the activity log shows what happened.
+5. Verify: `curl http://localhost:10944/api/v1/status` → `{"freecad_ok": true}`. `just fleet-e2e-offline` for CI-safe chain smoke.
 5. NSIS: `just tauri-build` (needs Rust) → `native/target/release/bundle/nsis/FreeCAD MCP_0.6.0_x64-setup.exe` (30 MB). Install hooks kill `freecad-mcp-backend.exe` pre-install.
 
 ## Pitfalls
@@ -40,7 +41,8 @@ FreeCAD MCP exposes parametric CAD, BIM/IFC, OpenFOAM+FluidX3D CFD, and CalculiX
 
 ## Sanity check
 
-- `curl http://localhost:10944/api/v1/diagnostics` → `tool_count` 50+, `freecad_ok` true.
+- `curl http://localhost:10944/api/v1/diagnostics` → 59 registered tools, `freecad_ok` true.
+- `http://localhost:10945/demo` → cube builds (volume ≈ width×height×depth), car builds with 4 wheels, depot lists both.
 - Webapp Dashboard green dot, Chat page `ollama`/`lm_studio` auto-detect via `GET /api/llm/discover`, Zustand store `webapp/src/store/llm.ts` persists `llm_provider`/`llm_model` in localStorage.
 
 ## Declared doubles

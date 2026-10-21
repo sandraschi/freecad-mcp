@@ -17,7 +17,7 @@ This project exposes FreeCAD as a server that two different kinds of users talk 
 | | Who | How | What for |
 |:---|:---|:---|:---|
 | **MCP server** (port 10944) | **AI agents** — Claude Desktop, Cursor, Continue, any MCP client | Your AI assistant calls tools like `step_to_stl()` or `cfd_run_solver()` directly. You type "convert this STEP file and slice it for my printer" and it does the whole chain. | Hands-free CAD work. Agentic loops: the AI iterates design → simulate → analyze → refine without you touching the GUI. |
-| **Web dashboard** (port 10945) | **Humans** — you, in a browser | A dark-mode React app with pages for converting files, browsing models, configuring fluid simulations, chatting with an LLM about CAD, viewing logs, and changing settings. | Point-and-click workflow. Upload a file, click Convert, download the STL. Fill in a form, click Run, see simulation results. |
+| **Web dashboard** (port 10945) | **Humans** — you, in a browser | A dark-mode React app: **Guided Demo** (cube → car → depot CRUD), Parts Studio, Depot, Convert, Models, Marketplace, BIM/CFD/FluidX3D workspaces, Chat, Logs and Settings. | Point-and-click workflow. Open `/demo` to see the whole chain work, or upload a STEP file and click Convert. |
 
 Both talk to the same FreeCAD backend. An AI agent can prepare a simulation case, and you can inspect the results in the web dashboard — or vice versa.
 
@@ -91,6 +91,9 @@ FreeCAD is a free professional CAD modeler (like SolidWorks but open-source). Th
 ```powershell
 just bootstrap   # uv sync + npm install
 start.ps1        # kills zombies, starts backend + frontend, opens browser
+
+# First stop: http://localhost:10945/demo
+# Build a cube, build a toy car, then rename/delete both in the depot.
 ```
 
 ## MCP Client Config

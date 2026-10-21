@@ -8,14 +8,23 @@ Vite + React 19 dashboard for FreeCAD MCP. Fleet ports **10945** (frontend) prox
 
 | Route | Page | Description |
 |:---|:---|:---|
-| `/` | Dashboard | FreeCAD status, file counts, quick action cards |
+| `/` | Dashboard | Hero, FreeCAD/OpenFOAM/FluidX3D/depot status, onboarding cue, quick actions |
+| `/demo` | Guided Demo | One wizard: build a cube, build a toy car, then depot CRUD - real API calls |
+| `/parts` | Parts Studio | Primitives, gears, ISO fasteners, sketch, TechDraw, generative; save to depot |
+| `/depot` | Depot | Full CRUD over the persistent CAD depot (list/download/create/upload/rename/delete) |
 | `/convert` | Convert | Upload STEP/STP → download STL |
 | `/models` | Models | File browser with embedded Three.js STL viewer, G-code column |
 | `/marketplace` | Marketplace | Search Printables, Thingiverse, GrabCAD → import to uploads |
-| `/chat` | CAD Expert | AI chat via Ollama (gemma3:1b) |
+| `/bim-demo` | BIM Demo | Form-driven walls, slabs, columns, windows, doors, roofs, IFC |
+| `/cfd-demos` | CFD Demos | Sample-case launcher for OpenFOAM |
+| `/toy-car` | Toy Car | Parametric / Blender / marketplace / auto car generation |
+| `/cfd` | CFD/OF | OpenFOAM workspace (domain → physics → BC → run → results) |
+| `/fluidx3d` | FluidX3D | GPU LBM workspace (setup, compile, run, render, sweep, surrogate) |
+| `/pipeline` | Pipeline | 6-step wizard from geometry to results |
+| `/chat` | CAD Expert | AI chat (Ollama by default; skill badge, personalities, export) |
 | `/apps` | Apps | Tool launcher cards (step_to_stl, slice_stl, freecad_gui, etc.) |
 | `/logs` | Logs | Live SSE log stream with filter and export |
-| `/settings` | Settings | Ollama URL + model configuration |
+| `/settings` | Settings | LLM provider discovery, Ollama URL/model, marketplace keys |
 | `/help` | Help | FreeCAD reference: intro, workbenches, scripting, marketplace guide |
 
 ## Stack
