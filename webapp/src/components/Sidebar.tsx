@@ -14,6 +14,7 @@ import {
 	Home,
 	LayoutDashboard,
 	Logs,
+	PlayCircle,
 	Settings,
 	ShoppingBag,
 	Sparkles,
@@ -25,6 +26,7 @@ import { NavLink } from "react-router-dom";
 
 const navItems = [
 	{ path: "/", label: "Dashboard", icon: LayoutDashboard },
+	{ path: "/demo", label: "Guided Demo", icon: PlayCircle },
 	{ path: "/parts", label: "Parts Studio", icon: Cog },
 	{ path: "/depot", label: "Depot", icon: Database },
 

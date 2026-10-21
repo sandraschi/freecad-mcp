@@ -9,6 +9,7 @@ import ConvertPage from "./pages/ConvertPage";
 import Dashboard from "./pages/Dashboard";
 import DepotPage from "./pages/DepotPage";
 import Fluidx3dPage from "./pages/Fluidx3dPage";
+import GuidedDemoPage from "./pages/GuidedDemoPage";
 import HelpPage from "./pages/HelpPage";
 import LogsPage from "./pages/LogsPage";
 import MarketplacePage from "./pages/MarketplacePage";
@@ -32,6 +33,7 @@ export default function App() {
 				<Route path="/bim-demo" element={<BimDemoPage />} />
 				<Route path="/cfd-demos" element={<CfdDemosPage />} />
 				<Route path="/toy-car" element={<ToyCarDemoPage />} />
+				<Route path="/demo" element={<GuidedDemoPage />} />
 				<Route path="/cfd" element={<CfdPage />} />
 				<Route path="/fluidx3d" element={<Fluidx3dPage />} />
 				<Route path="/pipeline" element={<PipelinePage />} />
