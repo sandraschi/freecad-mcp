@@ -26,6 +26,21 @@ interface DiscoverResult {
 	selected_model: string;
 }
 
+function ProviderStatusIcon({
+	name,
+	status,
+	probing,
+}: {
+	name: string;
+	status: DiscoverResult | null;
+	probing: boolean;
+}) {
+	const s = status?.status[name];
+	if (probing) return <Loader2 size={14} className="animate-spin text-slate-400" />;
+	if (s === "detected") return <CheckCircle2 size={14} className="text-emerald-400" />;
+	return <XCircle size={14} className="text-slate-400" />;
+}
+
 export default function SettingsPage() {
 	const [ollamaUrl, setOllamaUrl] = useState("http://127.0.0.1:11434");
 	const [model, setModel] = useState("gemma3:1b");
@@ -123,13 +138,6 @@ export default function SettingsPage() {
 		}
 	};
 
-	const ProviderStatusIcon = ({ name }: { name: string }) => {
-		const s = discover?.status[name];
-		if (probing) return <Loader2 size={14} className="animate-spin text-slate-500" />;
-		if (s === "detected") return <CheckCircle2 size={14} className="text-emerald-400" />;
-		return <XCircle size={14} className="text-slate-600" />;
-	};
-
 	return (
 		<div className="max-w-2xl space-y-6" data-testid="settings-page">
 			<h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -162,7 +170,7 @@ export default function SettingsPage() {
 							key={p.id}
 							className={`flex items-center gap-2 p-3 rounded-xl border text-xs ${discover?.status[p.id] === "detected" ? "bg-emerald-500/10 border-emerald-500/20" : "bg-white/5 border-white/10"}`}
 						>
-							<ProviderStatusIcon name={p.id} />
+							<ProviderStatusIcon name={p.id} status={discover} probing={probing} />
 							<div>
 								<p className="text-slate-300 font-medium">{p.label}</p>
 								<p className="text-slate-600">:{p.port}</p>

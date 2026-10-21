@@ -49,6 +49,16 @@ const tabs = [
 
 type TabId = (typeof tabs)[number]["id"];
 
+function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
+	return (
+		<span
+			className={`text-xs px-2 py-0.5 rounded-full font-medium ${ok ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}
+		>
+			{ok ? "V" : "?"} {label}
+		</span>
+	);
+}
+
 export default function Fluidx3dPage() {
 	const [activeTab, setActiveTab] = useState<TabId>("status");
 	const [status, setStatus] = useState<F3DStatus | null>(null);
@@ -198,14 +208,6 @@ export default function Fluidx3dPage() {
 			{loading ? <Loader2 size={14} className="animate-spin" /> : icon}
 			{label}
 		</button>
-	);
-
-	const StatusBadge = ({ ok, label }: { ok: boolean; label: string }) => (
-		<span
-			className={`text-xs px-2 py-0.5 rounded-full font-medium ${ok ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}
-		>
-			{ok ? "✓" : "✗"} {label}
-		</span>
 	);
 
 	return (
