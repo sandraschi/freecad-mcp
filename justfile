@@ -113,12 +113,26 @@ test-integration:
 install-paraview:
     winget install Kitware.ParaView
 
+# Format Python and web sources
+fmt:
+    uv run ruff format src/
+    Set-Location '{{justfile_directory()}}\webapp'; npx @biomejs/biome format --write .
+
+# Python type gate (fleet five-gate: QUALITY_GATES.md)
+typecheck:
+    uv run pyright src/
+
+# Full five-gate CI equivalent (ruff + biome, pyright + tsc, pytest)
+ci: lint typecheck test
+
 # Run all verification gates (lint + typecheck + tests)
 gates-green:
     uv run ruff check src/ --quiet
     uv run ruff format src/ --check --quiet
     Set-Location '{{justfile_directory()}}\webapp'; npx tsc --noEmit
     uv run pytest --quiet -x
+
+# mcpb-pack / cua-nsis-test / cua-webapp-test come from scripts/just/fleet.just.
 
 
 
@@ -127,15 +141,11 @@ gates-green:
 certify: gates-green
 
 e2e:
-    powershell.exe -NoProfile -NoProfile -ExecutionPolicy Bypass -File "D:\Dev\repos\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{{justfile_directory()}}\..\mcp-central-docs\scripts\playwright-audit.ps1" -RepoPath "{{justfile_directory()}}"
 
 # Register this MCP server with a client (stdio)
 install-mcp:
     uv run python -m freecad_mcp.server --mode stdio
-
-# Regenerate LLM documentation files (llms.txt)
-llms-txt:
-    uv run python -m freecad_mcp.utils.llms_txt
 
 # --- Diagnostics ---
 

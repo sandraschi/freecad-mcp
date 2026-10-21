@@ -5,6 +5,10 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 tests/
+data/
+cua-reports/
+*.bak
+*.bak.*
 
 # Discovery & Fleet Metadata
 glama.json
