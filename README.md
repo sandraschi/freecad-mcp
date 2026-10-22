@@ -12,10 +12,10 @@
 
 ## Install (Windows)
 
-**[Download freecad-mcp-0.6.1-setup.exe](https://github.com/sandraschi/freecad-mcp/releases/latest/download/freecad-mcp-0.6.1-setup.exe)** - the full desktop app (webapp + embedded backend) in one installer.
+**[Download freecad-mcp-0.6.2-setup.exe](https://github.com/sandraschi/freecad-mcp/releases/latest/download/freecad-mcp-0.6.2-setup.exe)** - the full desktop app (webapp + embedded backend) in one installer.
 
 - The installer is **unsigned**. Windows SmartScreen will warn: choose **More info > Run anyway**.
-- Prefer MCP-only? [freecad-mcp-0.6.1.mcpb](https://github.com/sandraschi/freecad-mcp/releases/latest/download/freecad-mcp-0.6.1.mcpb) registers the server in Claude Desktop.
+- Prefer MCP-only? [freecad-mcp-0.6.2.mcpb](https://github.com/sandraschi/freecad-mcp/releases/latest/download/freecad-mcp-0.6.2.mcpb) registers the server in Claude Desktop.
 - All releases and older versions: [Releases](https://github.com/sandraschi/freecad-mcp/releases).
 
 ## Two ways to use this

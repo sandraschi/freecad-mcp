@@ -2,6 +2,22 @@
 
 All notable changes to the FreeCAD MCP server and webapp.
 
+## [0.6.2] - 2026-10-22
+
+### Fixed
+- **Bridge ping blocked its own GUI pump.** `_bridge_connect` opened a bare TCP
+  connection and left it idle before sending `ping`. The bridge serves one
+  request per connection on a single-threaded GUI pump, so the idle socket
+  stalled the pump and every later ping timed out - the "bridge not responding"
+  state. It now pings over one fresh connection and closes it.
+- **`freecad_bridge ensure_gui` never connected to an already-running FreeCAD.**
+  It only connected when `start_bridge()` reported a launch, which is False when
+  a GUI exists. It now always attempts the connection.
+- **Launcher preflight.** `start.ps1` / `start.bat` run `scripts/ensure-bridge.ps1`
+  before the backend. It launches one bridged FreeCAD when none is running, or
+  restarts a hung one (graceful close, force after 20 s, verified pong, one
+  retry). `-NoRestart` and `-CheckOnly` are available.
+
 ## [0.6.1] - 2026-10-21
 
 ### Added

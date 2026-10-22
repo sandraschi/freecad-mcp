@@ -1,5 +1,39 @@
 # Build Log — freecad-mcp
 
+## 2026-10-22 - v0.6.2
+
+**Build type:** NSIS (Tauri 2.11.2) + MCPB - release gate PASS
+**Backend:** PyInstaller, 34.22 MB
+**Frontend:** Vite 5 production build
+**Installer:** 38,601,057 B (36.81 MiB), SHA-256 `6b95d40bd9c43e39dca4bc6f5bd37ca6a579ce845df95aa14dc335a9f6d1254d`
+**MCPB:** 168,896 B (164.9 KiB)
+**CUA:** 12/12, `all_passed=true`, `pywinauto=true`, `backend_receipt_proof=true`, SHA bound.
+
+### Fixed
+
+- **Bridge ping blocked its own GUI pump.** `_bridge_connect` opened a bare TCP
+  connection and left it idle before pinging. The bridge serves one request per
+  connection on a single-threaded GUI pump, so the idle socket stalled the pump
+  and every later ping timed out. This is what made 0.6.1 report "bridge not
+  responding" while FreeCAD was healthy. It now pings over one fresh connection.
+- **`freecad_bridge ensure_gui` did not connect to an already-running FreeCAD.**
+  It only attempted a connection when `start_bridge()` launched a process (False
+  when a GUI exists). It now always attempts the connection.
+- **Launcher preflight.** `start.ps1` / `start.bat` run `scripts/ensure-bridge.ps1`
+  before backend convergence: pings the bridge, launches one bridged FreeCAD, or
+  restarts a hung one (graceful close, force after 20 s, verify pong, one retry).
+  `-NoRestart` and `-CheckOnly` for control.
+- **CUA reliability.** It now ignores browser windows that share the app title
+  (Chrome at 127.0.0.1:10945 matched "FreeCAD MCP"), waits up to 30 s for the
+  WebView2 UIA tree, and falls back to an ImageGrab capture when
+  `capture_as_image()` fails.
+
+### Note
+
+The installer remains unsigned and the backend still carries Pillow because
+dev and runtime share a venv (known issue from 0.6.1). 0.6.2 supersedes 0.6.1
+for the bridge fix.
+
 ## 2026-10-22 - v0.6.1
 
 **Build type:** NSIS (Tauri 2.11.2) + MCPB - release gate PASS
