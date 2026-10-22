@@ -166,30 +166,26 @@ async def _bridge_send(method: str, params: dict | None = None, timeout: float =
 
 
 async def _bridge_connect():
-    """Connect to the FreeCAD bridge TCP socket."""
+    """Verify the bridge with a real ping request over a fresh connection.
+
+    Do NOT open a bare TCP connection first: the bridge serves one request per
+    connection on a single-threaded GUI pump, so an idle socket blocks the pump
+    and the next ping can never be answered. That self-inflicted stall is what
+    made the bridge look hung after every backend start.
+    """
     global _bridge_reader, _bridge_writer
-    try:
-        r, w = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", BRIDGE_PORT),
-            timeout=10,
-        )
-        _bridge_reader, _bridge_writer = r, w
-        # Verify with ping: a stale listener can accept the TCP connection and
-        # never answer, so "port open" alone must not count as connected.
-        resp = await _bridge_send("ping", timeout=5)
-        if resp.get("data") == "pong":
-            return True
-        logger.warning(
-            "Bridge port %s is open but ping failed (%r) - the bridge thread inside FreeCAD may be hung",
-            BRIDGE_PORT,
-            resp.get("error") or resp,
-        )
+    resp = await _bridge_send("ping", timeout=5)
+    if resp.get("data") == "pong":
         _bridge_reader = _bridge_writer = None
-        return False
-    except Exception as e:
-        logger.warning("Bridge connect failed: %s", e)
-        _bridge_reader = _bridge_writer = None
-        return False
+        return True
+
+    logger.warning(
+        "Bridge ping failed on port %s (%r) - FreeCAD bridge not answering",
+        BRIDGE_PORT,
+        resp.get("error") or resp,
+    )
+    _bridge_reader = _bridge_writer = None
+    return False
 
 
 def _freecad_already_running() -> bool:
@@ -332,12 +328,14 @@ async def lifespan(app: FastAPI):
         _state["freecad_version"] = "GUI running (bridge not responding)"
 
         async def _connect_existing() -> None:
-            if await _bridge_connect():
-                _state["freecad_ok"] = True
-                _state["bridge_mode"] = "tcp"
-                _state["freecad_version"] = "bridge_running"
-                logger.info("Connected to existing FreeCAD bridge")
-                return
+            for _attempt in range(3):
+                if await _bridge_connect():
+                    _state["freecad_ok"] = True
+                    _state["bridge_mode"] = "tcp"
+                    _state["freecad_version"] = "bridge_running"
+                    logger.info("Connected to existing FreeCAD bridge")
+                    return
+                await asyncio.sleep(2)
             _state["bridge_mode"] = "subprocess" if _state.get("freecad_ok") else "none"
             logger.warning(
                 "FreeCAD is running and port %s is open, but the bridge did not answer. "

@@ -835,7 +835,7 @@ dependencies = [
 
 [[package]]
 name = "freecad-mcp-native"
-version = "0.6.0"
+version = "0.6.2"
 dependencies = [
  "serde",
  "serde_json",

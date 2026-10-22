@@ -97,6 +97,25 @@ HEALTH_PATH = cfg("health_path", "/api/v1/health")
 DIAGNOSTICS_PATH = cfg("diagnostics_path", "/api/v1/diagnostics")
 FEATURE_PATH = cfg("feature_smoke_path", "/api/v1/system/info")
 REQUEST_LOG_PATH = cfg("request_log_path", "/api/v1/request-log")
+
+# A dev-server browser tab has the same title as the installed Tauri window.
+# Never automate the browser: it silently made the nav walk pass/fail against
+# the wrong app (observed 2026-10-22, Chrome at 127.0.0.1:10945/help).
+_BROWSER_CLASSES = {
+    "QMainWindow",
+    "Chrome_WidgetWin_1",
+    "MozillaWindowClass",
+    "ApplicationFrameWindow",
+}
+
+
+def _is_app_window(w) -> bool:
+    try:
+        return w.class_name not in _BROWSER_CLASSES
+    except Exception:
+        return True
+
+
 WINDOW_TITLE_RE = cfg("window_title_re", "Pywinauto MCP")
 BRIDGE_OK_TEXT = cfg("bridge_ok_text", "REST bridge reachable")
 INSTALL_DIR = cfg("install_dir", "%LOCALAPPDATA%\\Pywinauto MCP Operator")
@@ -143,7 +162,7 @@ def cua_available() -> bool:
 def _find_tauri_window(title_re: str):
     """Find Tauri webview window - excludes classic apps by class_name."""
     wins = pywinauto.findwindows.find_elements(title_re=title_re)
-    tauri = [w for w in wins if w.class_name != "QMainWindow"]
+    tauri = [w for w in wins if _is_app_window(w)]
     if not tauri:
         raise RuntimeError(f"No Tauri window found (classes: {set(w.class_name for w in wins)})")
     return tauri[0].handle
@@ -169,7 +188,7 @@ def cua_find_window(title_re: str = "", retry_seconds: int = 10) -> dict | None:
     while True:
         try:
             wins = pywinauto.findwindows.find_elements(title_re=title_re)
-            tauri = [w for w in wins if w.class_name != "QMainWindow"]
+            tauri = [w for w in wins if _is_app_window(w)]
             if tauri:
                 handle = tauri[0].handle
                 app = pywinauto.Application(backend="uia").connect(handle=handle)
@@ -196,13 +215,29 @@ def cua_screenshot(window_handle: int = 0, output_path: str = "") -> str | None:
         import pywinauto
 
         wins = pywinauto.findwindows.find_elements(title_re=WINDOW_TITLE_RE)
-        tauri = [w for w in wins if w.class_name != "QMainWindow"]
+        tauri = [w for w in wins if _is_app_window(w)]
         if tauri:
             app = pywinauto.Application(backend="uia").connect(handle=tauri[0].handle)
             win = app.window(handle=tauri[0].handle)
-            capture = win.capture_as_image()
-            capture.save(output_path)
-            return output_path
+            try:
+                win.set_focus()
+            except Exception:
+                pass
+            try:
+                capture = win.capture_as_image()
+                capture.save(output_path)
+                return output_path
+            except Exception:
+                # capture_as_image() fails on some occluded/WebView2 windows.
+                # ImageGrab of the (foregrounded) window rect is the fallback.
+                from PIL import ImageGrab
+
+                rect = win.rectangle()
+                ImageGrab.grab(
+                    bbox=(rect.left, rect.top, rect.right, rect.bottom),
+                    all_screens=True,
+                ).save(output_path)
+                return output_path
     except Exception:
         return None
 
@@ -608,7 +643,19 @@ def nav_click_through(output_dir: str):
     import pywinauto
 
     w = pywinauto.Application(backend="uia").connect(handle=handle).window(handle=handle)
-    labels = [label for label, _el in _sidebar_links(w)]
+    # WebView2 exposes its UIA tree a few seconds after the window is visible.
+    # A single immediate scan is a common false-negative (2026-10-22).
+    labels = []
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        _foreground_and_maximize(handle)
+        try:
+            labels = [label for label, _el in _sidebar_links(w)]
+        except Exception:
+            labels = []
+        if labels:
+            break
+        time.sleep(2)
     if not labels:
         phase_fail("no sidebar links discovered (icon-only collapsed sidebar, or nav is not <a> links)")
     log(f"Discovered {len(labels)} sidebar pages: {', '.join(labels)}")

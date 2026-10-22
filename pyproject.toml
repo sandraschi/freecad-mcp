@@ -1,6 +1,6 @@
 [project]
 name = "freecad-mcp"
-version = "0.6.1"
+version = "0.6.2"
 description = "FreeCAD 3D CAD automation: headless documents and export, plus CFD via FluidX3D/OpenFOAM"
 readme = "README.md"
 requires-python = ">=3.12"

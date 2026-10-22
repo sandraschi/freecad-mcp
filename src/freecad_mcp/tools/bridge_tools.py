@@ -115,11 +115,12 @@ def register_bridge_tools(
 
         if op == "ensure_gui":
             if state.get("bridge_mode") != "tcp":
-                started = start_bridge()
-                if started:
-                    connected = await connect_bridge()
-                    if connected:
-                        state["bridge_mode"] = "tcp"
+                # start_bridge() refuses when a GUI is already running, so its
+                # False return does NOT mean the bridge is absent. Always try to
+                # connect: an existing bridged FreeCAD must be usable.
+                start_bridge()
+                if await connect_bridge():
+                    state["bridge_mode"] = "tcp"
             return {
                 "success": state.get("bridge_mode") == "tcp",
                 "bridge_mode": state.get("bridge_mode"),
