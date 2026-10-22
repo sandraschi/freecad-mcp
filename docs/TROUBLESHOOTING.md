@@ -32,13 +32,22 @@ window on every call.
 
 ## Status says "GUI running (bridge not responding)"
 
-The bridge port (11968) is open but does not answer `ping`. The bridge thread
-inside FreeCAD is hung (this can happen after a long solver run or a crashed
-bridge script). The server refuses to launch another instance.
+The bridge port (11968) is open but does not answer `ping`. The bridge pump
+inside FreeCAD is hung (this can happen after a long solver run or a blocked GUI
+thread).
 
-Fix: save your model, restart FreeCAD, then start the bridge again (or restart
-the server while FreeCAD is closed so it can launch one bridged instance).
-`freecad_status` will report `bridge_loaded: false` until the ping succeeds.
+**The fleet launcher fixes this automatically.** `start.ps1` / `start.bat` (and
+the `starts/*.bat` wrappers) run `scripts/ensure-bridge.ps1` before the backend:
+it pings the bridge, launches one bridged FreeCAD when none is running, and when
+FreeCAD is running with a hung bridge it closes it (save prompts appear), waits
+20 s, force-closes if needed, relaunches it with the bridge, and verifies pong.
+If the first launch does not answer it retries once.
+
+- `-NoRestart` keeps the old refuse behaviour (leave FreeCAD untouched).
+- `-CheckOnly` reports state and exits: 0 = pong, 3 = running but hung,
+  4 = not running.
+- The MCP server itself still never launches a second FreeCAD while one is
+  running; the launcher owns recovery.
 
 ## Installed app closes immediately (exit code -1)
 

@@ -6,6 +6,11 @@
     FrontendPort = 10945
     HealthPath   = '/api/v1/status'
     WebRoot      = 'webapp'
+    # Guarantee a responsive FreeCAD bridge before the backend starts.
+    # Launches one bridged FreeCAD when none is running; refuses to start a
+    # second instance; offers a graceful restart when the bridge is hung.
+    PreStartScript   = 'scripts\ensure-bridge.ps1'
+    PreStartRequired = $true
     Backend = @{
         Kind          = 'uvicorn'
         UvicornTarget = 'freecad_mcp.server:app'

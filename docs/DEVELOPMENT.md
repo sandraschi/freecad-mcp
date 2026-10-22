@@ -59,6 +59,12 @@ just web              # Vite dev server on 10945
 .\start.ps1           # fleet launcher (reads fleet-start.config.ps1)
 ```
 
+`start.ps1` runs `scripts/ensure-bridge.ps1` first (config `PreStartScript`).
+It proves the bridge with a JSON ping, launches one bridged FreeCAD if none is
+running, and recovers a hung bridge by restarting FreeCAD (graceful close, then
+force after 20 s), verifying pong before the backend starts. `-NoRestart` opts
+out; `-CheckOnly` reports state without changing anything.
+
 The fleet launcher uses `Kind='uvicorn'` with `freecad_mcp.server:app` and probes
 `/api/v1/status`. Run `start.ps1 -BackendOnly` and check that endpoint after any
 change to the app factory or routes.
