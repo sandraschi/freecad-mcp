@@ -107,6 +107,8 @@ function Resolve-FreeCadExe {
     if (${env:ProgramFiles(x86)}) { $patterns += (Join-Path ${env:ProgramFiles(x86)} 'FreeCAD*\bin\FreeCAD.exe') }
     if ($env:LOCALAPPDATA) { $patterns += (Join-Path $env:LOCALAPPDATA 'Programs\FreeCAD*\bin\FreeCAD.exe') }
     $patterns += 'D:\Dev\repos\FreeCAD\*\bin\FreeCAD.exe'
+    # Portable builds keep FreeCAD.exe at the version-dir root (no bin\ subfolder).
+    $patterns += 'D:\Dev\repos\FreeCAD\*\FreeCAD.exe'
     foreach ($pattern in $patterns) {
         if (-not $pattern) { continue }
         $found = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
