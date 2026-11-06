@@ -8,6 +8,8 @@
   <a href="https://github.com/PrefectHQ/fastmcp"><img src="https://img.shields.io/badge/FastMCP-3.2-7c5cfc?style=flat-square" alt="FastMCP"></a>
 </p>
 
+FreeCAD as a server for AI agents and a web dashboard - parametric CAD, TechDraw, assemblies, CFD, FEM and BIM via MCP tools and REST.
+
 **Questions, improv ideas, "what if it also did X"?** → [Discussions](https://github.com/sandraschi/freecad-mcp/discussions) — Q&A for support, Ideas for anything you'd improve but wouldn't file a whole Issue for. Bugs still go to [Issues](https://github.com/sandraschi/freecad-mcp/issues).
 
 ## Install (Windows)
